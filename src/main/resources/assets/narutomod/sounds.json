@@ -1,0 +1,129 @@
+{
+  "kunai_thud": {
+    "category": "neutral",
+    "sounds": [
+      "narutomod:weapons/kunai_thud"
+    ],
+    "subtitle": "narutomod.subtitle.kunai_thud"
+  },
+  "needle_hit": {
+    "category": "neutral",
+    "sounds": [
+      "narutomod:weapons/needle_hit"
+    ],
+    "subtitle": "narutomod.subtitle.needle_hit"
+  },
+  "seal_a": {
+    "sounds": [
+      "narutomod:jutsu/seal_a"
+    ],
+    "subtitle": "narutomod.subtitle.jutsu_seal"
+  },
+  "seal_b": {
+    "sounds": [
+      "narutomod:jutsu/seal_b"
+    ],
+    "subtitle": "narutomod.subtitle.jutsu_seal"
+  },
+  "jutsu_cast": {
+    "sounds": [
+      "narutomod:jutsu/jutsu_cast"
+    ],
+    "subtitle": "narutomod.subtitle.jutsu_cast"
+  },
+  "jutsu_fail": {
+    "sounds": [
+      "narutomod:jutsu/jutsu_fail"
+    ],
+    "subtitle": "narutomod.subtitle.jutsu_fail"
+  },
+  "seal_c": {
+    "sounds": [
+      "narutomod:jutsu/seal_c"
+    ],
+    "subtitle": "narutomod.subtitle.jutsu_seal"
+  },
+  "fireball.shoot": {
+    "sounds": [
+      "mob/ghast/fireball4"
+    ],
+    "subtitle": "narutomod.subtitle.fireball.shoot"
+  },
+  "fireball.explosion": {
+    "sounds": [
+      "random/explode1",
+      "random/explode2",
+      "random/explode3",
+      "random/explode4"
+    ],
+    "subtitle": "narutomod.subtitle.fireball.explosion"
+  },
+  "waterbullet.shoot": {
+    "sounds": [
+      "liquid/swim5",
+      "liquid/swim6",
+      "liquid/swim7",
+      "liquid/swim8",
+      "liquid/swim9",
+      "liquid/swim10",
+      "liquid/swim11",
+      "liquid/swim12",
+      "liquid/swim13",
+      "liquid/swim14",
+      "liquid/swim15",
+      "liquid/swim16",
+      "liquid/swim17",
+      "liquid/swim18"
+    ],
+    "subtitle": "narutomod.subtitle.waterbullet.shoot"
+  },
+  "waterbullet.splash": {
+    "sounds": [
+      "mob/dolphin/splash1",
+      "mob/dolphin/splash2",
+      "mob/dolphin/splash3"
+    ],
+    "subtitle": "narutomod.subtitle.waterbullet.splash"
+  },
+  "sizzle": {
+    "sounds": [
+      "narutomod:weapons/sizzle"
+    ],
+    "subtitle": "narutomod.subtitle.sizzle"
+  },
+  "lonely_march": {
+    "sounds": [
+      {
+        "name": "narutomod:records/lonely_march",
+        "stream": true
+      }
+    ]
+  },
+  "leap": {
+    "sounds": [
+      "narutomod:abilities/leap",
+      "narutomod:abilities/leap2"
+    ],
+    "subtitle": "narutomod.subtitle.leap"
+  },
+  "double_jump": {
+    "sounds": [
+      "narutomod:abilities/doublejump",
+      "narutomod:abilities/doublejump2",
+      "narutomod:abilities/doublejump3"
+    ],
+    "subtitle": "ability.double_jump"
+  },
+  "sharingan_activate": {
+    "sounds": [
+      "narutomod:sharingan_activate"
+    ],
+    "subtitle": "narutomod.subtitle.sharingan_activate"
+  },
+  "chidori": {
+    "sounds": [
+      "narutomod:chidori"
+    ],
+    "subtitle": "narutomod.subtitle.chidori"
+  }
+}

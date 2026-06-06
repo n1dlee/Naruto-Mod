@@ -1,0 +1,38 @@
+modLoader="javafml"
+# Should be higher but the error for this beign wrong is really poor and tied to the forge version.
+loaderVersion="[41,)"
+issueTrackerURL="https://github.com/sekwah41/Naruto-Mod/issues"
+license="All rights reserved"
+[[mods]]
+    modId="narutomod"
+    version="${file.jarVersion}"
+    displayName="Sekwah41's Naruto mod"
+    updateJSONURL="https://www.sekwah.com/modversions/narutomod.json"
+    displayURL="http://www.planetminecraft.com/mod/naruto-mod-1750133/"
+    authors="Sekwah41"
+    logoFile="narutologo.png"
+    description='''
+A mod that adds new items and other features to the game that are from/based on the Naruto manga.
+'''
+
+[[dependencies.narutomod]]
+    modId="forge"
+    mandatory=true
+    versionRange="[46,48)"
+    ordering="NONE"
+    side="BOTH"
+
+# https://maven.apache.org/enforcer/enforcer-rules/versionRanges.html
+[[dependencies.narutomod]]
+    modId="minecraft"
+    mandatory=true
+    versionRange="[1.20,)"
+    ordering="NONE"
+    side="BOTH"
+
+[[dependencies.narutomod]]
+    modId="sekclib"
+    mandatory=true
+    versionRange="[1.0.0,2)"
+    ordering="NONE"
+    side="BOTH"

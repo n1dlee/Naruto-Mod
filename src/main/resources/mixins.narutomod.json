@@ -1,0 +1,17 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "compatibilityLevel": "JAVA_17",
+  "package": "com.sekwah.narutomod.mixin",
+  "refmap": "mixins.narutomod.refmap.json",
+  "mixins": [
+    "common.TripWireBlockMixin"
+  ],
+  "client": [
+    "client.LocalPlayerMixin",
+    "client.PlayerModelMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
