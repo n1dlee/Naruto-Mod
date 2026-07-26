@@ -1,0 +1,1 @@
+{ "type": "minecraft:crafting_shapeless", "category": "misc", "ingredients": [ { "item": "narutomod:scroll_chidori" }, { "item": "minecraft:sugar" }, { "item": "minecraft:diamond" } ], "result": { "item": "narutomod:scroll_chidori_dash", "count": 1 } }

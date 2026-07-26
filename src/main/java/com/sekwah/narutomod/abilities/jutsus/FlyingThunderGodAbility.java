@@ -2,30 +2,41 @@ package com.sekwah.narutomod.abilities.jutsus;
 
 import com.sekwah.narutomod.abilities.Ability;
 import com.sekwah.narutomod.capabilities.INinjaData;
+import com.sekwah.narutomod.item.NarutoItems;
+import com.sekwah.narutomod.util.EyeTargeting;
+import com.sekwah.narutomod.util.NarutoParticles;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.level.ClipContext;
-import net.minecraft.world.phys.BlockHitResult;
-import net.minecraft.world.phys.HitResult;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.Vec3;
-import org.joml.Vector3f;
 
 /**
- * Flying Thunder God (Hiraishin) — combo 1213, INSTANT.
- * First use: marks current position. Second use: teleports to mark.
- * Requires Uzumaki clan OR Kage rank.
+ * Flying Thunder God — the seal half of the technique (combo 1213, INSTANT).
+ *
+ * Canon: Minato never teleported to a place, he teleported to his *seal*. So casting this
+ * applies a seal, and what gets sealed depends on the situation:
+ *
+ *   - holding a plain kunai  -> one is converted into a Hiraishin kunai to throw
+ *   - looking at a creature  -> the seal is branded onto that creature
+ *   - otherwise              -> the seal is laid on the ground where you stand
+ *
+ * Jumping to any of those is {@link HiraishinTeleportAbility}'s job.
+ *
+ * S-rank: not granted by rank at all — only by the scroll found in Ancient Cities and
+ * bastions (see events/NarutoLootEvents).
  */
 public class FlyingThunderGodAbility extends Ability implements Ability.Cooldown {
 
-    private static final float MARK_COST = 50f;
-    private static final float TELEPORT_COST = 80f;
-    private static final double MARK_RANGE = 64.0D;
+    private static final float SEAL_COST = 50f;
+    private static final double BRAND_RANGE = 6.0D;
 
     @Override
     public ActivationType activationType() {
@@ -39,98 +50,66 @@ public class FlyingThunderGodAbility extends Ability implements Ability.Cooldown
 
     @Override
     public int getCooldown() {
-        return 10 * 20;
+        return 2 * 20;
+    }
+
+    @Override
+    public SoundEvent castingSound() {
+        return SoundEvents.END_PORTAL_FRAME_FILL;
     }
 
     @Override
     public boolean handleCost(Player player, INinjaData ninjaData, int chargeAmount) {
-        // Check clan/rank requirement
-        String clan = ninjaData.getClanId();
-        int rank = ninjaData.getNinjaRank();
-        if (!"uzumaki".equals(clan) && rank < 4) { // 4 = Kage
-            player.displayClientMessage(Component.literal("You must be Uzumaki clan or Kage rank!")
-                    .withStyle(ChatFormatting.RED), true);
-            return false;
-        }
-
-        BlockPos mark = ninjaData.getThunderGodMark();
-
-        if (mark == null) {
-            // Phase 1: Mark — no cooldown
-            if (ninjaData.getChakra() < MARK_COST) {
-                player.displayClientMessage(Component.translatable("jutsu.fail.notenoughchakra",
-                        Component.translatable(this.getTranslationKey(ninjaData)).withStyle(ChatFormatting.YELLOW)), true);
-                return false;
-            }
-            ninjaData.useChakra(MARK_COST, 10);
-            BlockPos markPos = findLookMark(player);
-            ninjaData.setThunderGodMark(markPos);
-            player.displayClientMessage(Component.literal("Position marked!")
-                    .withStyle(ChatFormatting.YELLOW), true);
-            if (player.level() instanceof ServerLevel serverLevel) {
-                serverLevel.sendParticles(
-                        new DustParticleOptions(new Vector3f(1.0f, 0.9f, 0.1f), 1.5f),
-                        markPos.getX() + 0.5D, markPos.getY() + 1.0D, markPos.getZ() + 0.5D,
-                        10, 0.3, 0.5, 0.3, 0.05);
-            }
-            return false; // No cooldown for marking
-        }
-
-        // Phase 2: Teleport
-        if (ninjaData.getChakra() < TELEPORT_COST) {
+        if (ninjaData.getChakra() < SEAL_COST) {
             player.displayClientMessage(Component.translatable("jutsu.fail.notenoughchakra",
                     Component.translatable(this.getTranslationKey(ninjaData)).withStyle(ChatFormatting.YELLOW)), true);
             return false;
         }
-        ninjaData.useChakra(TELEPORT_COST, 20);
-        return true; // Cooldown on teleport
+        ninjaData.useChakra(SEAL_COST, 20);
+        return true;
     }
 
     @Override
     public void performServer(Player player, INinjaData ninjaData, int ticksActive) {
-        BlockPos mark = ninjaData.getThunderGodMark();
-        if (mark == null) return; // Shouldn't happen — marking is handled in handleCost
-
-        // Yellow flash particles at source
-        if (player.level() instanceof ServerLevel serverLevel) {
-            serverLevel.sendParticles(
-                    new DustParticleOptions(new Vector3f(1.0f, 0.9f, 0.1f), 2.0f),
-                    player.getX(), player.getY() + 1.0, player.getZ(),
-                    20, 0.5, 1.0, 0.5, 0.1);
+        // 1. A kunai in hand becomes a marked kunai — the classic use.
+        for (InteractionHand hand : InteractionHand.values()) {
+            ItemStack held = player.getItemInHand(hand);
+            if (held.is(NarutoItems.KUNAI.get())) {
+                held.shrink(1);
+                ItemStack marked = new ItemStack(NarutoItems.HIRAISHIN_KUNAI.get());
+                if (!player.getInventory().add(marked)) {
+                    player.drop(marked, false);
+                }
+                sealEffect(player, player.getX(), player.getY() + 1.0, player.getZ());
+                player.displayClientMessage(
+                        Component.translatable("hiraishin.seal.kunai").withStyle(ChatFormatting.GOLD), true);
+                return;
+            }
         }
 
-        // Teleport
-        player.teleportTo(mark.getX() + 0.5, mark.getY(), mark.getZ() + 0.5);
-        player.setDeltaMovement(Vec3.ZERO);
-        player.fallDistance = 0.0F;
-        player.level().playSound(null, mark.getX(), mark.getY(), mark.getZ(),
-                SoundEvents.ENDERMAN_TELEPORT, SoundSource.PLAYERS, 1.0f, 1.5f);
-
-        // Yellow flash particles at destination
-        if (player.level() instanceof ServerLevel serverLevel) {
-            serverLevel.sendParticles(
-                    new DustParticleOptions(new Vector3f(1.0f, 0.9f, 0.1f), 2.0f),
-                    mark.getX() + 0.5, mark.getY() + 1.0, mark.getZ() + 0.5,
-                    20, 0.5, 1.0, 0.5, 0.1);
+        // 2. Otherwise brand whatever is in front of you.
+        LivingEntity target = EyeTargeting.raycastLiving(player, BRAND_RANGE);
+        if (target != null) {
+            ninjaData.setHiraishinEntityMark(target.getUUID().toString());
+            sealEffect(player, target.getX(), target.getY() + target.getBbHeight() * 0.5, target.getZ());
+            player.displayClientMessage(Component.translatable("hiraishin.seal.entity",
+                    target.getDisplayName()).withStyle(ChatFormatting.GOLD), true);
+            return;
         }
 
-        // Clear mark after teleport
-        ninjaData.setThunderGodMark(null);
+        // 3. Nothing in hand, nothing in front — seal the ground underfoot.
+        BlockPos here = player.blockPosition();
+        ninjaData.setThunderGodMark(here);
+        sealEffect(player, here.getX() + 0.5, here.getY() + 0.1, here.getZ() + 0.5);
+        player.displayClientMessage(Component.translatable("hiraishin.seal.position",
+                here.getX(), here.getY(), here.getZ()).withStyle(ChatFormatting.GOLD), true);
     }
 
-    private BlockPos findLookMark(Player player) {
-        Vec3 eye = player.getEyePosition();
-        Vec3 target = eye.add(player.getLookAngle().scale(MARK_RANGE));
-        HitResult hit = player.level().clip(new ClipContext(
-                eye,
-                target,
-                ClipContext.Block.COLLIDER,
-                ClipContext.Fluid.NONE,
-                player));
-
-        if (hit instanceof BlockHitResult blockHit && hit.getType() != HitResult.Type.MISS) {
-            return blockHit.getBlockPos().relative(blockHit.getDirection());
+    private static void sealEffect(Player player, double x, double y, double z) {
+        player.level().playSound(null, x, y, z, SoundEvents.END_PORTAL_FRAME_FILL,
+                SoundSource.PLAYERS, 0.8f, 1.4f);
+        if (player.level() instanceof ServerLevel serverLevel) {
+            NarutoParticles.spawnRing(serverLevel, new Vec3(x, y, z), 0.8, 24, NarutoParticles.TELEPORT_GOLD);
         }
-        return player.blockPosition();
     }
 }

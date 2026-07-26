@@ -16,6 +16,14 @@ public class GuiUtils {
         guiGraphics.drawString(font, text, (float) x - width, (float) y, color, false);
     }
 
+    public static void leftTextOutlined(GuiGraphics guiGraphics, Font font, String text, int x, int y, int color, int backgroundColor) {
+        guiGraphics.drawString(font, text, (float) x+1, (float) y, backgroundColor, false);
+        guiGraphics.drawString(font, text, (float) x-1, y, backgroundColor, false);
+        guiGraphics.drawString(font, text, (float) x, (float) y+1, backgroundColor, false);
+        guiGraphics.drawString(font, text, (float) x, (float) y-1, backgroundColor, false);
+        guiGraphics.drawString(font, text, (float) x, (float) y, color, false);
+    }
+
     public static void centeredText(GuiGraphics guiGraphics, Font font, Component component, int x, int y) {
         centeredText(guiGraphics, font, component, x, y, 16777215);
     }

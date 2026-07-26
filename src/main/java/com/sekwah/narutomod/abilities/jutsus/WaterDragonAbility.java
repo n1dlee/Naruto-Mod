@@ -3,9 +3,9 @@ package com.sekwah.narutomod.abilities.jutsus;
 import com.sekwah.narutomod.abilities.Ability;
 import com.sekwah.narutomod.capabilities.INinjaData;
 import com.sekwah.narutomod.damagetypes.NarutoDamageTypes;
+import com.sekwah.narutomod.util.NarutoParticles;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
@@ -20,7 +20,6 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
-import org.joml.Vector3f;
 
 import java.util.List;
 
@@ -40,9 +39,7 @@ public class WaterDragonAbility extends Ability implements Ability.Cooldown {
     private static final float MAIN_DAMAGE = 18.0f;
     private static final float SPLASH_DAMAGE = 8.0f;
     private static final double KNOCKBACK = 4.0;
-
-    private static final DustParticleOptions WATER_PARTICLE =
-            new DustParticleOptions(new Vector3f(0.15f, 0.55f, 1.0f), 1.2f);
+    private static final int WINDUP_TICKS = 9;
 
     @Override
     public ActivationType activationType() {
@@ -58,6 +55,22 @@ public class WaterDragonAbility extends Ability implements Ability.Cooldown {
     public int getCooldown() {
         return 12 * 20;
     }
+    // --- Phase 15: Nature Release ---
+    @Override
+    public String element() {
+        return "water";
+    }
+
+    @Override
+    public int elementLevelRequired() {
+        return 8;
+    }
+
+    @Override
+    public float elementXpReward() {
+        return 30f;
+    }
+
 
     @Override
     public boolean handleCost(Player player, INinjaData ninjaData, int chargeAmount) {
@@ -74,21 +87,42 @@ public class WaterDragonAbility extends Ability implements Ability.Cooldown {
     public void performServer(Player player, INinjaData ninjaData, int ticksActive) {
         Vec3 eye = player.getEyePosition();
         Vec3 look = player.getLookAngle().normalize();
-        DamageSource source = NarutoDamageTypes.getDamageSource(
-                player.level(), NarutoDamageTypes.WATER_BULLET, player, player);
-        float damageMultiplier = ninjaData.getRankDamageMultiplier();
 
-        // Find ray endpoint (block-aware)
+        // Aim is locked in at cast time — the dragon coalesces at this point over the next
+        // few ticks (WINDUP_TICKS) before striking, instead of an instant hit-scan.
         Vec3 end = eye.add(look.scale(RANGE));
         BlockHitResult blockHit = player.level().clip(
                 new ClipContext(eye, end, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, player));
         Vec3 impactPoint = blockHit.getType() == HitResult.Type.MISS ? end : blockHit.getLocation();
-
-        // Find first entity on ray
         LivingEntity mainTarget = findFirstEntity(player, eye, look, eye.distanceTo(impactPoint));
+        Vec3 coalescePoint = mainTarget != null
+                ? mainTarget.position().add(0, mainTarget.getBbHeight() * 0.5, 0)
+                : impactPoint;
 
+        for (int i = 0; i < WINDUP_TICKS; i++) {
+            final double shrink = 1.6 - i * 0.14;
+            ninjaData.scheduleDelayedTickEvent(p -> {
+                if (p.level() instanceof ServerLevel serverLevel) {
+                    NarutoParticles.spawnSpiral(serverLevel, coalescePoint, Math.max(shrink, 0.2), 0.15, 6, NarutoParticles.WATER_BLUE);
+                    serverLevel.sendParticles(ParticleTypes.SPLASH,
+                            coalescePoint.x, coalescePoint.y, coalescePoint.z, 4, 0.5, 0.3, 0.5, 0.02);
+                }
+            }, i + 1);
+        }
+
+        ninjaData.scheduleDelayedTickEvent(
+                p -> strike(p, ninjaData, eye, impactPoint, mainTarget), WINDUP_TICKS + 1);
+    }
+
+    private void strike(Player player, INinjaData ninjaData, Vec3 eye, Vec3 impactPoint, LivingEntity mainTarget) {
+        DamageSource source = NarutoDamageTypes.getDamageSource(
+                player.level(), NarutoDamageTypes.WATER_BULLET, player, player);
+        float damageMultiplier = ninjaData.getRankDamageMultiplier();
+
+        boolean targetAlive = mainTarget != null && mainTarget.isAlive();
+        LivingEntity hitTarget = targetAlive ? mainTarget : null;
         Vec3 splashCenter;
-        if (mainTarget != null) {
+        if (targetAlive) {
             applyHit(mainTarget, player, source, MAIN_DAMAGE * damageMultiplier);
             splashCenter = mainTarget.position().add(0, mainTarget.getBbHeight() * 0.5, 0);
         } else {
@@ -100,7 +134,7 @@ public class WaterDragonAbility extends Ability implements Ability.Cooldown {
                 splashCenter.x - SPLASH_RADIUS, splashCenter.y - SPLASH_RADIUS, splashCenter.z - SPLASH_RADIUS,
                 splashCenter.x + SPLASH_RADIUS, splashCenter.y + SPLASH_RADIUS, splashCenter.z + SPLASH_RADIUS);
         List<LivingEntity> splashTargets = player.level().getEntitiesOfClass(LivingEntity.class, splashBox,
-                e -> e != player && e != mainTarget && e.isAlive());
+                e -> e != player && e != hitTarget && e.isAlive());
         for (LivingEntity target : splashTargets) {
             if (target.position().distanceTo(splashCenter) <= SPLASH_RADIUS) {
                 target.hurt(source, SPLASH_DAMAGE * damageMultiplier);
@@ -169,7 +203,7 @@ public class WaterDragonAbility extends Ability implements Ability.Cooldown {
         int steps = (int)(diff.length() * 4);
         for (int i = 0; i <= steps; i++) {
             Vec3 pos = from.add(diff.scale(i / (double) Math.max(steps, 1)));
-            serverLevel.sendParticles(WATER_PARTICLE, pos.x, pos.y, pos.z, 2, 0.15, 0.15, 0.15, 0.0);
+            serverLevel.sendParticles(NarutoParticles.WATER_BLUE, pos.x, pos.y, pos.z, 2, 0.15, 0.15, 0.15, 0.0);
             serverLevel.sendParticles(ParticleTypes.SPLASH, pos.x, pos.y, pos.z, 1, 0.1, 0.1, 0.1, 0.05);
         }
     }

@@ -2,10 +2,12 @@ package com.sekwah.narutomod.abilities.jutsus;
 
 import com.sekwah.narutomod.abilities.Ability;
 import com.sekwah.narutomod.capabilities.INinjaData;
+import com.sekwah.narutomod.util.NarutoParticles;
 import net.minecraft.ChatFormatting;
-import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.sounds.SoundEvent;
+import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.LivingEntity;
@@ -13,7 +15,6 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
-import org.joml.Vector3f;
 
 import java.util.Comparator;
 import java.util.List;
@@ -30,8 +31,6 @@ public class ShadowPossessionAbility extends Ability implements Ability.Cooldown
     private static final int RANGE = 15;
     private static final float RAY_WIDTH = 1.8f;
     private static final int POSSESS_TICKS = 6 * 20; // 6 seconds
-    private static final DustParticleOptions SHADOW_PARTICLE =
-            new DustParticleOptions(new Vector3f(0.05f, 0.02f, 0.12f), 1.0f);
 
     @Override
     public ActivationType activationType() {
@@ -46,6 +45,11 @@ public class ShadowPossessionAbility extends Ability implements Ability.Cooldown
     @Override
     public int getCooldown() {
         return 15 * 20;
+    }
+
+    @Override
+    public SoundEvent castingSound() {
+        return SoundEvents.WARDEN_SONIC_CHARGE;
     }
 
     @Override
@@ -77,7 +81,7 @@ public class ShadowPossessionAbility extends Ability implements Ability.Cooldown
             int steps = Math.max(1, (int) Math.round(range * 3));
             for (int i = 0; i <= steps; i++) {
                 Vec3 pos = origin.add(shadowDir.scale(i / 3.0));
-                serverLevel.sendParticles(SHADOW_PARTICLE,
+                serverLevel.sendParticles(NarutoParticles.SHADOW_PURPLE,
                         pos.x, pos.y + 0.05, pos.z,
                         2, 0.15, 0.01, 0.15, 0.0);
             }
@@ -114,7 +118,7 @@ public class ShadowPossessionAbility extends Ability implements Ability.Cooldown
 
         // Visual poof on target
         if (player.level() instanceof ServerLevel serverLevel) {
-            serverLevel.sendParticles(SHADOW_PARTICLE,
+            serverLevel.sendParticles(NarutoParticles.SHADOW_PURPLE,
                     target.getX(), target.getY() + target.getBbHeight() * 0.5, target.getZ(),
                     20, 0.3, 0.4, 0.3, 0.02);
         }

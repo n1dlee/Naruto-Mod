@@ -4,6 +4,7 @@ import com.sekwah.narutomod.damagetypes.NarutoDamageTypes;
 import com.sekwah.narutomod.entity.NarutoEntities;
 import com.sekwah.narutomod.entity.projectile.AbstractNonGlowingHurtingProjectile;
 import com.sekwah.narutomod.sounds.NarutoSounds;
+import com.sekwah.narutomod.util.NarutoParticles;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.ParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
@@ -59,6 +60,13 @@ public class WaterBulletJutsuEntity extends AbstractNonGlowingHurtingProjectile 
     @Override
     public void tick() {
         super.tick();
+
+        // Companion trail so the bolt reads as a denser water projectile instead of a bare
+        // single-particle streak — the base class already emits one getTrailParticle() per
+        // tick, this adds a sparser blue-tinted second layer alongside it.
+        if (this.tickCount % 2 == 0) {
+            this.level().addParticle(NarutoParticles.WATER_BLUE, this.getX(), this.getY() + 0.1, this.getZ(), 0.0D, 0.0D, 0.0D);
+        }
 
         if (lifeSpan-- <= 0) {
 

@@ -12,6 +12,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundSource;
+import net.minecraft.util.Mth;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
@@ -221,12 +222,18 @@ public class WaterWalkAbility extends Ability implements Ability.Toggled {
 
     private void applyWallPlaneMovement(Player player, INinjaData ninjaData, Direction wallDirection) {
         Vec3 normal = Vec3.atLowerCornerOf(wallDirection.getNormal());
-        Vec3 wallForward = getWallPlaneForward(player, normal);
+        Vec3 wallForward = getWallPlaneForward(normal);
         Vec3 wallRight = normal.cross(wallForward).normalize();
         double baseSpeed = player.isShiftKeyDown() ? WALL_WALK_SNEAK_SPEED : WALL_WALK_RUN_SPEED;
         double verticalInput = player.zza;
         double horizontalInput = player.xxa;
         double verticalSpeed = verticalInput < 0.0D ? baseSpeed * WALL_WALK_DESCEND_MULTIPLIER : baseSpeed;
+
+        // Ceiling guard — don't let climbing push the player's head into a solid block above
+        if (verticalInput > 0.0D && hasCeilingAbove(player.level(), player.blockPosition())) {
+            verticalInput = 0.0D;
+        }
+
         Vec3 wallMovement = wallForward.scale(verticalInput * verticalSpeed)
                 .add(wallRight.scale(-horizontalInput * baseSpeed))
                 .add(normal.scale(WALL_GRIP_PUSH));
@@ -234,23 +241,52 @@ public class WaterWalkAbility extends Ability implements Ability.Toggled {
             wallMovement = normal.scale(WALL_GRIP_PUSH);
         }
 
+        // Descending onto solid ground — detach smoothly instead of fighting collision at the base of the wall
+        if (verticalInput < 0.0D && hasSolidGroundBelow(player.level(), player.blockPosition())) {
+            ninjaData.setWallWalkAttached(false);
+            player.setNoGravity(false);
+            player.setDeltaMovement(0.0D, 0.0D, 0.0D);
+            return;
+        }
+
+        // Defensive clamp — final safety net so no single tick can ever spike the player's
+        // vertical velocity beyond what wall-climbing should produce, regardless of edge cases.
+        double clampedY = Mth.clamp(wallMovement.y, -0.35D, 0.35D);
+
         // Cancel gravity — this flag is synced to client, so gravity is cancelled on both sides
         player.setNoGravity(true);
 
         player.resetFallDistance();
         player.setOnGround(true);
         ninjaData.getDoubleJumpData().canDoubleJumpServer = true;
-        player.lerpMotion(wallMovement.x, wallMovement.y, wallMovement.z);
+        player.lerpMotion(wallMovement.x, clampedY, wallMovement.z);
         float bobTarget = (float) Math.min(0.18D, Math.abs(verticalInput) * 0.12D + Math.abs(horizontalInput) * 0.08D);
         player.bob += (bobTarget - player.bob) * 0.45F;
     }
 
-    private Vec3 getWallPlaneForward(Player player, Vec3 wallNormal) {
-        Vec3 lookForward = projectOntoWallPlane(player.getLookAngle(), wallNormal);
-        if (lookForward.lengthSqr() < 0.0001D) {
+    /**
+     * "Up the wall" is always world-up projected onto the wall plane — deliberately NOT derived
+     * from the player's look angle. Using look angle here was the root cause of the wall-walk
+     * launch bug: glancing up/down with the mouse changed the climb direction each tick, so W/S
+     * could spike vertical velocity unpredictably. This keeps climbing direction fixed regardless
+     * of where the camera is pointed, matching literal "walk straight up the wall" chakra control.
+     */
+    private Vec3 getWallPlaneForward(Vec3 wallNormal) {
+        Vec3 up = projectOntoWallPlane(new Vec3(0.0D, 1.0D, 0.0D), wallNormal);
+        if (up.lengthSqr() < 0.0001D) {
             return new Vec3(0.0D, 1.0D, 0.0D);
         }
-        return lookForward.normalize();
+        return up.normalize();
+    }
+
+    private boolean hasCeilingAbove(Level level, BlockPos base) {
+        BlockState state = level.getBlockState(base.above(2));
+        return !state.isAir() && state.blocksMotion();
+    }
+
+    private boolean hasSolidGroundBelow(Level level, BlockPos base) {
+        BlockState state = level.getBlockState(base.below());
+        return !state.isAir() && state.blocksMotion();
     }
 
     private Vec3 projectOntoWallPlane(Vec3 vector, Vec3 wallNormal) {

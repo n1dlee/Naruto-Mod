@@ -12,7 +12,12 @@ public class NarutoSpriteSourceGen extends SpriteSourceProvider {
 
     @Override
     protected void addSources() {
+        // Since 1.19.3 only directories declared here end up on the block atlas; anything
+        // else a model references renders as the missing-texture magenta. "blocks" itself
+        // was never listed, which is why the imported 3D weapon/scroll models came out
+        // purple until it was added.
         this.atlas(BLOCKS_ATLAS)
+                .addSource(addFolder("blocks"))
                 .addSource(addFolder("blocks/weapons"))
                 .addSource(addFolder("blocks/deco"))
                 .addSource(addFolder("items"));

@@ -2,10 +2,12 @@ package com.sekwah.narutomod.abilities.jutsus;
 
 import com.sekwah.narutomod.abilities.Ability;
 import com.sekwah.narutomod.capabilities.INinjaData;
+import com.sekwah.narutomod.util.NarutoParticles;
 import net.minecraft.ChatFormatting;
-import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.sounds.SoundEvent;
+import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.LivingEntity;
@@ -15,7 +17,6 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
-import org.joml.Vector3f;
 
 /**
  * Sharingan — Genjutsu: Illusion (combo 1123).
@@ -35,9 +36,6 @@ public class SharinganGenjutsuAbility extends Ability implements Ability.Cooldow
     private static final double RANGE = 10.0;
     private static final int EFFECT_TICKS = 4 * 20;
 
-    private static final DustParticleOptions SHARINGAN_PARTICLE =
-            new DustParticleOptions(new Vector3f(0.85f, 0.05f, 0.05f), 1.2f);
-
     @Override
     public ActivationType activationType() {
         return ActivationType.INSTANT;
@@ -54,12 +52,18 @@ public class SharinganGenjutsuAbility extends Ability implements Ability.Cooldow
     }
 
     @Override
+    public SoundEvent castingSound() {
+        return SoundEvents.EVOKER_CAST_SPELL;
+    }
+
+    /** Canon: casting genjutsu through the eye needs a Sharingan matured to two tomoe. */
+    @Override
+    public String requiredEye() {
+        return "sharingan_tomoe2";
+    }
+
+    @Override
     public boolean handleCost(Player player, INinjaData ninjaData, int chargeAmount) {
-        if (!"uchiha".equals(ninjaData.getClanId())) {
-            player.displayClientMessage(Component.translatable("jutsu.fail.uchiha",
-                    Component.translatable(this.getTranslationKey(ninjaData)).withStyle(ChatFormatting.YELLOW)), true);
-            return false;
-        }
         if (!ninjaData.isSharinganActive()) {
             player.displayClientMessage(Component.translatable("jutsu.fail.sharingan.active",
                     Component.translatable(this.getTranslationKey(ninjaData)).withStyle(ChatFormatting.YELLOW)), true);
@@ -123,7 +127,7 @@ public class SharinganGenjutsuAbility extends Ability implements Ability.Cooldow
                 double angle = Math.toRadians(i * 18.0);
                 double px = targetEye.x + 0.5 * Math.cos(angle);
                 double pz = targetEye.z + 0.5 * Math.sin(angle);
-                serverLevel.sendParticles(SHARINGAN_PARTICLE, px, targetEye.y, pz, 1, 0.04, 0.04, 0.04, 0.0);
+                serverLevel.sendParticles(NarutoParticles.GENJUTSU_RED, px, targetEye.y, pz, 1, 0.04, 0.04, 0.04, 0.0);
             }
         }
     }

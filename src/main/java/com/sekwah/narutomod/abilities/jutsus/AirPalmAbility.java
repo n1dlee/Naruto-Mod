@@ -6,6 +6,8 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.sounds.SoundEvent;
+import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.AABB;
@@ -41,6 +43,11 @@ public class AirPalmAbility extends Ability implements Ability.Cooldown {
     @Override
     public int getCooldown() {
         return 5 * 20;
+    }
+
+    @Override
+    public SoundEvent castingSound() {
+        return SoundEvents.GUARDIAN_ATTACK;
     }
 
     @Override

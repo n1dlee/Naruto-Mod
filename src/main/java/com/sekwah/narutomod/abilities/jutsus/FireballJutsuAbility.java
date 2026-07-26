@@ -53,6 +53,22 @@ public class FireballJutsuAbility extends Ability implements Ability.Channeled, 
     public int getCooldown() {
         return 3 * 20; // base cooldown; no extra for charge to keep it spammable
     }
+    // --- Phase 15: Nature Release ---
+    @Override
+    public String element() {
+        return "fire";
+    }
+
+    @Override
+    public int elementLevelRequired() {
+        return 1;
+    }
+
+    @Override
+    public float elementXpReward() {
+        return 20f;
+    }
+
 
     @Override
     public boolean handleCost(Player player, INinjaData ninjaData, int chargeAmount) {
@@ -93,6 +109,12 @@ public class FireballJutsuAbility extends Ability implements Ability.Channeled, 
                 if (ticksChanneled > 20) {
                     serverLevel.sendParticles(ParticleTypes.LAVA, px, py, pz, 1, 0.02, 0.02, 0.02, 0);
                 }
+            }
+            // Rising heat-shimmer smoke as the fireball builds up
+            if (ticksChanneled % 3 == 0) {
+                serverLevel.sendParticles(ParticleTypes.LARGE_SMOKE,
+                        player.getX(), player.getEyeY() + 0.1, player.getZ(),
+                        1, 0.15, 0.05, 0.15, 0.01);
             }
         }
     }

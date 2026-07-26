@@ -6,7 +6,10 @@ import com.sekwah.narutomod.entity.NarutoEntities;
 import com.sekwah.narutomod.entity.jutsuprojectile.EarthWallEntity;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.particles.BlockParticleOption;
+import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.entity.player.Player;
@@ -37,6 +40,22 @@ public class EarthWallJutsuAbility extends Ability implements Ability.Cooldown {
     public int getCooldown() {
         return 5 * 20;
     }
+    // --- Phase 15: Nature Release ---
+    @Override
+    public String element() {
+        return "earth";
+    }
+
+    @Override
+    public int elementLevelRequired() {
+        return 1;
+    }
+
+    @Override
+    public float elementXpReward() {
+        return 15f;
+    }
+
 
     @Override
     public boolean handleCost(Player player, INinjaData ninjaData, int chargeAmount) {
@@ -85,6 +104,13 @@ public class EarthWallJutsuAbility extends Ability implements Ability.Cooldown {
             ninjaData.scheduleDelayedTickEvent((p) -> {
                 wallEntity.placeRow(row, Blocks.DIRT);
                 p.level().playSound(null, p, SoundEvents.GRAVEL_BREAK, SoundSource.PLAYERS, 1.0f, pitch);
+                if (p.level() instanceof ServerLevel serverLevel) {
+                    BlockParticleOption debris = new BlockParticleOption(ParticleTypes.BLOCK, Blocks.DIRT.defaultBlockState());
+                    for (BlockPos pos : row) {
+                        serverLevel.sendParticles(debris, pos.getX() + 0.5, pos.getY() + 0.2, pos.getZ() + 0.5,
+                                8, 0.3, 0.15, 0.3, 0.02);
+                    }
+                }
             }, 2 + i * 4);
         }
     }

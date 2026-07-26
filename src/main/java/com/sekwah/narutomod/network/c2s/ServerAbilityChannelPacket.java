@@ -66,6 +66,17 @@ public class ServerAbilityChannelPacket {
                         LOGGER.error("Ability doesnt exist {}", msg.abilityResource);
                         return;
                     }
+                    // Phase 15: scroll-taught jutsu must be learned; elemental jutsu need their
+                    // element unlocked + trained. Gating START also covers STOP.
+                    // Phase 16 adds the dojutsu gate.
+                    if (!ability.checkLearnedRequirement(player, ninjaData)
+                            || !ability.checkElementRequirement(player, ninjaData)
+                            || !ability.checkEyeRequirement(player, ninjaData)) {
+                        if (ability.castingFailSound() != null) {
+                            player.playNotifySound(ability.castingFailSound(), SoundSource.PLAYERS, 0.5f, 1.0f);
+                        }
+                        return;
+                    }
                     // Just check if its
                     if (ability.activationType() == Ability.ActivationType.CHANNELED) {
                         if (msg.status == ChannelStatus.START) {
@@ -74,6 +85,7 @@ public class ServerAbilityChannelPacket {
                             NarutoRegistries.ABILITIES.getResourceKey(ability).ifPresent(resourceKey -> {
                                 if(ninjaData.getCurrentlyChanneledAbility().equals(resourceKey.location())) {
                                     ability.performServer(player, ninjaData, ninjaData.getCurrentlyChanneledTicks());
+                                    ability.grantCastXp(ninjaData);
                                     ninjaData.setCurrentlyChanneledAbility(player, null);
                                 }
                             });
@@ -87,6 +99,7 @@ public class ServerAbilityChannelPacket {
                                     }
                                     player.displayClientMessage(Component.translatable("jutsu.cast", Component.translatable(ability.getTranslationKey(ninjaData)).withStyle(ChatFormatting.YELLOW)).withStyle(ChatFormatting.GREEN), true);
                                     ability.performServer(player, ninjaData, -1);
+                                    ability.grantCastXp(ninjaData);
                                 }
                             } else {
                                 player.displayClientMessage(Component.translatable("jutsu.channel.needed", Component.translatable(ability.getTranslationKey(ninjaData)).withStyle(ChatFormatting.YELLOW)).withStyle(ChatFormatting.RED), true);

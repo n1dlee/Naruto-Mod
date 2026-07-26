@@ -4,8 +4,8 @@ import com.sekwah.narutomod.abilities.Ability;
 import com.sekwah.narutomod.capabilities.INinjaData;
 import com.sekwah.narutomod.damagetypes.NarutoDamageTypes;
 import com.sekwah.narutomod.sounds.NarutoSounds;
+import com.sekwah.narutomod.util.NarutoParticles;
 import net.minecraft.ChatFormatting;
-import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
@@ -18,7 +18,6 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
-import org.joml.Vector3f;
 
 import java.util.Comparator;
 import java.util.List;
@@ -28,7 +27,7 @@ public class ChidoriDashAbility extends Ability implements Ability.Cooldown {
     private static final float CHAKRA_COST = 40.0F;
     private static final double DASH_DISTANCE = 10.0D;
     private static final double HIT_RADIUS = 1.25D;
-    private static final DustParticleOptions CHIDORI_PARTICLE = new DustParticleOptions(new Vector3f(0.45F, 0.85F, 1.0F), 1.0F);
+    private static final int WINDUP_TICKS = 4;
 
     @Override
     public ActivationType activationType() {
@@ -44,19 +43,26 @@ public class ChidoriDashAbility extends Ability implements Ability.Cooldown {
     public int getCooldown() {
         return 12 * 20;
     }
+    // --- Phase 15: Nature Release ---
+    @Override
+    public String element() {
+        return "lightning";
+    }
+
+    @Override
+    public int elementLevelRequired() {
+        return 9;
+    }
+
+    @Override
+    public float elementXpReward() {
+        return 30f;
+    }
+
 
     @Override
     public boolean handleCost(Player player, INinjaData ninjaData, int chargeAmount) {
-        if (!"uchiha".equals(ninjaData.getClanId())) {
-            player.displayClientMessage(Component.translatable("jutsu.fail.uchiha",
-                    Component.translatable(this.getTranslationKey(ninjaData)).withStyle(ChatFormatting.YELLOW)), true);
-            return false;
-        }
-        if (ninjaData.getSharinganLevel() < 2) {
-            player.displayClientMessage(Component.translatable("jutsu.fail.sharingan.two_tomoe",
-                    Component.translatable(this.getTranslationKey(ninjaData)).withStyle(ChatFormatting.YELLOW)), true);
-            return false;
-        }
+        // Phase 15: lightning-nature mastery gates this now (was Uchiha + Sharingan only)
         if (ninjaData.getChakra() < CHAKRA_COST) {
             player.displayClientMessage(Component.translatable("jutsu.fail.notenoughchakra",
                     Component.translatable(this.getTranslationKey(ninjaData)).withStyle(ChatFormatting.YELLOW)), true);
@@ -70,6 +76,19 @@ public class ChidoriDashAbility extends Ability implements Ability.Cooldown {
     public void performServer(Player player, INinjaData ninjaData, int ticksActive) {
         ninjaData.setChidoriTicks(0);
         Vec3 look = player.getLookAngle().normalize();
+
+        // Brief brace before the charge — crackling hand-flash sells "committing to the dash"
+        // instead of an instant zero-tell lunge.
+        if (player.level() instanceof ServerLevel serverLevel) {
+            Vec3 bracePos = player.position().add(0, player.getBbHeight() * 0.65, 0).add(look.scale(0.4));
+            serverLevel.sendParticles(NarutoParticles.CHIDORI_CYAN, bracePos.x, bracePos.y, bracePos.z, 10, 0.15, 0.15, 0.15, 0.02);
+            serverLevel.sendParticles(ParticleTypes.ELECTRIC_SPARK, bracePos.x, bracePos.y, bracePos.z, 10, 0.2, 0.2, 0.2, 0.05);
+        }
+
+        ninjaData.scheduleDelayedTickEvent(p -> launchDash(p, ninjaData, look), WINDUP_TICKS);
+    }
+
+    private void launchDash(Player player, INinjaData ninjaData, Vec3 look) {
         Vec3 start = player.position().add(0.0D, player.getBbHeight() * 0.5D, 0.0D);
         Vec3 end = start.add(look.scale(DASH_DISTANCE));
         BlockHitResult blockHit = player.level().clip(new ClipContext(start, end, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, player));
@@ -135,7 +154,7 @@ public class ChidoriDashAbility extends Ability implements Ability.Cooldown {
         int steps = Math.max(12, (int) (diff.length() * 2.0D));
         for (int i = 0; i <= steps; i++) {
             Vec3 pos = start.add(diff.scale(i / (double) steps));
-            serverLevel.sendParticles(CHIDORI_PARTICLE, pos.x, pos.y, pos.z, 1, 0.08D, 0.08D, 0.08D, 0.02D);
+            serverLevel.sendParticles(NarutoParticles.CHIDORI_CYAN, pos.x, pos.y, pos.z, 1, 0.08D, 0.08D, 0.08D, 0.02D);
             serverLevel.sendParticles(ParticleTypes.ELECTRIC_SPARK, pos.x, pos.y, pos.z, 2, 0.08D, 0.08D, 0.08D, 0.04D);
         }
     }

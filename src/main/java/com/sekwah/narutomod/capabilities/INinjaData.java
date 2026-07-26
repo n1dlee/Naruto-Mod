@@ -32,6 +32,32 @@ public interface INinjaData extends INBTSerializable<Tag> {
     void setInvisibleTicks(int ticks);
     boolean getInvisible();
 
+    // --- Kurama's own chakra, separate from the player's chakra pool ---
+    float getKuramaBond();
+    float getMaxKuramaBond();
+    void useKuramaBond(float amount);
+    void addKuramaBond(float amount);
+
+    // --- Scroll-wheel size/power control for tiered transformations (Susanoo / Kurama Cloak) ---
+    float getTransformPower();
+    void adjustTransformPower(float delta);
+
+    // --- Universal hand-seal cast-flash pose (Phase 9 Part B) ---
+    int getCastPoseTicks();
+    void setCastPoseTicks(int ticks);
+    boolean isCrossSealPose();
+    void setCrossSealPose(boolean crossSeal);
+
+    // --- Ability-specific cast pose dispatch (Phase 10 Part B) ---
+    ResourceLocation getLastCastAbilityId();
+    void setLastCastAbilityId(ResourceLocation id);
+
+    // --- Rasengan: held in hand, toggled on/off, resized with the scroll wheel ---
+    boolean isRasenganHeld();
+    void setRasenganHeld(boolean held);
+    int getRasenganCharge();
+    void adjustRasenganCharge(int delta);
+
     Vec3 getSubstitutionLoc();
     ResourceLocation getSubstitutionDimension();
     void setSubstitutionLoc(Vec3 loc, ResourceLocation dimension);
@@ -67,6 +93,26 @@ public interface INinjaData extends INBTSerializable<Tag> {
     void setNinjaRank(int rank);
     String getClanId();
     void setClanId(String clanId);
+    String getNatureAffinity();
+    void setNatureAffinity(String nature);
+
+    // --- Phase 15: Nature Release progression ---
+    boolean isElementUnlocked(String element);
+    java.util.List<String> getUnlockedElements();
+    int getMaxElementSlots();
+    boolean unlockElement(String element);
+    float getElementXp(String element);
+    void addElementXp(String element, float amount);
+    int getElementLevel(String element);
+    boolean isJutsuLearned(String jutsuPath);
+    void learnJutsu(String jutsuPath);
+
+    // --- Bingo Book bounty ---
+    String getBountyTargetId();
+    int getBountyRemaining();
+    float getBountyRewardXp();
+    void setBounty(String targetId, int count, float rewardXp);
+    void decrementBounty();
     int getSharinganLevel();
     boolean isSharinganActive();
     int getByakuganRange();
@@ -115,4 +161,53 @@ public interface INinjaData extends INBTSerializable<Tag> {
     void setKuramaCloakActive(boolean active);
     int getKuramaCloakTicks();
     void setKuramaCloakTicks(int ticks);
+    int getKuramaTailCount();
+    void setKuramaTailCount(int count);
+    float getKuramaMeleeDamageMultiplier();
+    void triggerKuramaTailLash(Player player, net.minecraft.world.entity.LivingEntity primaryTarget);
+
+    // --- Kurama Chakra Mode (KCM) ---
+    boolean isKcmActive();
+    void setKcmActive(boolean active);
+
+    // --- Phase 16: Dojutsu progression (stored, not rank-derived) ---
+    int getSharinganTomoe();
+    void setSharinganTomoe(int tomoe);
+    void setMangekyoAwakened(boolean awakened);
+    String getMangekyoForm();
+    void setMangekyoForm(String form);
+    void registerMangekyoUse(Player player);
+    /** UUID string of the creature branded with the Flying Thunder God seal, or empty. */
+    String getHiraishinEntityMark();
+    void setHiraishinEntityMark(String entityUuid);
+    /** How many un-rested Mangekyo casts have stacked up — drives the blindness duration. */
+    int getMsUseCounter();
+    /** Wipes accumulated Mangekyo eye strain — a full night's rest clears it. */
+    void clearMangekyoStrain();
+    boolean isEternalMangekyoAwakened();
+    void setEternalMangekyoAwakened(boolean awakened);
+    String getDefeatedMsBosses();
+    void addDefeatedMsBoss(String formId);
+    int getDefeatedMsBossCount();
+    boolean hasSignatureForm(String formId);
+    int getByakuganLevel();
+    void setByakuganLevel(int level);
+    boolean isRinneganAwakened();
+    void setRinneganAwakened(boolean awakened);
+    boolean isRinneganPathUnlocked(String pathId);
+    void unlockRinneganPath(String pathId);
+    boolean isRinneSharinganAwakened();
+    boolean tryConsumePhoenixSageCharge(long worldDay);
+
+    // --- Mangekyo Sharingan / Susanoo (Uchiha) ---
+    boolean isMangekyoAwakened();
+    boolean isSusanooActive();
+    void setSusanooActive(boolean active);
+    int getSusanooStage();
+    void setSusanooStage(int stage);
+    float getSusanooMeleeDamageMultiplier();
+    void triggerSusanooArmSwipe(Player player, net.minecraft.world.entity.LivingEntity primaryTarget);
+
+    // --- Giant-form camera eye height (Susanoo Complete Body / Kurama Full Avatar) ---
+    float getGiantEyeHeight();
 }

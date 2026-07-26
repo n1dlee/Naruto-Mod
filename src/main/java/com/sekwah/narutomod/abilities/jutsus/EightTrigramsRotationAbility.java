@@ -2,8 +2,8 @@ package com.sekwah.narutomod.abilities.jutsus;
 
 import com.sekwah.narutomod.abilities.Ability;
 import com.sekwah.narutomod.capabilities.INinjaData;
+import com.sekwah.narutomod.util.NarutoParticles;
 import net.minecraft.ChatFormatting;
-import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.LivingEntity;
@@ -11,7 +11,6 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
-import org.joml.Vector3f;
 
 import java.util.List;
 
@@ -30,9 +29,6 @@ public class EightTrigramsRotationAbility extends Ability implements Ability.Cha
     private static final float CHAKRA_PER_TICK = 2.0f;
     private static final double RADIUS = 2.5;
     private static final float MOB_DAMAGE = 6.0f;
-
-    private static final DustParticleOptions WHITE_PARTICLE =
-            new DustParticleOptions(new Vector3f(0.9f, 0.95f, 1.0f), 1.2f);
 
     @Override
     public ActivationType activationType() {
@@ -89,6 +85,17 @@ public class EightTrigramsRotationAbility extends Ability implements Ability.Cha
         // Freeze player in place
         player.addEffect(new net.minecraft.world.effect.MobEffectInstance(
                 net.minecraft.world.effect.MobEffects.MOVEMENT_SLOWDOWN, 5, 4, false, false));
+
+        // Kaiten's dome is canonically near-impenetrable — while spinning, the chakra shell
+        // absorbs almost all incoming damage, not just projectiles.
+        player.addEffect(new net.minecraft.world.effect.MobEffectInstance(
+                net.minecraft.world.effect.MobEffects.DAMAGE_RESISTANCE, 5, 3, false, false));
+
+        // Kaiten — spin the player's own body in place while channeling, on top of the
+        // particle spiral, so the technique reads as "the player is the rotating shield."
+        player.yBodyRot += 40.0F;
+        player.setYRot(player.yBodyRot);
+
         float damage = MOB_DAMAGE * ninjaData.getRankDamageMultiplier();
 
         Vec3 center = player.position().add(0, player.getBbHeight() * 0.5, 0);
@@ -125,7 +132,7 @@ public class EightTrigramsRotationAbility extends Ability implements Ability.Cha
                 double px = center.x + RADIUS * Math.cos(theta);
                 double pz = center.z + RADIUS * Math.sin(theta);
                 double py = center.y + Math.sin(Math.toRadians(ticksActive * 12.0 + i * 45.0)) * 0.8;
-                serverLevel.sendParticles(WHITE_PARTICLE, px, py, pz, 1, 0.05, 0.05, 0.05, 0.0);
+                serverLevel.sendParticles(NarutoParticles.ROTATION_WHITE, px, py, pz, 1, 0.05, 0.05, 0.05, 0.0);
             }
         }
     }

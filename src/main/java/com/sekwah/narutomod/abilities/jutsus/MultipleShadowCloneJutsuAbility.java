@@ -40,6 +40,8 @@ public class MultipleShadowCloneJutsuAbility extends Ability implements Ability.
 
     @Override
     public void performServer(Player player, INinjaData ninjaData, int ticksActive) {
+        ninjaData.setCrossSealPose(true);
+        ShadowCloneJutsuAbility.spawnCasterBurst(player, CLONE_COUNT);
         ShadowCloneJutsuAbility.spawnClones(player, CLONE_COUNT, SPREAD);
     }
 }

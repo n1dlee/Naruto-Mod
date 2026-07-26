@@ -68,6 +68,12 @@ public class NarutoItems {
     public static final RegistryObject<Item> AKATSUKI_CLOAK = ITEMS.register("akatsuki_cloak", ()
             -> new NarutoArmorItem(NarutoArmorMaterial.CHARACTER_CLOTHES, ArmorItem.Type.CHESTPLATE, new Item.Properties()));
 
+    public static final RegistryObject<Item> LEAF_CLOAK = ITEMS.register("leaf_cloak", ()
+            -> new NarutoArmorItem(NarutoArmorMaterial.CHARACTER_CLOTHES, ArmorItem.Type.CHESTPLATE, new Item.Properties()));
+
+    public static final RegistryObject<Item> SENJU_CLOAK = ITEMS.register("senju_cloak", ()
+            -> new NarutoArmorItem(NarutoArmorMaterial.CHARACTER_CLOTHES, ArmorItem.Type.CHESTPLATE, new Item.Properties()));
+
     public static final RegistryObject<Item> LONELY_MARCH = ITEMS.register("lonely_march", ()
             -> new RecordItem(41, NarutoSounds.LONELY_MARCH, new Item.Properties().stacksTo(1).rarity(Rarity.RARE), 46 * 20));
 
@@ -103,6 +109,73 @@ public class NarutoItems {
 
     public static final RegistryObject<Item> SOLDIER_PILL = ITEMS.register("soldier_pill", ()
             -> new SoldierPillItem(new Item.Properties().stacksTo(16)));
+
+    public static final RegistryObject<Item> FUMA_SHURIKEN = ITEMS.register("fuma_shuriken", ()
+            -> new FumaShurikenItem(new Item.Properties()));
+
+    public static final RegistryObject<Item> KUBIKIRIBOCHO = ITEMS.register("kubikiribocho", ()
+            -> new KubikiribochoItem(new Item.Properties().stacksTo(1)));
+
+    public static final RegistryObject<Item> SAMEHADA = ITEMS.register("samehada", ()
+            -> new com.sekwah.narutomod.item.weapons.SamehadaItem(new Item.Properties().stacksTo(1)));
+
+    // --- Phase 17: the rest of the Seven Swordsmen of the Mist, plus Madara's war fan ---
+    public static final RegistryObject<Item> NUIBARI = ITEMS.register("nuibari", ()
+            -> new NuibariItem(new Item.Properties().stacksTo(1)));
+
+    public static final RegistryObject<Item> SHIBUKI = ITEMS.register("shibuki", ()
+            -> new ShibukiItem(new Item.Properties().stacksTo(1)));
+
+    public static final RegistryObject<Item> KABUTOWARI = ITEMS.register("kabutowari", ()
+            -> new KabutowariItem(new Item.Properties().stacksTo(1)));
+
+    public static final RegistryObject<Item> HIRAMEKAREI = ITEMS.register("hiramekarei", ()
+            -> new HiramekareiItem(new Item.Properties().stacksTo(1)));
+
+    public static final RegistryObject<Item> KIBA_BLADES = ITEMS.register("kiba_blades", ()
+            -> new KibaBladesItem(new Item.Properties().stacksTo(1)));
+
+    public static final RegistryObject<Item> GUNBAI = ITEMS.register("gunbai", ()
+            -> new GunbaiItem(new Item.Properties().stacksTo(1)));
+
+    /** Phase 20: the marked kunai Minato threw ahead of himself. */
+    public static final RegistryObject<Item> HIRAISHIN_KUNAI = ITEMS.register("hiraishin_kunai", ()
+            -> new HiraishinKunaiItem(new Item.Properties()));
+
+    public static final RegistryObject<Item> BINGO_BOOK = ITEMS.register("bingo_book", ()
+            -> new BingoBookItem(new Item.Properties().stacksTo(1)));
+
+    public static final RegistryObject<Item> CHAKRA_PAPER = ITEMS.register("chakra_paper", ()
+            -> new ChakraPaperItem(new Item.Properties().stacksTo(16)));
+
+    /** Phase 16: rare drop from a defeated Mangekyo wielder — awakens the Rinnegan. */
+    public static final RegistryObject<Item> RINNEGAN_EYE = ITEMS.register("rinnegan_eye", ()
+            -> new RinneganEyeItem(new Item.Properties().stacksTo(1).rarity(net.minecraft.world.item.Rarity.EPIC)));
+
+    // --- Phase 15 C: jutsu technique scrolls ---
+    private static RegistryObject<Item> createScroll(String jutsuPath) {
+        return ITEMS.register("scroll_" + jutsuPath, ()
+                -> new JutsuScrollItem(jutsuPath, new Item.Properties().stacksTo(1)));
+    }
+
+    public static final RegistryObject<Item> SCROLL_FIREBALL = createScroll("fireball");
+    public static final RegistryObject<Item> SCROLL_WATER_BULLET = createScroll("water_bullet");
+    public static final RegistryObject<Item> SCROLL_WATER_DRAGON = createScroll("water_dragon");
+    public static final RegistryObject<Item> SCROLL_EARTH_WALL = createScroll("earth_wall");
+    public static final RegistryObject<Item> SCROLL_EARTH_SPIKES = createScroll("earth_spikes");
+    public static final RegistryObject<Item> SCROLL_GREAT_BREAKTHROUGH = createScroll("great_breakthrough");
+    public static final RegistryObject<Item> SCROLL_FALSE_DARKNESS = createScroll("false_darkness");
+    public static final RegistryObject<Item> SCROLL_CHIDORI = createScroll("chidori");
+    public static final RegistryObject<Item> SCROLL_CHIDORI_DASH = createScroll("chidori_dash");
+    public static final RegistryObject<Item> SCROLL_CHIDORI_NAGASHI = createScroll("chidori_nagashi");
+    public static final RegistryObject<Item> SCROLL_RASENSHURIKEN = createScroll("rasenshuriken");
+    public static final RegistryObject<Item> SCROLL_RASENGAN = createScroll("rasengan");
+    public static final RegistryObject<Item> SCROLL_SHADOW_CLONE = createScroll("shadow_clone");
+    public static final RegistryObject<Item> SCROLL_MULTIPLE_SHADOW_CLONE = createScroll("multiple_shadow_clone");
+    public static final RegistryObject<Item> SCROLL_FLYING_THUNDER_GOD = createScroll("flying_thunder_god");
+    public static final RegistryObject<Item> SCROLL_EIGHT_GATES = createScroll("eight_gates");
+    public static final RegistryObject<Item> SCROLL_KUCHIYOSE = createScroll("kuchiyose");
+    public static final RegistryObject<Item> SCROLL_SAGE_MODE = createScroll("sage_mode");
 
     // Ninja Masks
 

@@ -1,5 +1,6 @@
 package com.sekwah.narutomod.entity;
 
+import com.sekwah.narutomod.capabilities.NinjaCapabilityHandler;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.protocol.Packet;
@@ -34,6 +35,7 @@ public class ShadowCloneEntity extends PathfinderMob {
             SynchedEntityData.defineId(ShadowCloneEntity.class, EntityDataSerializers.OPTIONAL_UUID);
 
     private int aliveTicks = 0;
+    private boolean dispelled = false;
 
     public ShadowCloneEntity(EntityType<ShadowCloneEntity> entityType, Level level) {
         super(entityType, level);
@@ -81,8 +83,20 @@ public class ShadowCloneEntity extends PathfinderMob {
         }
     }
 
+    /** Set when the clone is destroyed by its own owner — dispelling your own clones for
+     *  chakra would otherwise be a free "cast 20 clones, punch them all" chakra pump. */
+    private boolean killedByOwner = false;
+
+    /** Minimum lifetime before a dispelling clone returns chakra — pairs with the
+     *  owner-kill check above to close the summon-and-instantly-harvest loop. */
+    private static final int MIN_TICKS_FOR_REFUND = 100;
+
     @Override
     public boolean hurt(DamageSource source, float amount) {
+        if (!level().isClientSide && source.getEntity() != null
+                && this.getOwnerUUID().map(id -> id.equals(source.getEntity().getUUID())).orElse(false)) {
+            this.killedByOwner = true;
+        }
         boolean result = super.hurt(source, amount);
         if (!level().isClientSide && !isAlive()) {
             poof();
@@ -91,10 +105,28 @@ public class ShadowCloneEntity extends PathfinderMob {
     }
 
     private void poof() {
+        if (this.dispelled) {
+            return;
+        }
+        this.dispelled = true;
         if (level() instanceof ServerLevel serverLevel) {
             serverLevel.sendParticles(ParticleTypes.CLOUD,
                     getX(), getY() + getBbHeight() / 2, getZ(),
                     30, 0.3, 0.4, 0.3, 0.05);
+
+            // Canon: when a shadow clone dispels, everything it gathered flows back to the
+            // original — translated here as a small chakra refund to the owner per clone.
+            // No refund for clones the owner destroyed themselves or that barely existed,
+            // so the mechanic rewards clones that actually fought, not chakra farming.
+            if (this.killedByOwner || this.aliveTicks < MIN_TICKS_FOR_REFUND) {
+                return;
+            }
+            this.getOwnerUUID().ifPresent(ownerId -> {
+                if (serverLevel.getEntity(ownerId) instanceof Player owner && owner.isAlive()) {
+                    owner.getCapability(NinjaCapabilityHandler.NINJA_DATA)
+                            .ifPresent(ownerData -> ownerData.addChakra(8f));
+                }
+            });
         }
     }
 

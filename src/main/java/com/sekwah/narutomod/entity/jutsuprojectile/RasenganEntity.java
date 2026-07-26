@@ -25,12 +25,15 @@ import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Vector3f;
 
+import java.util.UUID;
+
 public class RasenganEntity extends AbstractNonGlowingHurtingProjectile {
 
     public int lifeSpan = 80;
 
     private static final double MULTIPLIER = 0.15D;
     private static final DustParticleOptions CHAKRA_WAVE_PARTICLE = new DustParticleOptions(new Vector3f(0.35F, 0.85F, 1.0F), 1.2F);
+    private static final int GRIND_TICK_INTERVAL = 4;
 
     /** Synced to client so the renderer can scale visuals correctly. Min 20, max 60. */
     private static final EntityDataAccessor<Integer> CHARGE_AMOUNT =
@@ -40,6 +43,13 @@ public class RasenganEntity extends AbstractNonGlowingHurtingProjectile {
     private int chargeAmount = 20;
     private float damageMultiplier = 1.0F;
     private boolean canKillPlayers = false;
+
+    // --- Grinding state (anime-style: rasengan connects and grinds into the target for a
+    // couple seconds with continuous chip damage + a gentle shove, instead of one instant hit) ---
+    private boolean grinding = false;
+    private UUID grindTargetId = null;
+    private int grindTicksRemaining = 0;
+    private int grindTotalTicks = 0;
 
     public RasenganEntity(EntityType<RasenganEntity> entityType, Level level) {
         super(entityType, level);
@@ -108,6 +118,10 @@ public class RasenganEntity extends AbstractNonGlowingHurtingProjectile {
 
     @Override
     public void tick() {
+        if (this.grinding) {
+            tickGrind();
+            return;
+        }
         super.tick();
         if (lifeSpan-- <= 0) {
             if (this.level() instanceof ServerLevel serverLevel) {
@@ -119,65 +133,147 @@ public class RasenganEntity extends AbstractNonGlowingHurtingProjectile {
         }
     }
 
+    /**
+     * While grinding, the entity stops flying and instead glues itself to the target's position,
+     * dealing periodic chip damage + a small continuous shove — like Naruto grinding a Rasengan
+     * into an opponent — for a fixed duration before releasing with a bigger final knockback.
+     */
+    private void tickGrind() {
+        if (this.level().isClientSide) {
+            return;
+        }
+        if (!(this.level() instanceof ServerLevel serverLevel)) {
+            return;
+        }
+        Entity targetEntity = this.grindTargetId != null ? serverLevel.getEntity(this.grindTargetId) : null;
+        if (!(targetEntity instanceof LivingEntity target) || !target.isAlive()) {
+            releaseGrind(null);
+            return;
+        }
+
+        Vec3 stickPos = target.position().add(0, target.getBbHeight() * 0.5, 0);
+        this.setPos(stickPos.x, stickPos.y, stickPos.z);
+        this.setDeltaMovement(Vec3.ZERO);
+
+        this.grindTicksRemaining--;
+
+        if (this.grindTicksRemaining % GRIND_TICK_INTERVAL == 0) {
+            applyGrindDamageTick(target);
+
+            // Gentle continuous shove away from the caster while grinding (the big launch happens on release)
+            Entity owner = this.getOwner();
+            if (owner != null) {
+                Vec3 push = target.position().subtract(owner.position());
+                double len = push.horizontalDistance();
+                if (len > 0.001) {
+                    target.knockback(0.25, -push.x / len, -push.z / len);
+                }
+            }
+
+            serverLevel.sendParticles(CHAKRA_WAVE_PARTICLE,
+                    target.getX(), target.getY() + target.getBbHeight() * 0.5, target.getZ(),
+                    10, 0.3, 0.3, 0.3, 0.05);
+            serverLevel.sendParticles(ParticleTypes.CRIT,
+                    target.getX(), target.getY() + target.getBbHeight() * 0.5, target.getZ(),
+                    6, 0.25, 0.25, 0.25, 0.1);
+        }
+
+        if (this.grindTicksRemaining <= 0 || !target.isAlive()) {
+            releaseGrind(target);
+        }
+    }
+
+    private void applyGrindDamageTick(LivingEntity target) {
+        DamageSource dmgSource = NarutoDamageTypes.getDamageSource(this.level(), NarutoDamageTypes.RASENGAN, this, this.getOwner());
+        int tickCount = Math.max(1, this.grindTotalTicks / GRIND_TICK_INTERVAL);
+
+        if (target instanceof Player targetPlayer) {
+            // Same overall budget as before (14 HP at Chunin baseline), split across the grind —
+            // rechecking currentHP-1 every tick still naturally caps cumulative damage below Kage.
+            float totalDamage = 14.0F * this.damageMultiplier;
+            float damage = totalDamage / tickCount;
+            if (!this.canKillPlayers) {
+                damage = Math.min(damage, targetPlayer.getHealth() - 1.0F);
+            }
+            if (damage > 0) {
+                target.hurt(dmgSource, damage);
+            }
+        } else {
+            // Mobs: same 15→40 charge-scaled budget as before, split across the grind so tankier
+            // mobs visibly get chipped down + shoved rather than eating one lump sum.
+            float t = Math.max(0, Math.min(chargeAmount - 20, 40)) / 40.0f;
+            float totalDamage = (15.0f + t * 25.0f) * this.damageMultiplier;
+            target.hurt(dmgSource, totalDamage / tickCount);
+        }
+
+        if (this.getOwner() instanceof LivingEntity ownerLiving) {
+            this.doEnchantDamageEffects(ownerLiving, target);
+        }
+    }
+
+    private void releaseGrind(LivingEntity target) {
+        if (target != null && this.level() instanceof ServerLevel serverLevel) {
+            Vec3 diff = target.position().subtract(this.position());
+            double horizLen = diff.horizontalDistance();
+            if (horizLen > 0.001) {
+                double kbStrength = getKnockbackStrength();
+                target.knockback(kbStrength, -diff.x / horizLen, -diff.z / horizLen);
+                Vec3 motion = target.getDeltaMovement();
+                target.setDeltaMovement(motion.x, Math.min(motion.y + 0.6, 1.2), motion.z);
+            }
+            spawnReleaseBurst(serverLevel);
+            this.playSound(NarutoSounds.WATER_BULLET_SPLASH.get(), 2f, 1.5f);
+        }
+        this.discard();
+    }
+
+    private void spawnReleaseBurst(ServerLevel serverLevel) {
+        for (int i = 0; i < 36; i++) {
+            double angle = (Math.PI * 2.0D * i) / 36.0D;
+            double xSpeed = Math.cos(angle) * 0.18D;
+            double zSpeed = Math.sin(angle) * 0.18D;
+            serverLevel.sendParticles(CHAKRA_WAVE_PARTICLE,
+                    this.getX(), this.getY(), this.getZ(),
+                    1, xSpeed, 0.04D, zSpeed, 0.35D);
+        }
+        serverLevel.sendParticles(ParticleTypes.END_ROD,
+                this.getX(), this.getY(), this.getZ(),
+                24, 0.25D, 0.25D, 0.25D, 0.08D);
+    }
+
     @Override
     protected void onHitEntity(EntityHitResult hitResult) {
         super.onHitEntity(hitResult);
-        if (!this.level().isClientSide) {
-            Entity target = hitResult.getEntity();
-            Entity owner = this.getOwner();
-            DamageSource dmgSource = NarutoDamageTypes.getDamageSource(this.level(), NarutoDamageTypes.RASENGAN, this, owner);
-
-            if (target instanceof Player targetPlayer) {
-                // Below Kage, leave players at 1 HP. Kage-level Rasengan can be lethal.
-                float playerHp = targetPlayer.getHealth();
-                float damage = 14.0F * this.damageMultiplier;
-                if (!this.canKillPlayers) {
-                    damage = Math.min(damage, playerHp - 1.0F);
-                }
-                if (damage > 0) {
-                    target.hurt(dmgSource, damage);
-                }
-            } else {
-                // Mobs: scales 15 → 40 with full charge
-                float t = Math.max(0, Math.min(chargeAmount - 20, 40)) / 40.0f;
-                float mobDamage = (15.0f + t * 25.0f) * this.damageMultiplier;
-                target.hurt(dmgSource, mobDamage);
-            }
-
-            // Knockback — direction away from rasengan, scales with charge
-            Vec3 diff = target.position().subtract(this.position());
-            double horizLen = diff.horizontalDistance();
-            if (horizLen > 0) {
-                double kbStrength = getKnockbackStrength();
-                if (target instanceof LivingEntity living) {
-                    living.knockback(kbStrength, -diff.x / horizLen, -diff.z / horizLen);
-                    // Extra upward boost to make them fly back dramatically
-                    Vec3 motion = living.getDeltaMovement();
-                    living.setDeltaMovement(motion.x, Math.min(motion.y + 0.6, 1.2), motion.z);
-                }
-            }
-
-            if (owner instanceof LivingEntity) {
-                this.doEnchantDamageEffects((LivingEntity) owner, target);
-            }
+        if (this.level().isClientSide || this.grinding) {
+            return;
         }
+        Entity target = hitResult.getEntity();
+        if (!(target instanceof LivingEntity living) || !living.isAlive()) {
+            return;
+        }
+
+        // Start grinding instead of an instant single hit — matches Rasengan's anime usage of
+        // continuously drilling into the target for a couple seconds before releasing them.
+        this.grinding = true;
+        this.grindTargetId = living.getUUID();
+        float t = Math.max(0, Math.min(chargeAmount - 20, 40)) / 40.0f;
+        this.grindTotalTicks = (int) (30 + t * 20); // ~1.5s at min charge -> ~2.5s at max charge
+        this.grindTicksRemaining = this.grindTotalTicks;
+        this.setDeltaMovement(Vec3.ZERO);
+        this.xPower = 0.0D;
+        this.yPower = 0.0D;
+        this.zPower = 0.0D;
     }
 
     @Override
     protected void onHit(HitResult hitResult) {
         super.onHit(hitResult);
+        if (this.grinding) {
+            // onHitEntity already put us into the grind state — no burst/despawn yet, tick() drives it
+            return;
+        }
         if (this.level() instanceof ServerLevel serverLevel) {
-            for (int i = 0; i < 36; i++) {
-                double angle = (Math.PI * 2.0D * i) / 36.0D;
-                double xSpeed = Math.cos(angle) * 0.18D;
-                double zSpeed = Math.sin(angle) * 0.18D;
-                serverLevel.sendParticles(CHAKRA_WAVE_PARTICLE,
-                        this.getX(), this.getY(), this.getZ(),
-                        1, xSpeed, 0.04D, zSpeed, 0.35D);
-            }
-            serverLevel.sendParticles(ParticleTypes.END_ROD,
-                    this.getX(), this.getY(), this.getZ(),
-                    24, 0.25D, 0.25D, 0.25D, 0.08D);
+            spawnReleaseBurst(serverLevel);
         }
         if (!this.level().isClientSide) {
             this.playSound(NarutoSounds.WATER_BULLET_SPLASH.get(), 2f, 1.5f);

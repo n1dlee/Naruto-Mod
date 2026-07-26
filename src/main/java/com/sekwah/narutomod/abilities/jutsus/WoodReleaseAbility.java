@@ -2,11 +2,14 @@ package com.sekwah.narutomod.abilities.jutsus;
 
 import com.sekwah.narutomod.abilities.Ability;
 import com.sekwah.narutomod.capabilities.INinjaData;
+import com.sekwah.narutomod.util.NarutoParticles;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.sounds.SoundEvent;
+import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
@@ -41,6 +44,11 @@ public class WoodReleaseAbility extends Ability implements Ability.Cooldown {
     @Override
     public int getCooldown() {
         return 15 * 20;
+    }
+
+    @Override
+    public SoundEvent castingSound() {
+        return SoundEvents.AZALEA_PLACE;
     }
 
     @Override
@@ -110,11 +118,13 @@ public class WoodReleaseAbility extends Ability implements Ability.Cooldown {
             }
         }
 
-        // Green leaf particles
+        // Green leaf particles + a rising growth spiral around the cage shell
         if (level instanceof ServerLevel serverLevel) {
             serverLevel.sendParticles(ParticleTypes.COMPOSTER,
                     center.getX() + 0.5, center.getY() + 1.5, center.getZ() + 0.5,
                     30, 1.5, 1.5, 1.5, 0.05);
+            Vec3 base = Vec3.atCenterOf(center).subtract(0, 0.5, 0);
+            NarutoParticles.spawnSpiral(serverLevel, base, 1.8, 0.3, 12, NarutoParticles.LOG_BROWN);
         }
 
         // Schedule wood removal after 10 seconds

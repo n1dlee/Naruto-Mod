@@ -17,7 +17,13 @@ import java.util.UUID;
 public class AmaterasuFireEntity extends Entity {
 
     private static final int MAX_LIFESPAN = 20 * 20;
-    private static final float DAMAGE = 3.0F;
+    private static final float DAMAGE = 4.0F;
+    /**
+     * Canon: Amaterasu is unquenchable and burns until the target is ash. A literal 7-day
+     * burn isn't playable, but the black flames should CLING — victims keep burning long
+     * after leaving the flame patch, far beyond a normal fire tick.
+     */
+    private static final int CLING_FIRE_SECONDS = 15;
 
     private int lifeSpan = MAX_LIFESPAN;
     /** Transient owner reference — resolved each tick from ownerUUID so it survives chunk reloads. */
@@ -70,7 +76,7 @@ public class AmaterasuFireEntity extends Entity {
             AABB damageBox = this.getBoundingBox().inflate(1.5D);
             this.level().getEntities(this, damageBox, entity -> entity instanceof LivingEntity && entity != ownerEntity)
                     .forEach(entity -> {
-                        entity.setSecondsOnFire(6);
+                        entity.setSecondsOnFire(CLING_FIRE_SECONDS);
                         entity.hurt(damageSource, DAMAGE * this.damageMultiplier);
                     });
         }

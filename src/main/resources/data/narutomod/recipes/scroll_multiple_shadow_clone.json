@@ -1,0 +1,1 @@
+{ "type": "minecraft:crafting_shapeless", "category": "misc", "ingredients": [ { "item": "narutomod:scroll_shadow_clone" }, { "item": "minecraft:ink_sac" }, { "item": "minecraft:gunpowder" } ], "result": { "item": "narutomod:scroll_multiple_shadow_clone", "count": 1 } }

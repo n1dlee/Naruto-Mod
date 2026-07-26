@@ -24,10 +24,14 @@ public class NarutoInGameGUI {
     private final SubstitutionGUI substitutionOverlay;
     private final WorldMarkerGUI worldMarkerOverlay;
     private final SharinganOverlayGUI sharinganOverlay;
+    private final RinneganOverlayGUI rinneganOverlay;
     private final ByakuganOverlayGUI byakuganOverlay;
     private final ByakuganEntityVisionGUI byakuganEntityVisionOverlay;
     private final SageModeOverlayGUI sageModeOverlay;
     private final KuramaCloakOverlayGUI kuramaCloakOverlay;
+    private final SusanooOverlayGUI susanooOverlay;
+    private final KuramaChakraModeOverlayGUI kcmOverlay;
+    private final JutsuHudGUI jutsuHudOverlay;
     private final Minecraft minecraft;
 
     private final PlayerGUI[] overlays;
@@ -49,12 +53,16 @@ public class NarutoInGameGUI {
         this.substitutionOverlay = new SubstitutionGUI(this.minecraft);
         this.worldMarkerOverlay = new WorldMarkerGUI(this.minecraft);
         this.sharinganOverlay = new SharinganOverlayGUI(this.minecraft);
+        this.rinneganOverlay = new RinneganOverlayGUI(this.minecraft);
         this.byakuganOverlay = new ByakuganOverlayGUI(this.minecraft);
         this.byakuganEntityVisionOverlay = new ByakuganEntityVisionGUI(this.minecraft);
         this.sageModeOverlay = new SageModeOverlayGUI(this.minecraft);
         this.kuramaCloakOverlay = new KuramaCloakOverlayGUI(this.minecraft);
+        this.susanooOverlay = new SusanooOverlayGUI(this.minecraft);
+        this.kcmOverlay = new KuramaChakraModeOverlayGUI(this.minecraft);
+        this.jutsuHudOverlay = new JutsuHudGUI(this.minecraft);
 
-        this.overlays = new PlayerGUI[]{this.byakuganEntityVisionOverlay, this.byakuganOverlay, this.sharinganOverlay, this.sageModeOverlay, this.kuramaCloakOverlay, this.worldMarkerOverlay, this.substitutionOverlay, this.charkaOverlay};
+        this.overlays = new PlayerGUI[]{this.byakuganEntityVisionOverlay, this.byakuganOverlay, this.sharinganOverlay, this.rinneganOverlay, this.sageModeOverlay, this.kuramaCloakOverlay, this.susanooOverlay, this.kcmOverlay, this.worldMarkerOverlay, this.substitutionOverlay, this.charkaOverlay, this.jutsuHudOverlay};
 
         MinecraftForge.EVENT_BUS.addListener(this::renderGameOverlay);
         MinecraftForge.EVENT_BUS.addListener(this::clientTickEvent);

@@ -32,6 +32,37 @@ public class NarutoCreativeTabs {
                 output.accept(NarutoItems.KUSANAGI.get());
                 output.accept(NarutoItems.SMOKE_BOMB.get());
                 output.accept(NarutoItems.SOLDIER_PILL.get());
+                output.accept(NarutoItems.FUMA_SHURIKEN.get());
+                output.accept(NarutoItems.KUBIKIRIBOCHO.get());
+                output.accept(NarutoItems.SAMEHADA.get());
+                output.accept(NarutoItems.NUIBARI.get());
+                output.accept(NarutoItems.SHIBUKI.get());
+                output.accept(NarutoItems.KABUTOWARI.get());
+                output.accept(NarutoItems.HIRAMEKAREI.get());
+                output.accept(NarutoItems.KIBA_BLADES.get());
+                output.accept(NarutoItems.GUNBAI.get());
+                output.accept(NarutoItems.HIRAISHIN_KUNAI.get());
+                output.accept(NarutoItems.BINGO_BOOK.get());
+                output.accept(NarutoItems.CHAKRA_PAPER.get());
+                output.accept(NarutoItems.RINNEGAN_EYE.get());
+                output.accept(NarutoItems.SCROLL_FIREBALL.get());
+                output.accept(NarutoItems.SCROLL_WATER_BULLET.get());
+                output.accept(NarutoItems.SCROLL_WATER_DRAGON.get());
+                output.accept(NarutoItems.SCROLL_EARTH_WALL.get());
+                output.accept(NarutoItems.SCROLL_EARTH_SPIKES.get());
+                output.accept(NarutoItems.SCROLL_GREAT_BREAKTHROUGH.get());
+                output.accept(NarutoItems.SCROLL_FALSE_DARKNESS.get());
+                output.accept(NarutoItems.SCROLL_CHIDORI.get());
+                output.accept(NarutoItems.SCROLL_CHIDORI_DASH.get());
+                output.accept(NarutoItems.SCROLL_CHIDORI_NAGASHI.get());
+                output.accept(NarutoItems.SCROLL_RASENGAN.get());
+                output.accept(NarutoItems.SCROLL_RASENSHURIKEN.get());
+                output.accept(NarutoItems.SCROLL_SHADOW_CLONE.get());
+                output.accept(NarutoItems.SCROLL_MULTIPLE_SHADOW_CLONE.get());
+                output.accept(NarutoItems.SCROLL_FLYING_THUNDER_GOD.get());
+                output.accept(NarutoItems.SCROLL_EIGHT_GATES.get());
+                output.accept(NarutoItems.SCROLL_KUCHIYOSE.get());
+                output.accept(NarutoItems.SCROLL_SAGE_MODE.get());
             }).title(Component.translatable("narutomod_weapons"))::build);
     public static RegistryObject<CreativeModeTab> NINJA_ARMOR = CREATIVE_MODE_TABS.register("narutomod_armor", CreativeModeTab.builder()
             .icon(() -> NarutoItems.RED_ANBU_MASK.get().getDefaultInstance())
@@ -45,6 +76,8 @@ public class NarutoCreativeTabs {
                 output.accept(NarutoItems.FLAK_JACKET.get());
                 output.accept(NarutoItems.ANBU_ARMOR.get());
                 output.accept(NarutoItems.AKATSUKI_CLOAK.get());
+                output.accept(NarutoItems.LEAF_CLOAK.get());
+                output.accept(NarutoItems.SENJU_CLOAK.get());
             }).title(Component.translatable("narutomod_armor"))::build);
     public static RegistryObject<CreativeModeTab> HEADBANDS = CREATIVE_MODE_TABS.register("narutomod_headbands", CreativeModeTab.builder()
             .icon(() -> NarutoItems.HEADBAND_BLUE.get().getDefaultInstance())

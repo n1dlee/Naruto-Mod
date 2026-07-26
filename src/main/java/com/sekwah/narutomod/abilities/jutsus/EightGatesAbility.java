@@ -2,8 +2,13 @@ package com.sekwah.narutomod.abilities.jutsus;
 
 import com.sekwah.narutomod.abilities.Ability;
 import com.sekwah.narutomod.capabilities.INinjaData;
+import com.sekwah.narutomod.util.NarutoParticles;
 import net.minecraft.ChatFormatting;
+import net.minecraft.core.particles.ParticleOptions;
 import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.entity.player.Player;
 
 /**
@@ -61,5 +66,27 @@ public class EightGatesAbility extends Ability {
         player.displayClientMessage(
                 Component.literal(gateName + " — OPEN! (Gate " + nextGate + "/8)")
                         .withStyle(color), true);
+
+        // Escalating gate-open sound — mirrors the GREEN->RED->BLACK particle escalation below
+        var gateSound = nextGate <= 4 ? SoundEvents.BEACON_POWER_SELECT
+                : nextGate <= 7 ? SoundEvents.ANVIL_LAND
+                : SoundEvents.WARDEN_SONIC_BOOM;
+        float gatePitch = 1.2f - nextGate * 0.08f;
+        player.level().playSound(null, player, gateSound, SoundSource.PLAYERS, 1.0f, gatePitch);
+
+        // Chakra pressure shockwave ring — color escalates green -> red -> black as gates open
+        if (player.level() instanceof ServerLevel serverLevel) {
+            ParticleOptions ringParticle = nextGate <= 4 ? NarutoParticles.GATE_GREEN
+                    : nextGate <= 7 ? NarutoParticles.GATE_RED
+                    : NarutoParticles.GATE_BLACK;
+            double baseY = player.getY() + 0.1;
+            for (int ring = 0; ring < 3; ring++) {
+                double radius = 0.6 + ring * (0.5 + nextGate * 0.15);
+                NarutoParticles.spawnRing(serverLevel, player.position().add(0, baseY - player.getY() + ring * 0.5, 0),
+                        radius, 12 + nextGate * 2, ringParticle);
+            }
+            NarutoParticles.spawnBurst(serverLevel, player.position().add(0, player.getBbHeight() * 0.5, 0),
+                    10 + nextGate * 3, 0.5, ringParticle);
+        }
     }
 }

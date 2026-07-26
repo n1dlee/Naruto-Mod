@@ -21,6 +21,22 @@ public class WaterBulletJutsuAbility extends Ability implements Ability.Cooldown
     public long defaultCombo() {
         return 132;
     }
+    // --- Phase 15: Nature Release ---
+    @Override
+    public String element() {
+        return "water";
+    }
+
+    @Override
+    public int elementLevelRequired() {
+        return 1;
+    }
+
+    @Override
+    public float elementXpReward() {
+        return 15f;
+    }
+
 
     @Override
     public boolean handleCost(Player player, INinjaData ninjaData, int chargeAmount) {

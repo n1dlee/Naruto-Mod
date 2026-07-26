@@ -61,10 +61,21 @@ public class NinjaCommand {
                                         .executes(ctx -> {
                                             String clan = parseClan(StringArgumentType.getString(ctx, "clan"));
                                             if (clan == null) {
-                                                sendInvalid(ctx.getSource(), "clan", "uzumaki, uchiha, hyuga, nara, haruno, senju, none");
+                                                sendInvalid(ctx.getSource(), "clan", "uzumaki, uchiha, hyuga, nara, haruno, senju, akimichi, yamanaka, inuzuka, aburame, none");
                                                 return 0;
                                             }
                                             return mutateTarget(ctx, "clan", data -> data.setClanId(clan));
+                                        }))))
+                .then(Commands.literal("nature")
+                        .then(Commands.argument("target", EntityArgument.player())
+                                .then(Commands.argument("nature", StringArgumentType.word())
+                                        .executes(ctx -> {
+                                            String nature = parseNature(StringArgumentType.getString(ctx, "nature"));
+                                            if (nature == null) {
+                                                sendInvalid(ctx.getSource(), "nature", "fire, water, wind, earth, lightning, none");
+                                                return 0;
+                                            }
+                                            return mutateTarget(ctx, "nature affinity", data -> data.setNatureAffinity(nature));
                                         }))))
                 .then(Commands.literal("ninja")
                         .then(Commands.argument("target", EntityArgument.player())
@@ -166,7 +177,16 @@ public class NinjaCommand {
 
     private static String parseClan(String clan) {
         return switch (clan.toLowerCase(Locale.ROOT)) {
-            case "uzumaki", "uchiha", "hyuga", "nara", "haruno", "senju" -> clan.toLowerCase(Locale.ROOT);
+            case "uzumaki", "uchiha", "hyuga", "nara", "haruno", "senju",
+                 "akimichi", "yamanaka", "inuzuka", "aburame" -> clan.toLowerCase(Locale.ROOT);
+            case "none" -> "";
+            default -> null;
+        };
+    }
+
+    private static String parseNature(String nature) {
+        return switch (nature.toLowerCase(Locale.ROOT)) {
+            case "fire", "water", "wind", "earth", "lightning" -> nature.toLowerCase(Locale.ROOT);
             case "none" -> "";
             default -> null;
         };

@@ -73,6 +73,161 @@ public abstract class Ability {
         return true;
     }
 
+    // --- Phase 15: Nature Release ---
+
+    /**
+     * Element id this jutsu belongs to ("fire", "water", "earth", "wind", "lightning"),
+     * or null for non-elemental techniques and kekkei genkai. Elemental jutsu are gated
+     * centrally by unlocked element + mastery level (see checkElementRequirement) and
+     * feed element XP on every successful cast.
+     */
+    public String element() {
+        return null;
+    }
+
+    /**
+     * Element mastery level required to cast (only checked when element() != null).
+     */
+    public int elementLevelRequired() {
+        return 1;
+    }
+
+    /**
+     * Element XP granted per successful cast of this jutsu.
+     */
+    public float elementXpReward() {
+        return 15f;
+    }
+
+    /**
+     * Phase 15 C: scroll-taught jutsu must be learned before casting. Checked centrally
+     * from the activation/channel packet handlers together with the element gate.
+     */
+    public boolean checkLearnedRequirement(Player player, INinjaData ninjaData) {
+        var resourceKey = NarutoRegistries.ABILITIES.getResourceKey(this);
+        if (resourceKey.isEmpty()) {
+            return true;
+        }
+        String path = resourceKey.get().location().getPath();
+        if (!JutsuScrolls.requiresScroll(path) || ninjaData.isJutsuLearned(path)) {
+            return true;
+        }
+        player.displayClientMessage(Component.translatable("jutsu.fail.notlearned",
+                Component.translatable(this.getTranslationKey(ninjaData)).withStyle(ChatFormatting.YELLOW))
+                .withStyle(ChatFormatting.RED), true);
+        return false;
+    }
+
+    /**
+     * Central elemental gate: the caster must have this jutsu's element unlocked and
+     * trained to the required mastery level. Non-elemental jutsu always pass.
+     */
+    public boolean checkElementRequirement(Player player, INinjaData ninjaData) {
+        String element = this.element();
+        if (element == null) {
+            return true;
+        }
+        Component elementName = Component.translatable("element.narutomod." + element).withStyle(ChatFormatting.YELLOW);
+        if (!ninjaData.isElementUnlocked(element)) {
+            player.displayClientMessage(Component.translatable("jutsu.fail.element.locked",
+                    Component.translatable(this.getTranslationKey(ninjaData)).withStyle(ChatFormatting.YELLOW),
+                    elementName).withStyle(ChatFormatting.RED), true);
+            return false;
+        }
+        int level = ninjaData.getElementLevel(element);
+        if (level < this.elementLevelRequired()) {
+            player.displayClientMessage(Component.translatable("jutsu.fail.element.level",
+                    Component.translatable(this.getTranslationKey(ninjaData)).withStyle(ChatFormatting.YELLOW),
+                    elementName,
+                    Component.literal(String.valueOf(this.elementLevelRequired())).withStyle(ChatFormatting.YELLOW),
+                    Component.literal(String.valueOf(level)).withStyle(ChatFormatting.YELLOW)).withStyle(ChatFormatting.RED), true);
+            return false;
+        }
+        return true;
+    }
+
+    // --- Phase 16: Dojutsu gating ---
+
+    /**
+     * Eye required to cast this technique, or null for eye-agnostic jutsu. One of:
+     * "sharingan_tomoe1".."sharingan_tomoe3", "sharingan_ms", "sharingan_ems",
+     * "byakugan", "rinnegan", "rinnegan_path:&lt;id&gt;", "rinne_sharingan".
+     * Checked centrally from the activation/channel packet handlers, next to the
+     * element and scroll gates.
+     */
+    public String requiredEye() {
+        return null;
+    }
+
+    /**
+     * Mangekyo form that owns this signature technique ("itachi", "sasuke", "madara",
+     * "shisui", "obito"), or null when any Mangekyo may cast it. A player commands a
+     * form either by awakening it or by taking it from the boss who owned it.
+     */
+    public String requiredEyeForm() {
+        return null;
+    }
+
+    /**
+     * Central dojutsu gate. Eye-agnostic jutsu always pass.
+     */
+    public boolean checkEyeRequirement(Player player, INinjaData ninjaData) {
+        String eye = this.requiredEye();
+        if (eye == null) {
+            return true;
+        }
+        boolean hasEye;
+        String eyeKey = eye;
+        if (eye.startsWith("sharingan_tomoe")) {
+            int tomoe = eye.charAt(eye.length() - 1) - '0';
+            hasEye = ninjaData.getSharinganTomoe() >= tomoe || ninjaData.isMangekyoAwakened();
+        } else if (eye.startsWith("rinnegan_path:")) {
+            String path = eye.substring("rinnegan_path:".length());
+            hasEye = ninjaData.isRinneganAwakened()
+                    && (ninjaData.isRinneganPathUnlocked(path) || ninjaData.isRinneSharinganAwakened());
+            eyeKey = "rinnegan_path";
+        } else {
+            hasEye = switch (eye) {
+                case "sharingan_ms" -> ninjaData.isMangekyoAwakened();
+                case "sharingan_ems" -> ninjaData.isEternalMangekyoAwakened();
+                case "byakugan" -> ninjaData.getByakuganLevel() >= 1;
+                case "rinnegan" -> ninjaData.isRinneganAwakened() || ninjaData.isRinneSharinganAwakened();
+                case "rinne_sharingan" -> ninjaData.isRinneSharinganAwakened();
+                default -> true;
+            };
+        }
+        if (!hasEye) {
+            player.displayClientMessage(Component.translatable("jutsu.fail.eye." + eyeKey,
+                    Component.translatable(this.getTranslationKey(ninjaData)).withStyle(ChatFormatting.YELLOW))
+                    .withStyle(ChatFormatting.RED), true);
+            return false;
+        }
+        String form = this.requiredEyeForm();
+        if (form != null && !ninjaData.hasSignatureForm(form)) {
+            player.displayClientMessage(Component.translatable("jutsu.fail.eye.form",
+                    Component.translatable(this.getTranslationKey(ninjaData)).withStyle(ChatFormatting.YELLOW),
+                    Component.translatable("mangekyo.form." + form).withStyle(ChatFormatting.YELLOW))
+                    .withStyle(ChatFormatting.RED), true);
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * Awards XP after a successful cast — call sites live in the ability
+     * activation/channel packet handlers so every jutsu path funnels through one place.
+     * Elemental jutsu train their element; every cast also grants a token amount of
+     * rank XP (practice) — the real rank progression comes from landed hits and kills
+     * (see PlayerEvents), since chakra spend no longer drips XP.
+     */
+    public void grantCastXp(INinjaData ninjaData) {
+        ninjaData.addChakraXp(2f);
+        String element = this.element();
+        if (element != null) {
+            ninjaData.addElementXp(element, this.elementXpReward());
+        }
+    }
+
     /**
      *
      * @return sound to play, if null no sound should be played

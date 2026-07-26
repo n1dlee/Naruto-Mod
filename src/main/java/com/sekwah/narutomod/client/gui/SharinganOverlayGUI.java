@@ -20,9 +20,15 @@ public class SharinganOverlayGUI implements PlayerGUI {
             new ResourceLocation(NarutoMod.MOD_ID, "textures/effects/sharingan/mangekyou.png")
     };
 
+    private static ResourceLocation emsTexture(String form) {
+        return new ResourceLocation(NarutoMod.MOD_ID, "textures/effects/sharingan/ems_" + form + ".png");
+    }
+
     private final Minecraft minecraft;
     private boolean active;
     private int level;
+    /** Phase 16: which pinwheel to draw once the Mangekyo has gone Eternal. */
+    private String emsForm = "";
 
     public SharinganOverlayGUI(Minecraft minecraft) {
         this.minecraft = minecraft;
@@ -43,7 +49,9 @@ public class SharinganOverlayGUI implements PlayerGUI {
         guiGraphics.fill(0, 0, width, 18, 0x66000000);
         guiGraphics.fill(0, height - 18, width, height, 0x66000000);
 
-        ResourceLocation texture = TEXTURES[Math.min(this.level, 4)];
+        ResourceLocation texture = this.emsForm.isEmpty()
+                ? TEXTURES[Math.min(this.level, 4)]
+                : emsTexture(this.emsForm);
         int iconSize = this.level >= 4 ? 48 : 40;
         guiGraphics.blit(texture, width - iconSize - 8, 8, 0, 0, iconSize, iconSize, iconSize, iconSize);
         RenderSystem.disableBlend();
@@ -54,6 +62,7 @@ public class SharinganOverlayGUI implements PlayerGUI {
         player.getCapability(NinjaCapabilityHandler.NINJA_DATA).ifPresent(ninjaData -> {
             this.active = ninjaData.isSharinganActive();
             this.level = ninjaData.getSharinganLevel();
+            this.emsForm = ninjaData.isEternalMangekyoAwakened() ? ninjaData.getMangekyoForm() : "";
         });
     }
 }

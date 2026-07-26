@@ -1,6 +1,7 @@
 package com.sekwah.narutomod.network.c2s;
 
 import com.sekwah.narutomod.abilities.Ability;
+import com.sekwah.narutomod.capabilities.INinjaData;
 import com.sekwah.narutomod.capabilities.NinjaCapabilityHandler;
 import com.sekwah.narutomod.capabilities.toggleabilitydata.ToggleAbilityData;
 import com.sekwah.narutomod.gameevents.NarutoGameEvents;
@@ -54,6 +55,16 @@ public class ServerAbilityActivatePacket {
                         return;
                     }
                     Ability ability = NarutoRegistries.ABILITIES.getValue(msg.abilityId);
+                    // Phase 15: scroll-taught jutsu must be learned; elemental jutsu need their
+                    // element unlocked + trained. Phase 16 adds the dojutsu gate.
+                    if (!ability.checkLearnedRequirement(player, ninjaData)
+                            || !ability.checkElementRequirement(player, ninjaData)
+                            || !ability.checkEyeRequirement(player, ninjaData)) {
+                        if (ability.castingFailSound() != null) {
+                            player.playNotifySound(ability.castingFailSound(), SoundSource.PLAYERS, 0.5f, 1.0f);
+                        }
+                        return;
+                    }
                     if (ability.activationType() == Ability.ActivationType.INSTANT) {
 
                         boolean canTriggerJutsu = true;
@@ -70,10 +81,21 @@ public class ServerAbilityActivatePacket {
                                         player, ability.castingSound(), SoundSource.PLAYERS, 0.5f, 1.0f);
                                 player.level().gameEvent(player, NarutoGameEvents.JUTSU_CASTING.get(), player.position().add(0, player.getEyeHeight() * 0.7, 0));
                             }
+                            ninjaData.setCrossSealPose(false);
+                            NarutoRegistries.ABILITIES.getResourceKey(ability).ifPresent(key -> ninjaData.setLastCastAbilityId(key.location()));
                             ability.performServer(player, ninjaData);
+                            ability.grantCastXp(ninjaData);
+                            strainMangekyo(player, ninjaData, ability);
+                            ninjaData.setCastPoseTicks(8);
 
-                            if (ability  instanceof Ability.Cooldown) {
-                               ((Ability.Cooldown) ability).registerCooldown(ninjaData, ability.getTranslationKey(ninjaData));
+                            if (ability  instanceof Ability.Cooldown cooldownAbility) {
+                               cooldownAbility.registerCooldown(ninjaData, ability.getTranslationKey(ninjaData));
+                               if (cooldownAbility.getCooldown() > 0) {
+                                   com.sekwah.narutomod.network.PacketHandler.sendToPlayer(
+                                           new com.sekwah.narutomod.network.s2c.ClientCooldownPacket(
+                                                   ability.getTranslationKey(ninjaData), cooldownAbility.getCooldown()),
+                                           player);
+                               }
                             }
                         } else if(ability.castingFailSound() != null) {
                             player.playNotifySound( ability.castingFailSound(), SoundSource.PLAYERS, 0.5f, 1.0f);
@@ -94,13 +116,31 @@ public class ServerAbilityActivatePacket {
                                     return;
                                 }
                                 // Toggle ability on
+                                if (ability.castingSound() != null) {
+                                    player.level().playSound(null,
+                                            player, ability.castingSound(), SoundSource.PLAYERS, 0.5f, 1.0f);
+                                    player.level().gameEvent(player, NarutoGameEvents.JUTSU_CASTING.get(), player.position().add(0, player.getEyeHeight() * 0.7, 0));
+                                }
                                 abilityTracker.addAbilityStarted(player, ninjaData, ability);
+                                strainMangekyo(player, ninjaData, ability);
                             }
                         });
                     }
                 });
             });
             ctx.get().setPacketHandled(true);
+        }
+
+        /**
+         * Phase 16: casting with an ordinary Mangekyo burns the eyes — each use blinds the
+         * caster for twice as long as the last. Eternal Mangekyo is immune (see
+         * NinjaData#registerMangekyoUse), which is the whole reward for hunting the bosses.
+         */
+        private static void strainMangekyo(ServerPlayer player, INinjaData ninjaData, Ability ability) {
+            String eye = ability.requiredEye();
+            if (eye != null && eye.startsWith("sharingan_ms")) {
+                ninjaData.registerMangekyoUse(player);
+            }
         }
     }
 }

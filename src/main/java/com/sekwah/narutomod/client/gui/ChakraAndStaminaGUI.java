@@ -32,6 +32,10 @@ public class ChakraAndStaminaGUI implements PlayerGUI {
     private float chakraXp;
     private int ninjaRank;
     private String clanId = "";
+    private float kuramaBond;
+    private float maxKuramaBond;
+    /** Awakened natures for the HUD card: [display name, level, argb color as string]. */
+    private java.util.List<String[]> elementDisplay = java.util.List.of();
 
     // Charge bar state
     private boolean isChanneling = false;
@@ -153,33 +157,72 @@ public class ChakraAndStaminaGUI implements PlayerGUI {
                 intStaminaColor,
                 intStaminaColorDarker);
 
-        // --- Rank + Clan display above the chakra bar ---
+        // --- Rank + Clan display: top-left corner "ninja card" (kept out of the
+        // vanilla XP-bar/health/hunger band which sits centered above the hotbar) ---
         int rankIdx = Math.min(ninjaRank, 4);
         String rankName = RANK_NAMES[rankIdx];
         int rankColor = RANK_COLORS[rankIdx];
-        int infoY = this.screenHeight - 36;
+        int cardX = 6;
+        int cardY = 6;
 
-        // Rank icon (left of center)
-        if (RANK_ICONS[rankIdx] != null) {
-            this.setColor(Color.WHITE);
-            guiGraphics.blit(RANK_ICONS[rankIdx], screenMid - 8, infoY - 1, 0, 0, 10, 10, 10, 10);
-        }
-
-        // Rank name + XP text
-        String rankText = rankName + " [" + (int) chakraXp + " XP]";
-        GuiUtils.centeredTextOutlined(guiGraphics, this.getFont(), rankText,
-                screenMid, infoY, rankColor, 0x222222);
-
-        // Clan icon (to the right of the rank text)
+        // Clan icon (top-left corner)
+        int clanIconWidth = 0;
         if (!clanId.isEmpty()) {
             for (int i = 0; i < CLAN_IDS.length; i++) {
                 if (CLAN_IDS[i].equals(clanId)) {
-                    int textWidth = this.getFont().width(rankText);
                     this.setColor(Color.WHITE);
-                    guiGraphics.blit(CLAN_ICONS[i], screenMid + textWidth / 2 + 3, infoY - 2, 0, 0, 12, 12, 12, 12);
+                    guiGraphics.blit(CLAN_ICONS[i], cardX, cardY, 0, 0, 12, 12, 12, 12);
+                    clanIconWidth = 14;
                     break;
                 }
             }
+        }
+
+        // Rank icon (next to clan icon)
+        int rankIconX = cardX + clanIconWidth;
+        int rankIconWidth = 0;
+        if (RANK_ICONS[rankIdx] != null) {
+            this.setColor(Color.WHITE);
+            guiGraphics.blit(RANK_ICONS[rankIdx], rankIconX, cardY + 1, 0, 0, 10, 10, 10, 10);
+            rankIconWidth = 12;
+        }
+
+        // Rank name + XP text, left-aligned after the icons
+        String rankText = rankName + " [" + (int) chakraXp + " XP]";
+        GuiUtils.leftTextOutlined(guiGraphics, this.getFont(), rankText,
+                rankIconX + rankIconWidth, cardY + 2, rankColor, 0x222222);
+
+        // --- Phase 15: awakened natures with mastery levels ---
+        if (!elementDisplay.isEmpty()) {
+            int elementX = cardX;
+            int elementY = cardY + 24;
+            for (String[] entry : elementDisplay) {
+                String label = entry[0] + " " + entry[1];
+                int color = Integer.parseInt(entry[2]);
+                GuiUtils.leftTextOutlined(guiGraphics, this.getFont(), label,
+                        elementX, elementY, color, 0x222222);
+                elementX += this.getFont().width(label) + 8;
+            }
+        }
+
+        // --- Kurama bond meter (Uzumaki only) — Kurama's own chakra, separate from the player's ---
+        if ("uzumaki".equals(clanId) && maxKuramaBond > 0) {
+            int bondBarWidth = 60;
+            int bondBarHeight = 3;
+            int bondBarX = cardX;
+            int bondBarY = cardY + 14;
+            float bondPercent = kuramaBond / maxKuramaBond;
+            int filledW = (int) (bondBarWidth * bondPercent);
+
+            guiGraphics.fill(bondBarX - 1, bondBarY - 1,
+                    bondBarX + bondBarWidth + 1, bondBarY + bondBarHeight + 1,
+                    0xAA222222);
+            guiGraphics.fill(bondBarX, bondBarY,
+                    bondBarX + filledW, bondBarY + bondBarHeight,
+                    0xFFFF8800);
+
+            GuiUtils.leftTextOutlined(guiGraphics, this.getFont(), "Kurama",
+                    bondBarX + bondBarWidth + 4, bondBarY - 3, 0xFF8800, 0x331a00);
         }
 
         // --- Charge bar (shown during channeling) ---
@@ -277,6 +320,30 @@ public class ChakraAndStaminaGUI implements PlayerGUI {
             this.sageCharge = ninjaData.getSageCharge();
             this.sageModeActive = ninjaData.isSageModeActive();
             this.sageModeTicks = ninjaData.getSageModeTicks();
+            this.kuramaBond = ninjaData.getKuramaBond();
+            this.maxKuramaBond = ninjaData.getMaxKuramaBond();
+
+            java.util.List<String[]> elements = new java.util.ArrayList<>();
+            for (String element : ninjaData.getUnlockedElements()) {
+                String name = switch (element) {
+                    case "fire" -> "Fire";
+                    case "water" -> "Water";
+                    case "earth" -> "Earth";
+                    case "wind" -> "Wind";
+                    case "lightning" -> "Lightning";
+                    default -> element;
+                };
+                int color = switch (element) {
+                    case "fire" -> 0xFF5533;
+                    case "water" -> 0x33AAFF;
+                    case "earth" -> 0xCC8833;
+                    case "wind" -> 0x55DD77;
+                    case "lightning" -> 0xEEE055;
+                    default -> 0xFFFFFF;
+                };
+                elements.add(new String[]{name, String.valueOf(ninjaData.getElementLevel(element)), String.valueOf(color)});
+            }
+            this.elementDisplay = elements;
         });
     }
 

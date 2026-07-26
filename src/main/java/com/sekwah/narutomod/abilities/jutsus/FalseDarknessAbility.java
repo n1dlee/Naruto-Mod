@@ -8,6 +8,8 @@ import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.sounds.SoundEvent;
+import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
@@ -52,6 +54,27 @@ public class FalseDarknessAbility extends Ability implements Ability.Cooldown {
     public int getCooldown() {
         return 12 * 20;
     }
+
+    @Override
+    public SoundEvent castingSound() {
+        return SoundEvents.LIGHTNING_BOLT_IMPACT;
+    }
+    // --- Phase 15: Nature Release ---
+    @Override
+    public String element() {
+        return "lightning";
+    }
+
+    @Override
+    public int elementLevelRequired() {
+        return 3;
+    }
+
+    @Override
+    public float elementXpReward() {
+        return 20f;
+    }
+
 
     @Override
     public boolean handleCost(Player player, INinjaData ninjaData, int chargeAmount) {

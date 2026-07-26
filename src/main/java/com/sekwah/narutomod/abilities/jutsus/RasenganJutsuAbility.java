@@ -2,29 +2,28 @@ package com.sekwah.narutomod.abilities.jutsus;
 
 import com.sekwah.narutomod.abilities.Ability;
 import com.sekwah.narutomod.capabilities.INinjaData;
-import com.sekwah.narutomod.entity.jutsuprojectile.RasenganEntity;
+import com.sekwah.narutomod.util.NarutoParticles;
 import net.minecraft.ChatFormatting;
-import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.chat.Component;
-import net.minecraft.server.level.ServerLevel;
+import net.minecraft.sounds.SoundEvent;
+import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.phys.Vec3;
 
 /**
- * Rasengan - CHANNELED jutsu (combo 212).
- * Hold keys for at least 1 second (20 ticks) to form the Rasengan, then release to fire.
- * Longer charge = stronger knockback (scales 4.0 → 6.0 over 20–60 ticks).
- * Deals 7 hearts (14 HP) to players but cannot kill them (leaves at 1 HP).
+ * Rasengan — held in hand (combo 212, TOGGLE), like Naruto actually uses it: formed, carried,
+ * resized on the fly, and rammed into a target or a wall rather than thrown. Toggle on to form
+ * it, scroll the mouse wheel to grow/shrink it (20-60, same scale the old charge used), melee
+ * an entity to slam it into them (see PlayerEvents.applyRasenganMeleeHit), or punch a block to
+ * blast a small crater (see PlayerEvents.onLeftClickBlock). Either action consumes it.
  */
-public class RasenganJutsuAbility extends Ability implements Ability.Channeled, Ability.Cooldown {
+public class RasenganJutsuAbility extends Ability implements Ability.Toggled, Ability.ToggleStartCheck, Ability.HandleEnded {
 
-    private static final float CHAKRA_PER_TICK = 2.0f;
-    private static final int MIN_CHARGE = 20;  // 1 second
-    private static final int MAX_CHARGE = 60;  // 3 seconds (knockback caps here)
+    private static final float CHAKRA_PER_TICK = 1.5f;
+    private static final float ACTIVATE_COST = 15f;
 
     @Override
     public ActivationType activationType() {
-        return ActivationType.CHANNELED;
+        return ActivationType.TOGGLE;
     }
 
     @Override
@@ -33,60 +32,74 @@ public class RasenganJutsuAbility extends Ability implements Ability.Channeled, 
     }
 
     @Override
-    public int getCooldown() {
-        return 8 * 20;
-    }
-
-    // Must hold at least MIN_CHARGE ticks — no instant-release cast
-    @Override
-    public boolean canActivateBelowMinCharge() {
-        return false;
+    public boolean canStartToggle(Player player, INinjaData ninjaData) {
+        return validateChakra(player, ninjaData, ACTIVATE_COST);
     }
 
     @Override
     public boolean handleCost(Player player, INinjaData ninjaData, int chargeAmount) {
-        if (ninjaData.getChakra() < CHAKRA_PER_TICK) {
-            player.displayClientMessage(Component.translatable("jutsu.fail.notenoughchakra",
-                    Component.translatable(this.getTranslationKey(ninjaData)).withStyle(ChatFormatting.YELLOW)), true);
-            return false;
-        }
-        ninjaData.useChakra(CHAKRA_PER_TICK, 5);
-        return true;
-    }
-
-    /**
-     * Called every tick while channeling. Spawns a blue spiral around the player's hand.
-     */
-    @Override
-    public void handleChannelling(Player player, INinjaData ninjaData, int ticksChanneled) {
-        if (player.level() instanceof ServerLevel serverLevel) {
-            // Spiral pattern that rotates faster as charge grows
-            double speed = 0.7 + (ticksChanneled / 40.0);
-            double angle = ticksChanneled * speed;
-            double radius = 0.35;
-
-            for (int i = 0; i < 2; i++) {
-                double a = angle + Math.PI * i;
-                double px = player.getX() + Math.cos(a) * radius;
-                double py = player.getEyeY() - 0.35 + Math.sin(ticksChanneled * 0.3) * 0.1;
-                double pz = player.getZ() + Math.sin(a) * radius;
-                serverLevel.sendParticles(ParticleTypes.SOUL_FIRE_FLAME,
-                        px, py, pz, 1, 0, 0, 0, 0.01);
-            }
-        }
+        return validateChakra(player, ninjaData, CHAKRA_PER_TICK);
     }
 
     @Override
     public void performServer(Player player, INinjaData ninjaData, int ticksActive) {
-        // Clamp charge amount between min and max
-        final int charge = Math.max(MIN_CHARGE, Math.min(ticksActive, MAX_CHARGE));
-        ninjaData.scheduleDelayedTickEvent((p) -> {
-            Vec3 look = p.getLookAngle();
-            RasenganEntity rasengan = new RasenganEntity(p, look.x, look.y, look.z);
-            rasengan.setChargeAmount(charge);
-            rasengan.setDamageMultiplier(ninjaData.getRankDamageMultiplier());
-            rasengan.setCanKillPlayers(ninjaData.getNinjaRank() >= 4);
-            p.level().addFreshEntity(rasengan);
-        }, 3);
+        if (!ninjaData.isRasenganHeld()) {
+            ninjaData.useChakra(ACTIVATE_COST, 10);
+            ninjaData.setRasenganHeld(true);
+            player.displayClientMessage(
+                    Component.literal("Rasengan formed!").withStyle(ChatFormatting.AQUA), true);
+        } else {
+            ninjaData.useChakra(CHAKRA_PER_TICK, 5);
+        }
+    }
+
+    @Override
+    public void handleAbilityEnded(Player player, INinjaData ninjaData, int ticksActive) {
+        ninjaData.setRasenganHeld(false);
+    }
+
+    @Override
+    public SoundEvent castingSound() {
+        return SoundEvents.END_PORTAL_FRAME_FILL;
+    }
+
+    /**
+     * Spiral + compressing ring in the player's hand, scaled by the current held charge
+     * (20-60, adjustable with the scroll wheel).
+     */
+    @Override
+    public void performToggleClient(Player player, INinjaData ninjaData) {
+        int charge = ninjaData.getRasenganCharge();
+        float t = Math.max(0, Math.min(charge - 20, 40)) / 40.0f;
+        double radius = 0.2 + t * 0.25;
+        double angle = player.tickCount * (0.7 + t);
+
+        for (int i = 0; i < 2; i++) {
+            double a = angle + Math.PI * i;
+            double px = player.getX() + Math.cos(a) * radius;
+            double py = player.getEyeY() - 0.35 + Math.sin(player.tickCount * 0.3) * 0.1;
+            double pz = player.getZ() + Math.sin(a) * radius;
+            player.level().addParticle(NarutoParticles.RASENGAN_BLUE, px, py, pz, 0, 0, 0);
+        }
+
+        if (player.tickCount % 4 == 0) {
+            double ringRadius = radius + 0.15;
+            double py = player.getEyeY() - 0.35;
+            for (int i = 0; i < 8; i++) {
+                double a = (Math.PI * 2 * i) / 8 - player.tickCount * 0.15;
+                double px = player.getX() + Math.cos(a) * ringRadius;
+                double pz = player.getZ() + Math.sin(a) * ringRadius;
+                player.level().addParticle(NarutoParticles.RASENGAN_BLUE, px, py, pz, 0, 0, 0);
+            }
+        }
+    }
+
+    private boolean validateChakra(Player player, INinjaData ninjaData, float cost) {
+        if (ninjaData.getChakra() < cost) {
+            player.displayClientMessage(Component.translatable("jutsu.fail.notenoughchakra",
+                    Component.translatable(this.getTranslationKey(ninjaData)).withStyle(ChatFormatting.YELLOW)), true);
+            return false;
+        }
+        return true;
     }
 }

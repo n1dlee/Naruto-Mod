@@ -60,6 +60,15 @@ public class NarutoResourceManager extends BlockEntityWithoutLevelRenderer {
                 .setArmorModel(new AkatsukiCloakModel(modelSet.bakeLayer(AkatsukiCloakModel.LAYER_LOCATION)))
                 .setArmorTexture("textures/models/armor/akatsuki_cloak.png");
 
+        // Leaf Village and Senju cloaks reuse the Akatsuki cloak geometry with a different texture
+        ((NarutoArmorItem) NarutoItems.LEAF_CLOAK.get())
+                .setArmorModel(new AkatsukiCloakModel(modelSet.bakeLayer(AkatsukiCloakModel.LAYER_LOCATION)))
+                .setArmorTexture("textures/models/armor/leaf_cloak.png");
+
+        ((NarutoArmorItem) NarutoItems.SENJU_CLOAK.get())
+                .setArmorModel(new AkatsukiCloakModel(modelSet.bakeLayer(AkatsukiCloakModel.LAYER_LOCATION)))
+                .setArmorTexture("textures/models/armor/senju_cloak.png");
+
         setHeadbandRenderer(modelSet, NarutoItems.HEADBAND_BLUE, "textures/models/armor/headband/headband_blue_blank.png");
         setHeadbandRenderer(modelSet, NarutoItems.HEADBAND_BLACK, "textures/models/armor/headband/headband_black_blank.png");
         setHeadbandRenderer(modelSet, NarutoItems.HEADBAND_RED, "textures/models/armor/headband/headband_red_blank.png");

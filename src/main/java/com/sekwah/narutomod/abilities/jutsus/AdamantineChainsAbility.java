@@ -2,17 +2,19 @@ package com.sekwah.narutomod.abilities.jutsus;
 
 import com.sekwah.narutomod.abilities.Ability;
 import com.sekwah.narutomod.capabilities.INinjaData;
+import com.sekwah.narutomod.capabilities.NinjaCapabilityHandler;
+import com.sekwah.narutomod.util.NarutoParticles;
 import net.minecraft.ChatFormatting;
-import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.sounds.SoundEvent;
+import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
-import org.joml.Vector3f;
 
 import java.util.HashSet;
 import java.util.List;
@@ -30,8 +32,6 @@ public class AdamantineChainsAbility extends Ability implements Ability.Cooldown
     private static final float CHAKRA_COST = 70f;
     private static final double CHAIN_RANGE = 10.0;
     private static final double CHAIN_WIDTH = 1.0;
-    private static final DustParticleOptions CHAIN_PARTICLE =
-            new DustParticleOptions(new Vector3f(1.0f, 0.55f, 0.0f), 1.2f);
 
     @Override
     public ActivationType activationType() {
@@ -46,6 +46,11 @@ public class AdamantineChainsAbility extends Ability implements Ability.Cooldown
     @Override
     public int getCooldown() {
         return 25 * 20;
+    }
+
+    @Override
+    public SoundEvent castingSound() {
+        return SoundEvents.CHAIN_PLACE;
     }
 
     @Override
@@ -92,7 +97,7 @@ public class AdamantineChainsAbility extends Ability implements Ability.Cooldown
                 int steps = (int)(CHAIN_RANGE * 4);
                 for (int i = 0; i <= steps; i++) {
                     Vec3 pos = origin.add(dir.scale(i / 4.0));
-                    serverLevel.sendParticles(CHAIN_PARTICLE, pos.x, pos.y, pos.z,
+                    serverLevel.sendParticles(NarutoParticles.CHAIN_GOLD, pos.x, pos.y, pos.z,
                             1, 0.05, 0.05, 0.05, 0.01);
                 }
             }
@@ -120,13 +125,20 @@ public class AdamantineChainsAbility extends Ability implements Ability.Cooldown
                             // Players: slowed heavily, not killed
                             target.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, playerBindTicks, 4, false, true));
                             target.addEffect(new MobEffectInstance(MobEffects.JUMP, playerBindTicks, -10, false, false));
+                            // Canon: these are SEALING chains — they suppress the victim's
+                            // chakra, not just their movement (strong enough to seal bijuu)
+                            targetPlayer.getCapability(NinjaCapabilityHandler.NINJA_DATA)
+                                    .ifPresent(targetData -> targetData.useChakra(150f, playerBindTicks));
                         } else {
                             // Mobs: full freeze
                             target.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, mobBindTicks, 10, false, true));
                         }
+                        // Chakra suppression weakens whatever the chains bind
+                        target.addEffect(new MobEffectInstance(MobEffects.WEAKNESS,
+                                target instanceof Player ? playerBindTicks : mobBindTicks, 1, false, true));
                         // Particle burst on target
                         if (player.level() instanceof ServerLevel serverLevel) {
-                            serverLevel.sendParticles(CHAIN_PARTICLE,
+                            serverLevel.sendParticles(NarutoParticles.CHAIN_GOLD,
                                     target.getX(), target.getY() + target.getBbHeight() * 0.5, target.getZ(),
                                     15, 0.3, 0.4, 0.3, 0.05);
                         }

@@ -4,10 +4,13 @@ import com.sekwah.narutomod.abilities.Ability;
 import com.sekwah.narutomod.capabilities.INinjaData;
 import com.sekwah.narutomod.entity.SubstitutionLogEntity;
 import com.sekwah.narutomod.sounds.NarutoSounds;
+import com.sekwah.narutomod.util.NarutoParticles;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.sounds.SoundEvent;
+import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.Mth;
 import net.minecraft.world.effect.MobEffectInstance;
@@ -89,6 +92,11 @@ public class SubstitutionJutsuAbility extends Ability implements Ability.Channel
                     pos.z,
                     100,
                     0.5, 0.7, 0.5, 0);
+            // Log-swap flash: brown wood-chip burst sells the "replaced by a log" moment,
+            // plus a quick expanding ring so the swap point reads clearly at a glance
+            NarutoParticles.spawnBurst(serverLevel, pos.add(0, player.getBbHeight() * 0.5, 0),
+                    25, 0.4, NarutoParticles.LOG_BROWN);
+            NarutoParticles.spawnRing(serverLevel, pos.add(0, 0.1, 0), 0.8, 12, NarutoParticles.LOG_BROWN);
         }
     }
 
@@ -112,5 +120,10 @@ public class SubstitutionJutsuAbility extends Ability implements Ability.Channel
     @Override
     public boolean useChargedMessages() {
         return true;
+    }
+
+    @Override
+    public SoundEvent castingSound() {
+        return SoundEvents.SHULKER_TELEPORT;
     }
 }

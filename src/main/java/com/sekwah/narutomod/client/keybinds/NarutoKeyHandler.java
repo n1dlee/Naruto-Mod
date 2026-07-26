@@ -10,11 +10,13 @@ import com.sekwah.narutomod.config.NarutoConfig;
 import com.sekwah.narutomod.network.PacketHandler;
 import com.sekwah.narutomod.network.c2s.ServerAbilityChannelPacket;
 import com.sekwah.narutomod.network.c2s.ServerJutsuCastingPacket;
+import com.sekwah.narutomod.network.c2s.ServerScrollAdjustPacket;
 import com.sekwah.narutomod.network.c2s.ServerWallWalkDetachPacket;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.client.event.InputEvent;
 import net.minecraftforge.client.event.RegisterKeyMappingsEvent;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
@@ -44,6 +46,11 @@ public class NarutoKeyHandler {
      */
     private static long currentJutsuCombo = 0;
     private static Ability currentJutsuComboAbility = null;
+
+    /** Read by the combo-hint HUD (JutsuHudGUI). */
+    public static long getCurrentJutsuCombo() {
+        return currentJutsuCombo;
+    }
     /**
      * This will limit the jutsu value to 10 keys long
      */
@@ -60,6 +67,8 @@ public class NarutoKeyHandler {
 
     private static KeyBindingTickHeld JUTSU_MENU_KEY;
     private static KeyBindingTickHeld CHIDORI_KEY;
+    private static KeyBindingTickHeld POWER_ADJUST_KEY;
+    private static KeyBindingTickHeld HIRAISHIN_KEY;
 
     /**
      * Attached on the main NarutoMod file to the mod bus as this isn't a forge bus event
@@ -73,6 +82,8 @@ public class NarutoKeyHandler {
         JUTSU_B_KEY = registerKeyBind("naruto.keys.key3", KeyEvent.VK_B, event);
         JUTSU_MENU_KEY = registerKeyBind("naruto.keys.jutsu_menu", KeyEvent.VK_J, event);
         CHIDORI_KEY = registerKeyBind("naruto.keys.chidori", KeyEvent.VK_G, event);
+        POWER_ADJUST_KEY = registerKeyBind("naruto.keys.power_adjust", KeyEvent.VK_R, event);
+        HIRAISHIN_KEY = registerKeyBind("naruto.keys.hiraishin", KeyEvent.VK_H, event);
 
         JUTSU_KEYS.add(LEAP_KEY);
         JUTSU_KEYS.add(JUTSU_C_KEY);
@@ -99,6 +110,15 @@ public class NarutoKeyHandler {
             Minecraft mc = Minecraft.getInstance();
             if(mc.player != null ) {
                 NarutoAbilities.triggerAbility(NarutoAbilities.CHIDORI.getId());
+            }
+        });
+
+        // Hiraishin is bound to its own key rather than a hand-seal combo: the technique's
+        // whole identity is snapping between seals faster than you could type one.
+        HIRAISHIN_KEY.registerClickConsumer( () -> {
+            Minecraft mc = Minecraft.getInstance();
+            if(mc.player != null ) {
+                NarutoAbilities.triggerAbility(NarutoAbilities.HIRAISHIN_TELEPORT.getId());
             }
         });
 
@@ -189,7 +209,37 @@ public class NarutoKeyHandler {
         if (CHIDORI_KEY != null) {
             CHIDORI_KEY.update();
         }
+        if (POWER_ADJUST_KEY != null) {
+            POWER_ADJUST_KEY.update();
+        }
         handleWallWalkJumpDetach();
+    }
+
+    /**
+     * Mouse wheel doubles as a size/power dial while a tiered transformation (Susanoo /
+     * Kurama Cloak) or a held Rasengan is active — but ONLY while holding R at the same
+     * time. Plain scrolling always switches hotbar slots as normal, so you can still pick
+     * a weapon for melee combat while transformed or carrying a Rasengan.
+     */
+    @SubscribeEvent
+    public static void onMouseScroll(InputEvent.MouseScrollingEvent event) {
+        if (POWER_ADJUST_KEY == null || !POWER_ADJUST_KEY.isDown()) {
+            return;
+        }
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player == null) {
+            return;
+        }
+        mc.player.getCapability(NinjaCapabilityHandler.NINJA_DATA).ifPresent(ninjaData -> {
+            boolean transformed = ninjaData.isSusanooActive() || ninjaData.isKuramaCloakActive();
+            boolean rasenganHeld = ninjaData.isRasenganHeld();
+            if (!transformed && !rasenganHeld) {
+                return;
+            }
+            event.setCanceled(true);
+            float direction = event.getScrollDelta() > 0 ? 1f : -1f;
+            PacketHandler.sendToServer(new ServerScrollAdjustPacket(direction));
+        });
     }
 
     private static void handleWallWalkJumpDetach() {

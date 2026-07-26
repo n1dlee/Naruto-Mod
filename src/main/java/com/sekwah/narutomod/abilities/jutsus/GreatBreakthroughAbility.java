@@ -7,6 +7,8 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.sounds.SoundEvent;
+import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.LivingEntity;
@@ -44,6 +46,27 @@ public class GreatBreakthroughAbility extends Ability implements Ability.Cooldow
     public int getCooldown() {
         return 7 * 20;
     }
+
+    @Override
+    public SoundEvent castingSound() {
+        return SoundEvents.PHANTOM_SWOOP;
+    }
+    // --- Phase 15: Nature Release ---
+    @Override
+    public String element() {
+        return "wind";
+    }
+
+    @Override
+    public int elementLevelRequired() {
+        return 1;
+    }
+
+    @Override
+    public float elementXpReward() {
+        return 15f;
+    }
+
 
     @Override
     public boolean handleCost(Player player, INinjaData ninjaData, int chargeAmount) {

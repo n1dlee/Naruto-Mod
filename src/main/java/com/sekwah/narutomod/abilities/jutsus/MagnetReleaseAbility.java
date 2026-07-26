@@ -2,10 +2,12 @@ package com.sekwah.narutomod.abilities.jutsus;
 
 import com.sekwah.narutomod.abilities.Ability;
 import com.sekwah.narutomod.capabilities.INinjaData;
+import com.sekwah.narutomod.util.NarutoParticles;
 import net.minecraft.ChatFormatting;
-import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.sounds.SoundEvent;
+import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -17,7 +19,6 @@ import net.minecraft.world.item.TieredItem;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
-import org.joml.Vector3f;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -48,6 +49,11 @@ public class MagnetReleaseAbility extends Ability implements Ability.Cooldown {
     @Override
     public int getCooldown() {
         return 12 * 20;
+    }
+
+    @Override
+    public SoundEvent castingSound() {
+        return SoundEvents.ANVIL_LAND;
     }
 
     @Override
@@ -97,7 +103,7 @@ public class MagnetReleaseAbility extends Ability implements Ability.Cooldown {
             // Gray metallic particles along trajectory
             if (level instanceof ServerLevel serverLevel) {
                 serverLevel.sendParticles(
-                        new DustParticleOptions(new Vector3f(0.5f, 0.5f, 0.55f), 1.0f),
+                        NarutoParticles.METAL_GRAY,
                         item.getX(), item.getY() + 0.25, item.getZ(),
                         3, 0.1, 0.1, 0.1, 0.02);
             }
@@ -112,12 +118,14 @@ public class MagnetReleaseAbility extends Ability implements Ability.Cooldown {
             target.hurt(player.damageSources().playerAttack(player), totalDamage);
         }
 
-        // Particles at target
+        // Particles at target — dense metallic field, not just a flat burst
         if (level instanceof ServerLevel serverLevel) {
             serverLevel.sendParticles(
-                    new DustParticleOptions(new Vector3f(0.4f, 0.4f, 0.45f), 1.5f),
+                    NarutoParticles.METAL_GRAY,
                     targetPoint.x, targetPoint.y, targetPoint.z,
                     15, 0.5, 0.5, 0.5, 0.05);
+            NarutoParticles.spawnRing(serverLevel, targetPoint, 1.2, 16, NarutoParticles.METAL_GRAY);
+            NarutoParticles.spawnRing(serverLevel, targetPoint, 0.6, 10, NarutoParticles.METAL_GRAY);
         }
 
         // Schedule gravity restoration for items

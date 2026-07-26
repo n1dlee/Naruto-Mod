@@ -4,6 +4,8 @@ import com.sekwah.narutomod.abilities.Ability;
 import com.sekwah.narutomod.capabilities.INinjaData;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.particles.BlockParticleOption;
+import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
@@ -46,6 +48,22 @@ public class EarthSpikesAbility extends Ability implements Ability.Cooldown {
     public int getCooldown() {
         return 8 * 20;
     }
+    // --- Phase 15: Nature Release ---
+    @Override
+    public String element() {
+        return "earth";
+    }
+
+    @Override
+    public int elementLevelRequired() {
+        return 4;
+    }
+
+    @Override
+    public float elementXpReward() {
+        return 20f;
+    }
+
 
     @Override
     public boolean handleCost(Player player, INinjaData ninjaData, int chargeAmount) {
@@ -109,6 +127,9 @@ public class EarthSpikesAbility extends Ability implements Ability.Cooldown {
 
                 serverLevel.playSound(null, root, SoundEvents.GRAVEL_BREAK,
                         SoundSource.BLOCKS, 1.2f, 0.7f + (float) Math.random() * 0.3f);
+                BlockParticleOption debris = new BlockParticleOption(ParticleTypes.BLOCK, Blocks.DIRT.defaultBlockState());
+                serverLevel.sendParticles(debris, root.getX() + 0.5, root.getY() + SPIKE_HEIGHT * 0.5, root.getZ() + 0.5,
+                        20, 0.35, SPIKE_HEIGHT * 0.4, 0.35, 0.05);
             }, delay);
 
             // Removal event: scheduled separately via the same ninjaData reference

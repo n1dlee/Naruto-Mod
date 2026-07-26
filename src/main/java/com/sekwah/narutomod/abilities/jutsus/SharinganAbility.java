@@ -3,19 +3,18 @@ package com.sekwah.narutomod.abilities.jutsus;
 import com.sekwah.narutomod.abilities.Ability;
 import com.sekwah.narutomod.capabilities.INinjaData;
 import com.sekwah.narutomod.sounds.NarutoSounds;
+import com.sekwah.narutomod.util.NarutoParticles;
 import net.minecraft.ChatFormatting;
-import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
-import org.joml.Vector3f;
 
 public class SharinganAbility extends Ability implements Ability.Toggled, Ability.ToggleStartCheck {
 
     private static final float CHAKRA_COST = 1.0F;
     private static final int CHAKRA_COOLDOWN = 15;
-    private static final DustParticleOptions SHARINGAN_PARTICLE = new DustParticleOptions(new Vector3f(0.9F, 0.0F, 0.0F), 0.7F);
 
     @Override
     public ActivationType activationType() {
@@ -51,14 +50,36 @@ public class SharinganAbility extends Ability implements Ability.Toggled, Abilit
         if (level >= 3) {
             player.addEffect(new MobEffectInstance(MobEffects.DAMAGE_BOOST, 40, 0, false, false));
         }
+
+        // Canon: the Sharingan also perceives chakra — chakra vision at 2+ tomoe, same
+        // glowing-outline translation as the Byakugan but with a much smaller radius
+        // (the Byakugan is THE long-range sensory dojutsu; the Sharingan reads what's near).
+        if (level >= 2 && player.tickCount % 20 == 0) {
+            double visionRadius = 8 + level * 4; // 16 -> 24 blocks
+            for (LivingEntity seen : player.level().getEntitiesOfClass(LivingEntity.class,
+                    player.getBoundingBox().inflate(visionRadius), e -> e != player && e.isAlive())) {
+                seen.addEffect(new MobEffectInstance(MobEffects.GLOWING, 30, 0, false, false));
+            }
+        }
     }
 
     @Override
     public void performToggleClient(Player player, INinjaData ninjaData) {
         if (player.tickCount % 8 == 0) {
-            player.level().addParticle(SHARINGAN_PARTICLE,
+            player.level().addParticle(NarutoParticles.SHARINGAN_RED,
                     player.getX(), player.getEyeY() - 0.15D, player.getZ(),
                     0.0D, 0.0D, 0.0D);
+        }
+        // Slow expanding "eye glint" ring, pulses roughly once a second
+        if (player.tickCount % 20 == 0) {
+            double eyeY = player.getEyeY() - 0.1D;
+            for (int i = 0; i < 8; i++) {
+                double angle = (Math.PI * 2 * i) / 8;
+                double radius = 0.15D;
+                player.level().addParticle(NarutoParticles.SHARINGAN_RED,
+                        player.getX() + Math.cos(angle) * radius, eyeY, player.getZ() + Math.sin(angle) * radius,
+                        0.0D, 0.0D, 0.0D);
+            }
         }
     }
 
