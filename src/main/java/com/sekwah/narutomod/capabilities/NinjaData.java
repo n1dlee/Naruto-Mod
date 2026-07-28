@@ -258,7 +258,7 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
      */
     private transient boolean applyingEyeStrain = false;
 
-    private static final float TRANSPLANT_IDLE_DRAIN = 1.0f;   // per second, always on
+    private static final float TRANSPLANT_IDLE_DRAIN = 0.6f;   // per second, always on
     private static final int SHARINGAN_DODGE_COOLDOWN = 30;    // 1.5s between dodges
     private static final float SHARINGAN_DODGE_COST = 6.0f;
 

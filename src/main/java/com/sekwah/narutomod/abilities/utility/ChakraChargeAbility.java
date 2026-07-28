@@ -31,12 +31,20 @@ public class ChakraChargeAbility extends Ability implements Ability.Channeled {
     }
 
 
+    /**
+     * Rates are x4 the original. At Kage rank the pool is ~15000, and the old 1/tick meant
+     * standing still for over ten minutes to refill from empty - long enough that charging
+     * stopped being a decision and became a chore.
+     */
+    private static final float CHARGE_STILL = 4f;
+    private static final float CHARGE_MOVING = 0.8f;
+
     @Override
     public void handleChannelling(Player player, INinjaData ninjaData, int ticksChanneled) {
        if(player.isSprinting() || !player.onGround()) {
-           ninjaData.addChakra(0.2f);
+           ninjaData.addChakra(CHARGE_MOVING);
        } else {
-           ninjaData.addChakra(1f);
+           ninjaData.addChakra(CHARGE_STILL);
        }
     }
 

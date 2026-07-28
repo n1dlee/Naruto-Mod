@@ -15,19 +15,19 @@ import net.minecraft.resources.ResourceLocation;
 public enum MangekyoBossVariant {
 
     // --- Uchiha: defeating one upgrades a Mangekyo to Eternal ---
-    ITACHI("itachi", 180f, 11f, 0.30f, 0.85f, 0.35f, 0.05f, BossKit.CROWS_AND_FLAME),
-    SASUKE("sasuke", 165f, 12f, 0.33f, 0.55f, 0.30f, 0.85f, BossKit.LIGHTNING),
-    MADARA("madara", 230f, 15f, 0.31f, 0.15f, 0.35f, 0.95f, BossKit.GUNBAI),
-    SHISUI("shisui", 140f, 10f, 0.38f, 0.25f, 0.80f, 0.35f, BossKit.ILLUSION),
-    OBITO("obito", 175f, 12f, 0.32f, 0.45f, 0.20f, 0.75f, BossKit.PHASE),
+    ITACHI("itachi", 260f, 11f, 0.30f, 0.85f, 0.35f, 0.05f, BossKit.CROWS_AND_FLAME),
+    SASUKE("sasuke", 240f, 12f, 0.33f, 0.55f, 0.30f, 0.85f, BossKit.LIGHTNING),
+    MADARA("madara", 320f, 15f, 0.31f, 0.15f, 0.35f, 0.95f, BossKit.GUNBAI),
+    SHISUI("shisui", 210f, 10f, 0.38f, 0.25f, 0.80f, 0.35f, BossKit.ILLUSION),
+    OBITO("obito", 250f, 12f, 0.32f, 0.45f, 0.20f, 0.75f, BossKit.PHASE),
 
     // --- Missing-nin: no Sharingan, so no Eternal Mangekyo. They drop their own blade
     // instead, which is what actually made them famous.
-    KISAME("kisame", 210f, 14f, 0.31f, 0f, 0f, 0f, BossKit.SWORDSMAN),
-    ZABUZA("zabuza", 170f, 13f, 0.32f, 0f, 0f, 0f, BossKit.SWORDSMAN),
-    HIDAN("hidan", 190f, 12f, 0.33f, 0f, 0f, 0f, BossKit.SWORDSMAN),
-    DEIDARA("deidara", 150f, 10f, 0.34f, 0f, 0f, 0f, BossKit.EXPLOSIVE),
-    SASORI("sasori", 165f, 11f, 0.30f, 0f, 0f, 0f, BossKit.EXPLOSIVE);
+    KISAME("kisame", 290f, 14f, 0.31f, 0f, 0f, 0f, BossKit.SWORDSMAN),
+    ZABUZA("zabuza", 240f, 13f, 0.32f, 0f, 0f, 0f, BossKit.SWORDSMAN),
+    HIDAN("hidan", 270f, 12f, 0.33f, 0f, 0f, 0f, BossKit.SWORDSMAN),
+    DEIDARA("deidara", 220f, 10f, 0.34f, 0f, 0f, 0f, BossKit.EXPLOSIVE),
+    SASORI("sasori", 235f, 11f, 0.30f, 0f, 0f, 0f, BossKit.EXPLOSIVE);
 
     /** What flavour of ranged attack this wielder leans on. */
     public enum BossKit {

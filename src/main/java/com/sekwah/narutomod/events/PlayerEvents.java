@@ -6,6 +6,7 @@ import com.sekwah.narutomod.capabilities.NinjaCapabilityHandler;
 import com.sekwah.narutomod.damagetypes.NarutoDamageTypes;
 import com.sekwah.narutomod.entity.MangekyoBossEntity;
 import com.sekwah.narutomod.entity.MangekyoBossVariant;
+import com.sekwah.narutomod.entity.RogueNinjaEntity;
 import com.sekwah.narutomod.sounds.NarutoSounds;
 import com.sekwah.narutomod.util.NarutoParticles;
 import net.minecraft.ChatFormatting;
@@ -122,6 +123,17 @@ public class PlayerEvents {
     private static final float SHARINGAN_EYE_DROP_CHANCE = 0.35f; // per Uchiha boss kill
     private static final float CHAKRA_FLOW_BONUS = 5.0f;     // bonus damage per chakra-flowed hit
     private static final float CHAKRA_FLOW_HIT_COST = 3.0f;
+
+    /**
+     * Kill rewards for the mod's own mobs. Flat values rather than health-derived ones so
+     * the payout stays predictable when a variant's health is retuned: an S-rank is worth
+     * an S-rank's XP regardless of which wielder it happened to be.
+     *
+     * Vanilla monsters deliberately keep the generic 10 + maxHealth/2 formula - grinding
+     * zombies should stay far slower than hunting ninja.
+     */
+    private static final float BOSS_KILL_XP = 1500f;
+    private static final float ROGUE_NINJA_KILL_XP = 200f;
 
     /**
      * Chakra Scalpel (Haruno, toggled): while active, every melee strike severs muscle
@@ -414,19 +426,30 @@ public class PlayerEvents {
     }
 
     /**
-     * Phase 16: a full night's rest clears accumulated Mangekyo eye strain, so the
-     * escalating blindness can't stack forever across a long session.
+     * A full night's rest restores the ninja completely: chakra and stamina back to full,
+     * and accumulated Mangekyo eye strain cleared so the escalating blindness can't stack
+     * forever across a long session.
+     *
+     * Sleeping through the night is already a real cost in survival - you give up the night
+     * and you have to be somewhere safe - so it is a fair full refill rather than a partial
+     * one, and it gives the bed a purpose beyond skipping mobs.
      */
     @SubscribeEvent
     public static void onWakeUp(PlayerWakeUpEvent event) {
         Player player = event.getEntity();
         player.getCapability(NinjaCapabilityHandler.NINJA_DATA).ifPresent(ninjaData -> {
-            if (ninjaData.getMsUseCounter() <= 0) {
+            if (!ninjaData.isNinjaModeEnabled()) {
                 return;
             }
-            ninjaData.clearMangekyoStrain();
-            player.displayClientMessage(
-                    Component.translatable("jutsu.mangekyo.strain.rested").withStyle(ChatFormatting.GREEN), true);
+            boolean strained = ninjaData.getMsUseCounter() > 0;
+            if (strained) {
+                ninjaData.clearMangekyoStrain();
+            }
+            ninjaData.setChakra(ninjaData.getMaxChakra());
+            ninjaData.setStamina(ninjaData.getMaxStamina());
+            player.displayClientMessage(Component.translatable(strained
+                            ? "jutsu.mangekyo.strain.rested"
+                            : "naruto.rested").withStyle(ChatFormatting.GREEN), true);
         });
     }
 
@@ -857,7 +880,7 @@ public class PlayerEvents {
             };
             boss.spawnAtLocation(new net.minecraft.world.item.ItemStack(trophy));
             killer.getCapability(NinjaCapabilityHandler.NINJA_DATA)
-                    .ifPresent(data -> data.addChakraXp(350f + boss.getMaxHealth()));
+                    .ifPresent(data -> data.addChakraXp(BOSS_KILL_XP));
             killer.displayClientMessage(Component.translatable("mangekyo.boss.trophy",
                     Component.translatable(variant.translationKey()).withStyle(ChatFormatting.RED))
                     .withStyle(ChatFormatting.GOLD), false);
@@ -865,7 +888,7 @@ public class PlayerEvents {
         }
 
         killer.getCapability(NinjaCapabilityHandler.NINJA_DATA).ifPresent(ninjaData -> {
-            ninjaData.addChakraXp(500f + boss.getMaxHealth());
+            ninjaData.addChakraXp(BOSS_KILL_XP);
             if (!ninjaData.isMangekyoAwakened()) {
                 // No Mangekyo to upgrade yet — the kill still counts for the XP above.
                 killer.displayClientMessage(Component.translatable("mangekyo.ems.nomangekyo")
@@ -903,8 +926,12 @@ public class PlayerEvents {
         killer.getCapability(NinjaCapabilityHandler.NINJA_DATA).ifPresent(ninjaData -> {
             // Phase 15 C: every hostile kill trains the ninja (tougher mob = more XP);
             // bounty completion below still pays its big lump on top of this.
+            // A rogue ninja is worth far more than its 30 health would suggest: you learn
+            // from fighting someone who fights back, not from swatting a zombie.
             if (ninjaData.isNinjaModeEnabled() && event.getEntity() instanceof net.minecraft.world.entity.monster.Monster) {
-                ninjaData.addChakraXp(10f + event.getEntity().getMaxHealth() * 0.5f);
+                ninjaData.addChakraXp(event.getEntity() instanceof RogueNinjaEntity
+                        ? ROGUE_NINJA_KILL_XP
+                        : 10f + event.getEntity().getMaxHealth() * 0.5f);
             }
             if (ninjaData.getBountyRemaining() <= 0 || !killedId.equals(ninjaData.getBountyTargetId())) {
                 return;

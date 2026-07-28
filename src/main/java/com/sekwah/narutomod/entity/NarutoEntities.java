@@ -129,10 +129,32 @@ public class NarutoEntities {
                 (type, level, spawnType, pos, random) ->
                         com.sekwah.narutomod.config.NarutoConfig.mangekyoBossSpawnEnabled
                                 && level.getDifficulty() != net.minecraft.world.Difficulty.PEACEFUL
+                                && isNearPlayerElevation(level, pos)
                                 && net.minecraft.world.entity.monster.Monster.isDarkEnoughToSpawn(level, pos, random)
                                 && net.minecraft.world.entity.Mob.checkMobSpawnRules(
                                         type, level, spawnType, pos, random),
                 net.minecraftforge.event.entity.SpawnPlacementRegisterEvent.Operation.REPLACE);
+    }
+
+    /** How far above or below the player a boss may appear. */
+    private static final int BOSS_MAX_Y_OFFSET = 20;
+
+    /**
+     * Keeps a boss on roughly the player's own layer of the world.
+     *
+     * Natural spawning is happy to place one in a cave at Y 23 while the player is on the
+     * surface at Y 80. The sighting announcement then points at somewhere unreachable, and
+     * the boss despawns unfound long before anyone digs down to it. Restricting the vertical
+     * offset makes the announcement mean something.
+     *
+     * Only the bosses get this. Rogue ninja are the zombie substitute and are supposed to
+     * fill caves, so narrowing their spawn band would gut their spawn rate.
+     */
+    private static boolean isNearPlayerElevation(net.minecraft.world.level.ServerLevelAccessor level,
+                                                 net.minecraft.core.BlockPos pos) {
+        net.minecraft.world.entity.player.Player nearest = level.getNearestPlayer(
+                pos.getX() + 0.5D, pos.getY() + 0.5D, pos.getZ() + 0.5D, -1.0D, false);
+        return nearest != null && Math.abs(nearest.getY() - pos.getY()) <= BOSS_MAX_Y_OFFSET;
     }
 
     @SubscribeEvent

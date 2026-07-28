@@ -1,6 +1,6 @@
 \.gradle/
 eclipse/
-forge/
+/forge/
 out/
 bin/
 src/generated

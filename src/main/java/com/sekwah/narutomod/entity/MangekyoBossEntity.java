@@ -60,6 +60,17 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
         this.xpReward = 120;
     }
 
+    /**
+     * Always outlined. A boss that spawns naturally somewhere in a 128-block radius is
+     * effectively impossible to find in wooded or hilly terrain, and the sighting message
+     * is worthless without something to home in on. Overriding this instead of using
+     * setGlowingTag keeps it true on both sides with no sync or NBT round-trip.
+     */
+    @Override
+    public boolean isCurrentlyGlowing() {
+        return true;
+    }
+
     @Override
     protected void defineSynchedData() {
         super.defineSynchedData();
@@ -123,7 +134,7 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
     public static AttributeSupplier.Builder createAttributes() {
         // Overwritten per wielder in applyVariant — these are the shared baseline.
         return Monster.createMonsterAttributes()
-                .add(Attributes.MAX_HEALTH, 180.0D)
+                .add(Attributes.MAX_HEALTH, 260.0D)
                 .add(Attributes.MOVEMENT_SPEED, 0.32D)
                 .add(Attributes.ATTACK_DAMAGE, 12.0D)
                 .add(Attributes.KNOCKBACK_RESISTANCE, 0.8D)
@@ -184,9 +195,15 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
         if (!(this.level() instanceof ServerLevel serverLevel)) {
             return;
         }
+        // Coordinates are handed over deliberately: without them a 160-block search radius
+        // in forest or hills means the announcement just taunts the player.
         Component message = Component.translatable("mangekyo.boss.sighted",
                         Component.translatable(variant.translationKey())
-                                .withStyle(net.minecraft.ChatFormatting.RED))
+                                .withStyle(net.minecraft.ChatFormatting.RED),
+                        Component.literal(this.blockPosition().getX() + ", "
+                                        + this.blockPosition().getY() + ", "
+                                        + this.blockPosition().getZ())
+                                .withStyle(net.minecraft.ChatFormatting.GOLD))
                 .withStyle(net.minecraft.ChatFormatting.DARK_RED);
         for (net.minecraft.server.level.ServerPlayer player : serverLevel.players()) {
             if (player.blockPosition().closerThan(this.blockPosition(), 160)) {
