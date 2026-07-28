@@ -84,13 +84,22 @@ public class NarutoEntities {
             EntityType.Builder.<AmaterasuFireEntity>of(AmaterasuFireEntity::new, MobCategory.MISC).fireImmune().sized(0.6F, 0.6F).clientTrackingRange(8).updateInterval(10));
 
     /**
-     * Phase 16: the first genuinely hostile mob in the mod — every other entity here is
-     * summoned by an ability, so this is the only MONSTER-category registration. Spawning
-     * is handled deliberately by MangekyoBossSpawner rather than vanilla spawn rules.
+     * Phase 16: an S-rank missing-nin. Spawns through ordinary vanilla mob spawning like
+     * any other monster, just at a very rare weight (see the forge biome modifier in data/),
+     * so encountering one is a genuine event rather than something on a timer.
      */
     public static final RegistryObject<EntityType<MangekyoBossEntity>> MANGEKYO_BOSS = register("mangekyo_boss",
             EntityType.Builder.<MangekyoBossEntity>of(MangekyoBossEntity::new, MobCategory.MONSTER)
                     .sized(0.6F, 1.95F).clientTrackingRange(12));
+
+    /**
+     * Phase 21: rank-and-file missing-nin. Unlike the Mangekyo bosses these DO use vanilla
+     * natural spawning (see the forge biome modifier in data/), because the whole point is
+     * having ninja to grind instead of zombies.
+     */
+    public static final RegistryObject<EntityType<RogueNinjaEntity>> ROGUE_NINJA = register("rogue_ninja",
+            EntityType.Builder.<RogueNinjaEntity>of(RogueNinjaEntity::new, MobCategory.MONSTER)
+                    .sized(0.6F, 1.95F).clientTrackingRange(8));
 
     private static <T extends Entity> RegistryObject<EntityType<T>> register(String key, EntityType.Builder<T> builder) {
         return ENTITIES.register(key, () -> builder.build(key));
@@ -101,11 +110,38 @@ public class NarutoEntities {
     }
 
     @SubscribeEvent
+    public static void registerSpawnPlacements(net.minecraftforge.event.entity.SpawnPlacementRegisterEvent event) {
+        event.register(ROGUE_NINJA.get(),
+                net.minecraft.world.entity.SpawnPlacements.Type.ON_GROUND,
+                net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
+                net.minecraft.world.entity.monster.Monster::checkMonsterSpawnRules,
+                net.minecraftforge.event.entity.SpawnPlacementRegisterEvent.Operation.REPLACE);
+
+        // Bosses now ride the ordinary monster-spawning pipeline too, just at a far rarer
+        // weight (see the biome modifier). The config flag stays meaningful by being folded
+        // into the spawn predicate rather than gating a custom timer.
+        event.register(MANGEKYO_BOSS.get(),
+                net.minecraft.world.entity.SpawnPlacements.Type.ON_GROUND,
+                net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
+                // Monster::checkMonsterSpawnRules can't be used directly here: the boss extends
+                // PathfinderMob (it only implements Enemy), so it doesn't satisfy that method's
+                // `? extends Monster` bound. Same three checks, spelled out.
+                (type, level, spawnType, pos, random) ->
+                        com.sekwah.narutomod.config.NarutoConfig.mangekyoBossSpawnEnabled
+                                && level.getDifficulty() != net.minecraft.world.Difficulty.PEACEFUL
+                                && net.minecraft.world.entity.monster.Monster.isDarkEnoughToSpawn(level, pos, random)
+                                && net.minecraft.world.entity.Mob.checkMobSpawnRules(
+                                        type, level, spawnType, pos, random),
+                net.minecraftforge.event.entity.SpawnPlacementRegisterEvent.Operation.REPLACE);
+    }
+
+    @SubscribeEvent
     public static void entityAttributeCreation(EntityAttributeCreationEvent event) {
         event.put(SUBSTITUTION_LOG.get(), SubstitutionLogEntity.createAttributes().build());
         event.put(SHADOW_CLONE.get(), ShadowCloneEntity.createAttributes().build());
         event.put(SUMMON_BEAST.get(), SummonBeastEntity.createAttributes().build());
         event.put(MANGEKYO_BOSS.get(), MangekyoBossEntity.createAttributes().build());
+        event.put(ROGUE_NINJA.get(), RogueNinjaEntity.createAttributes().build());
     }
 
 }

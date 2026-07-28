@@ -3,6 +3,7 @@ package com.sekwah.narutomod.client.gui;
 import com.sekwah.narutomod.abilities.Ability;
 import com.sekwah.narutomod.abilities.JutsuScrolls;
 import com.sekwah.narutomod.abilities.NarutoAbilities;
+import com.sekwah.narutomod.capabilities.INinjaData;
 import com.sekwah.narutomod.capabilities.NinjaCapabilityHandler;
 import com.sekwah.narutomod.network.PacketHandler;
 import com.sekwah.narutomod.network.c2s.ServerToggleNinjaPacket;
@@ -13,8 +14,10 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import net.minecraft.util.Mth;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -28,7 +31,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public class JutsuScreen extends Screen {
 
-    private record JutsuEntry(String path, String element, int levelRequired, long combo, boolean needsScroll) {}
+    private record JutsuEntry(String path, String element, int levelRequired, long combo, boolean needsScroll,
+                              Ability ability) {}
 
     private static final String[] ELEMENT_ORDER = {"fire", "water", "earth", "wind", "lightning"};
     private static final Map<String, Integer> ELEMENT_COLORS = Map.of(
@@ -52,12 +56,20 @@ public class JutsuScreen extends Screen {
     private static final int COLOR_LOW_LEVEL = 0xFFAA33;
     private static final int COLOR_NO_SCROLL = 0xFF5555;
     private static final int COLOR_ELEMENT_LOCKED = 0x666666;
+    /** "You have this technique" but we can't cheaply verify clan/rank gates from the GUI. */
+    private static final int COLOR_INNATE = 0xDDDDDD;
 
     private final Map<String, List<JutsuEntry>> byElement = new LinkedHashMap<>();
-    private final List<JutsuEntry> signature = new ArrayList<>();
+    /** Every non-elemental jutsu: dojutsu, clan kekkei genkai, utility, summons — all of it. */
+    private final List<JutsuEntry> other = new ArrayList<>();
 
     private Button becomeANinja;
     private Button changeBack;
+
+    // --- Scroll state for the "other" column, since the full catalog no longer fits ---
+    private int otherScrollOffset = 0;
+    private int otherMaxScroll = 0;
+    private int otherColX, otherColWidth, otherListTop, otherListBottom;
 
     public JutsuScreen() {
         super(Component.translatable("naruto.gui.jutsu.title"));
@@ -69,9 +81,16 @@ public class JutsuScreen extends Screen {
         this.addButtons();
     }
 
+    /**
+     * Every registered ability lands somewhere on this screen now — elemental jutsu go to
+     * their nature's column, everything else (dojutsu, clan kekkei genkai, summons,
+     * utility techniques) goes into the scrollable "other" list. Previously anything that
+     * was neither elemental nor scroll-taught was silently omitted entirely, which is why
+     * roughly half the mod's jutsu never showed up here.
+     */
     private void buildCatalog() {
         this.byElement.clear();
-        this.signature.clear();
+        this.other.clear();
         for (String element : ELEMENT_ORDER) {
             this.byElement.put(element, new ArrayList<>());
         }
@@ -84,15 +103,37 @@ public class JutsuScreen extends Screen {
             String path = resourceKey.get().location().getPath();
             String element = ability.element();
             boolean needsScroll = JutsuScrolls.requiresScroll(path);
+            JutsuEntry jutsuEntry = new JutsuEntry(path, element, ability.elementLevelRequired(),
+                    ability.defaultCombo(), needsScroll, ability);
             if (element != null && this.byElement.containsKey(element)) {
-                this.byElement.get(element).add(new JutsuEntry(path, element, ability.elementLevelRequired(), ability.defaultCombo(), needsScroll));
-            } else if (needsScroll) {
-                this.signature.add(new JutsuEntry(path, null, 0, ability.defaultCombo(), true));
+                this.byElement.get(element).add(jutsuEntry);
+            } else {
+                this.other.add(jutsuEntry);
             }
         }
         for (List<JutsuEntry> list : this.byElement.values()) {
-            list.sort((a, b) -> Integer.compare(a.levelRequired(), b.levelRequired()));
+            list.sort(Comparator.comparingInt(JutsuEntry::levelRequired));
         }
+        this.other.sort(Comparator.comparing(JutsuEntry::path));
+        this.otherScrollOffset = 0;
+    }
+
+    /**
+     * Best-effort live status colour for an "other" entry. Scroll-gated and eye-gated
+     * jutsu have cheap, side-effect-free checks (isJutsuLearned / Ability.hasEyeAccess) so
+     * those get real green/red feedback. Clan- and rank-gated innate techniques only
+     * expose their gate inside handleCost() (which spends chakra as a side effect), so
+     * there's no safe way to preview them here — those get a neutral "you have this"
+     * colour instead of a possibly-wrong green.
+     */
+    private int otherStatusColor(JutsuEntry entry, INinjaData ninjaData) {
+        if (entry.needsScroll() && !ninjaData.isJutsuLearned(entry.path())) {
+            return COLOR_NO_SCROLL;
+        }
+        if (entry.ability() != null && entry.ability().requiredEye() != null) {
+            return entry.ability().hasEyeAccess(ninjaData) ? COLOR_READY : COLOR_ELEMENT_LOCKED;
+        }
+        return COLOR_INNATE;
     }
 
     public void addButtons() {
@@ -149,9 +190,14 @@ public class JutsuScreen extends Screen {
                     ? (int) ninjaData.getChakraXp() + " XP"
                     : (int) ninjaData.getChakraXp() + " / " + (int) RANK_XP_THRESHOLDS[rank + 1] + " XP";
             String clan = ninjaData.getClanId().isEmpty() ? "-" : capitalize(ninjaData.getClanId());
+            // Nature slots are shown because an empty slot is the only thing that lets
+            // chakra paper work, and without this the paper just refuses with no context.
+            String natures = ninjaData.getUnlockedElements().size() + "/" + ninjaData.getMaxElementSlots();
             GuiUtils.centeredText(guiGraphics, this.font,
-                    Component.literal(RANK_NAMES[rank] + "  •  " + xpText + "  •  ")
+                    Component.literal(RANK_NAMES[rank] + "  |  " + xpText + "  |  ")
                             .append(Component.translatable("naruto.gui.jutsu.clan").append(": " + clan))
+                            .append("  |  ")
+                            .append(Component.translatable("naruto.gui.jutsu.natures").append(": " + natures))
                             .withStyle(ChatFormatting.GRAY),
                     this.width / 2, 20, 0xCCCCCC);
 
@@ -177,53 +223,77 @@ public class JutsuScreen extends Screen {
                 y2 = renderElementSection(guiGraphics, ninjaData, element, col2X, y2, colWidth, bottomY);
             }
 
-            // Signature column
+            // "Other" column: every non-elemental jutsu (dojutsu, clan techniques, summons,
+            // utility) — the whole catalog now fits somewhere on screen, scrolled if needed.
             guiGraphics.drawString(this.font,
-                    Component.translatable("naruto.gui.jutsu.signature").withStyle(ChatFormatting.BOLD),
+                    Component.translatable("naruto.gui.jutsu.other").withStyle(ChatFormatting.BOLD),
                     col3X, topY, 0xD9C2FF, false);
-            int y3 = topY + HEADER_HEIGHT;
-            for (JutsuEntry entry : this.signature) {
-                if (y3 + LINE_HEIGHT > bottomY) {
-                    drawOverflowMark(guiGraphics, col3X + 4, y3);
-                    y3 += LINE_HEIGHT;
-                    break;
+
+            List<PanelLine> dojutsuLines = buildDojutsuLines(ninjaData);
+            int dojutsuHeight = dojutsuLines.isEmpty() ? 0 : HEADER_HEIGHT + dojutsuLines.size() * LINE_HEIGHT + 6;
+
+            this.otherColX = col3X;
+            this.otherColWidth = colWidth;
+            this.otherListTop = topY + HEADER_HEIGHT;
+            this.otherListBottom = bottomY - dojutsuHeight;
+
+            int viewportHeight = Math.max(0, this.otherListBottom - this.otherListTop);
+            int contentHeight = this.other.size() * LINE_HEIGHT;
+            this.otherMaxScroll = Math.max(0, contentHeight - viewportHeight);
+            this.otherScrollOffset = Mth.clamp(this.otherScrollOffset, 0, this.otherMaxScroll);
+
+            guiGraphics.enableScissor(col3X, this.otherListTop, col3X + colWidth, this.otherListBottom);
+            int rowY = this.otherListTop - this.otherScrollOffset;
+            for (JutsuEntry entry : this.other) {
+                if (rowY + LINE_HEIGHT > this.otherListTop && rowY < this.otherListBottom) {
+                    drawJutsuRow(guiGraphics, entry, col3X, rowY, colWidth, otherStatusColor(entry, ninjaData), false);
                 }
-                boolean learned = ninjaData.isJutsuLearned(entry.path());
-                int color = learned ? COLOR_READY : COLOR_NO_SCROLL;
-                drawJutsuRow(guiGraphics, entry, col3X, y3, colWidth, color, false);
-                y3 += LINE_HEIGHT;
+                rowY += LINE_HEIGHT;
+            }
+            guiGraphics.disableScissor();
+
+            if (this.otherMaxScroll > 0) {
+                if (this.otherScrollOffset > 0) {
+                    guiGraphics.drawString(this.font, "^", col3X + colWidth - 6, this.otherListTop, 0x999999, false);
+                }
+                if (this.otherScrollOffset < this.otherMaxScroll) {
+                    guiGraphics.drawString(this.font, "v", col3X + colWidth - 6, this.otherListBottom - LINE_HEIGHT, 0x999999, false);
+                }
             }
 
-            renderDojutsuPanel(guiGraphics, ninjaData, col3X, y3 + 6, colWidth, bottomY);
+            renderDojutsuPanel(guiGraphics, dojutsuLines, col3X, this.otherListBottom + 6, colWidth, bottomY);
         });
 
         super.render(guiGraphics, mouseX, mouseY, partialTick);
     }
 
+    @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+        if (this.otherMaxScroll > 0 && mouseX >= this.otherColX && mouseX <= this.otherColX + this.otherColWidth
+                && mouseY >= this.otherListTop && mouseY <= this.otherListBottom) {
+            this.otherScrollOffset = Mth.clamp(
+                    this.otherScrollOffset - (int) Math.signum(delta) * LINE_HEIGHT * 3,
+                    0, this.otherMaxScroll);
+            return true;
+        }
+        return super.mouseScrolled(mouseX, mouseY, delta);
+    }
+
+    private record PanelLine(String text, int color) {}
+
     /**
      * Phase 16: what the ninja's eyes can currently do — tomoe count, Mangekyo tier and
-     * which wielders' techniques have been taken, plus Rinnegan state. Only drawn for a
-     * player who actually has a dojutsu, so it stays out of the way for everyone else.
+     * which wielders' techniques have been taken, plus Rinnegan state. Built as plain data
+     * first (not rendered directly) so the "other" list above can reserve exactly the
+     * space this panel needs, rather than the panel's position jumping around as the list
+     * above it scrolls.
      */
-    private void renderDojutsuPanel(GuiGraphics guiGraphics, com.sekwah.narutomod.capabilities.INinjaData ninjaData,
-                                    int x, int y, int colWidth, int bottomY) {
+    private List<PanelLine> buildDojutsuLines(INinjaData ninjaData) {
+        List<PanelLine> lines = new ArrayList<>();
         boolean hasSharingan = ninjaData.getSharinganTomoe() > 0 || ninjaData.isMangekyoAwakened();
         boolean hasByakugan = ninjaData.getByakuganLevel() > 0;
         boolean hasRinnegan = ninjaData.isRinneganAwakened() || ninjaData.isRinneSharinganAwakened();
-        if (!hasSharingan && !hasByakugan && !hasRinnegan) {
-            return;
-        }
-        // Everything below is clipped to the column and stops at the button row.
-        if (y + HEADER_HEIGHT > bottomY) {
-            return;
-        }
 
-        guiGraphics.drawString(this.font,
-                Component.translatable("naruto.gui.jutsu.dojutsu").withStyle(ChatFormatting.BOLD),
-                x, y, 0xFF8888, false);
-        y += HEADER_HEIGHT;
-
-        int rowWidth = colWidth - ROW_INDENT;
         if (hasSharingan) {
             String tier;
             if (ninjaData.isEternalMangekyoAwakened()) {
@@ -233,27 +303,38 @@ public class JutsuScreen extends Screen {
             } else {
                 tier = ninjaData.getSharinganTomoe() + " tomoe";
             }
-            y = drawPanelRow(guiGraphics, "Sharingan: " + tier, x, y, rowWidth, bottomY,
-                    ninjaData.isEternalMangekyoAwakened() ? COLOR_READY : 0xFF6666);
+            lines.add(new PanelLine("Sharingan: " + tier,
+                    ninjaData.isEternalMangekyoAwakened() ? COLOR_READY : 0xFF6666));
 
             String defeated = ninjaData.getDefeatedMsBosses();
             if (!defeated.isEmpty()) {
-                y = drawPanelRow(guiGraphics, "Forms: " + defeated.replace(",", ", "),
-                        x, y, rowWidth, bottomY, 0xBBBBBB);
+                lines.add(new PanelLine("Forms: " + defeated.replace(",", ", "), 0xBBBBBB));
             } else if (ninjaData.isMangekyoAwakened()) {
                 // Explain the blindness the player is about to run into, before they do
-                y = drawPanelRow(guiGraphics,
-                        Component.translatable("naruto.gui.jutsu.strain").getString(),
-                        x, y, rowWidth, bottomY, 0xAA3333);
+                lines.add(new PanelLine(Component.translatable("naruto.gui.jutsu.strain").getString(), 0xAA3333));
             }
         }
         if (hasByakugan) {
-            y = drawPanelRow(guiGraphics, "Byakugan: Lv " + ninjaData.getByakuganLevel(),
-                    x, y, rowWidth, bottomY, 0xCCDDFF);
+            lines.add(new PanelLine("Byakugan: Lv " + ninjaData.getByakuganLevel(), 0xCCDDFF));
         }
         if (hasRinnegan) {
-            drawPanelRow(guiGraphics, ninjaData.isRinneSharinganAwakened() ? "Rinne Sharingan" : "Rinnegan",
-                    x, y, rowWidth, bottomY, 0xC0B0E0);
+            lines.add(new PanelLine(ninjaData.isRinneSharinganAwakened() ? "Rinne Sharingan" : "Rinnegan", 0xC0B0E0));
+        }
+        return lines;
+    }
+
+    private void renderDojutsuPanel(GuiGraphics guiGraphics, List<PanelLine> lines, int x, int y, int colWidth, int bottomY) {
+        if (lines.isEmpty() || y + HEADER_HEIGHT > bottomY) {
+            return;
+        }
+        guiGraphics.drawString(this.font,
+                Component.translatable("naruto.gui.jutsu.dojutsu").withStyle(ChatFormatting.BOLD),
+                x, y, 0xFF8888, false);
+        y += HEADER_HEIGHT;
+
+        int rowWidth = colWidth - ROW_INDENT;
+        for (PanelLine line : lines) {
+            y = drawPanelRow(guiGraphics, line.text(), x, y, rowWidth, bottomY, line.color());
         }
     }
 
@@ -345,7 +426,13 @@ public class JutsuScreen extends Screen {
         guiGraphics.drawString(this.font, Component.literal(fitToWidth(name, nameSpace)), nameX, y, nameColor, false);
     }
 
-    /** Trims text to the given pixel width, appending an ellipsis when it had to cut. */
+    /**
+     * Trims text to the given pixel width, appending "..." when it had to cut. Plain ASCII
+     * dots on purpose — a real ellipsis glyph (…) sits outside the font's ASCII page, and on
+     * this client (Embeddium/Oculus) mixing ASCII and extended-glyph pages mid-string makes
+     * everything after the switch render as garbage. Every player-visible string in this mod
+     * is kept ASCII-only for that reason.
+     */
     private String fitToWidth(String text, int maxWidth) {
         if (maxWidth <= 0) {
             return "";
@@ -353,13 +440,13 @@ public class JutsuScreen extends Screen {
         if (this.font.width(text) <= maxWidth) {
             return text;
         }
-        String trimmed = this.font.plainSubstrByWidth(text, Math.max(0, maxWidth - this.font.width("…")));
-        return trimmed + "…";
+        String trimmed = this.font.plainSubstrByWidth(text, Math.max(0, maxWidth - this.font.width("...")));
+        return trimmed + "...";
     }
 
     private void drawOverflowMark(GuiGraphics guiGraphics, int x, int y) {
         guiGraphics.drawString(this.font,
-                Component.literal("…").withStyle(ChatFormatting.DARK_GRAY), x, y, 0x777777, false);
+                Component.literal("...").withStyle(ChatFormatting.DARK_GRAY), x, y, 0x777777, false);
     }
 
     /** 1/2/3 digits -> the actual C/V/B keys the player presses. */

@@ -73,7 +73,7 @@ public class ChidoriNagashiAbility extends Ability implements Ability.Cooldown {
         // Phase 15: lightning-nature mastery gates this now (was Uchiha only)
         // Canon: Nagashi is the body-wide release of an already-formed Chidori
         if (!ninjaData.isChidoriActive()) {
-            player.displayClientMessage(Component.literal("Form a Chidori first — Nagashi releases its current!")
+            player.displayClientMessage(Component.literal("Form a Chidori first - Nagashi releases its current!")
                     .withStyle(ChatFormatting.RED), true);
             return false;
         }

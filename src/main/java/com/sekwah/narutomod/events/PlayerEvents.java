@@ -119,6 +119,7 @@ public class PlayerEvents {
     private static final float[] KURAMA_DAMAGE_REDUCTION = {0f, 0.10f, 0.10f, 0.10f, 0.30f, 0.30f, 0.30f, 0.30f, 0.50f, 0.80f}; // by tail count 0-9
     private static final float SHARINGAN_DANGER_SENSE_REDUCTION = 0.15f; // 3-tomoe Sharingan, see applyTransformationDamageSponge
     private static final float RINNEGAN_DROP_CHANCE = 0.15f; // per Mangekyo boss kill
+    private static final float SHARINGAN_EYE_DROP_CHANCE = 0.35f; // per Uchiha boss kill
     private static final float CHAKRA_FLOW_BONUS = 5.0f;     // bonus damage per chakra-flowed hit
     private static final float CHAKRA_FLOW_HIT_COST = 3.0f;
 
@@ -247,6 +248,85 @@ public class PlayerEvents {
                         .containsKey(Attributes.ATTACK_DAMAGE);
     }
 
+    /**
+     * The Sharingan reads an attack a heartbeat before it arrives and the body steps out of
+     * the way. Cancels the hit outright and throws the player clear — sideways off a
+     * projectile or melee swing, straight up out of a blast. Rolls and costs are handled in
+     * NinjaData.trySharinganDodge (chance scales 20/40/60% with tomoe, matching the 1.12.2
+     * mod's 60% at full maturity, plus a chakra cost and a short cooldown so it thins
+     * damage rather than granting immunity).
+     *
+     * Deliberately skips damage you cannot dodge by moving: falling, drowning, starving,
+     * poison and the like — sidestepping your own suffocation would read as a bug.
+     */
+    private static void applySharinganDodge(LivingHurtEvent event) {
+        if (!(event.getEntity() instanceof Player player)) {
+            return;
+        }
+        DamageSource source = event.getSource();
+        if (source.is(net.minecraft.tags.DamageTypeTags.BYPASSES_INVULNERABILITY)
+                || source.is(net.minecraft.tags.DamageTypeTags.IS_FALL)
+                || source.is(net.minecraft.tags.DamageTypeTags.IS_DROWNING)
+                || source.is(net.minecraft.tags.DamageTypeTags.IS_FIRE)
+                || source.is(net.minecraft.world.damagesource.DamageTypes.STARVE)
+                || source.is(net.minecraft.world.damagesource.DamageTypes.MAGIC)) {
+            return;
+        }
+        player.getCapability(NinjaCapabilityHandler.NINJA_DATA).ifPresent(ninjaData -> {
+            if (!ninjaData.trySharinganDodge(player, event.getAmount())) {
+                return;
+            }
+            event.setCanceled(true);
+
+            // An explosion has no single direction to sidestep, so leap out of it instead.
+            boolean explosion = source.is(net.minecraft.tags.DamageTypeTags.IS_EXPLOSION);
+            Vec3 escape;
+            if (explosion || source.getEntity() == null) {
+                escape = new Vec3(0, 0.85, 0);
+            } else {
+                // Sidestep perpendicular to the incoming line, with a small hop.
+                Vec3 fromAttacker = player.position().subtract(source.getEntity().position()).normalize();
+                Vec3 sideways = new Vec3(-fromAttacker.z, 0, fromAttacker.x)
+                        .scale(player.getRandom().nextBoolean() ? 0.9 : -0.9);
+                escape = sideways.add(0, 0.35, 0);
+            }
+            player.setDeltaMovement(player.getDeltaMovement().add(escape));
+            player.hurtMarked = true;
+            player.resetFallDistance();
+
+            player.displayClientMessage(
+                    Component.translatable("sharingan.dodge").withStyle(ChatFormatting.AQUA), true);
+            player.level().playSound(null, player.blockPosition(), NarutoSounds.JUTSU_CAST.get(),
+                    SoundSource.PLAYERS, 0.4f, 1.8f);
+            if (player.level() instanceof ServerLevel serverLevel) {
+                serverLevel.sendParticles(NarutoParticles.SHARINGAN_RED,
+                        player.getX(), player.getY() + 1.0, player.getZ(), 12, 0.3, 0.4, 0.3, 0.02);
+            }
+        });
+    }
+
+    /**
+     * Canon: tomoe open under extreme stress, not on a promotion schedule. Rank still hands
+     * them out automatically, but nearly dying can open the next one early — which is how
+     * every Uchiha in the story actually awakened theirs.
+     */
+    private static void applySharinganStressAwakening(LivingHurtEvent event) {
+        if (!(event.getEntity() instanceof Player player)) {
+            return;
+        }
+        player.getCapability(NinjaCapabilityHandler.NINJA_DATA).ifPresent(ninjaData -> {
+            if (!ninjaData.isNinjaModeEnabled() || !ninjaData.hasSharinganEye()) {
+                return;
+            }
+            // Only a genuinely lethal-feeling moment counts: the hit has to leave them
+            // under a fifth of their health.
+            float remaining = player.getHealth() - event.getAmount();
+            if (remaining > 0 && remaining <= player.getMaxHealth() * 0.2f) {
+                ninjaData.tryAwakenSharinganTomoe(player, 0.35f);
+            }
+        });
+    }
+
     private static void applyChakraFlowHit(LivingHurtEvent event) {
         if (!event.getSource().is(net.minecraft.world.damagesource.DamageTypes.PLAYER_ATTACK)) {
             return;
@@ -350,12 +430,72 @@ public class PlayerEvents {
         });
     }
 
+    /**
+     * The Sharingan sees through illusions. Blindness and disorientation are the hallmarks
+     * of genjutsu in this mod (every genjutsu technique here applies one or both), so an
+     * open eye shortens them and a fully matured one refuses them outright.
+     *
+     * Two things it deliberately does NOT block:
+     *  - the Mangekyo's own eye strain, flagged via isApplyingEyeStrain, or having the eye
+     *    open would erase the entire overuse drawback
+     *  - anything the player drank themselves; only hostile applications are illusions
+     */
+    /**
+     * Guards the re-apply below: adding the shortened effect fires this same event again,
+     * which would otherwise shorten it recursively down to a single tick.
+     */
+    private static boolean reapplyingShortenedGenjutsu = false;
+
+    @SubscribeEvent
+    public static void onGenjutsuEffect(net.minecraftforge.event.entity.living.MobEffectEvent.Applicable event) {
+        if (reapplyingShortenedGenjutsu || !(event.getEntity() instanceof Player player)) {
+            return;
+        }
+        MobEffectInstance instance = event.getEffectInstance();
+        if (instance.getEffect() != MobEffects.BLINDNESS && instance.getEffect() != MobEffects.CONFUSION) {
+            return;
+        }
+        player.getCapability(NinjaCapabilityHandler.NINJA_DATA).ifPresent(ninjaData -> {
+            if (!ninjaData.isNinjaModeEnabled() || !ninjaData.isSharinganActive()
+                    || ninjaData.isApplyingEyeStrain()) {
+                return;
+            }
+            int tomoe = ninjaData.isMangekyoAwakened() ? 3 : ninjaData.getSharinganTomoe();
+            if (tomoe <= 0) {
+                return;
+            }
+            if (tomoe >= 3) {
+                event.setResult(net.minecraftforge.eventbus.api.Event.Result.DENY);
+                player.displayClientMessage(
+                        Component.translatable("sharingan.genjutsu.broken").withStyle(ChatFormatting.AQUA), true);
+                return;
+            }
+            // One or two tomoe blunt the illusion rather than dispelling it. The instance's
+            // duration is not writable, so deny the original and re-apply a shortened copy.
+            float keep = tomoe == 1 ? 0.6f : 0.35f;
+            int shortened = Math.max(1, (int) (instance.getDuration() * keep));
+            event.setResult(net.minecraftforge.eventbus.api.Event.Result.DENY);
+            reapplyingShortenedGenjutsu = true;
+            try {
+                player.addEffect(new MobEffectInstance(instance.getEffect(), shortened,
+                        instance.getAmplifier(), instance.isAmbient(), instance.isVisible()));
+            } finally {
+                reapplyingShortenedGenjutsu = false;
+            }
+        });
+    }
+
     @SubscribeEvent
     public static void livingHurt(LivingHurtEvent event) {
         applyKamuiIntangibility(event);
         if (event.isCanceled()) {
             return;
         }
+        applySharinganDodge(event);
+        if (event.isCanceled()) {
+            return;
+        }
+        applySharinganStressAwakening(event);
         applyRankMeleeDamage(event);
         applyChakraScalpelHit(event);
         applyChakraFlowHit(event);
@@ -698,6 +838,11 @@ public class PlayerEvents {
         if (boss.level().random.nextFloat() < RINNEGAN_DROP_CHANCE) {
             boss.spawnAtLocation(new net.minecraft.world.item.ItemStack(
                     com.sekwah.narutomod.item.NarutoItems.RINNEGAN_EYE.get()));
+        }
+        // An Uchiha corpse still has its eyes. This is how a non-Uchiha ever gets one.
+        if (variant.isUchiha() && boss.level().random.nextFloat() < SHARINGAN_EYE_DROP_CHANCE) {
+            boss.spawnAtLocation(new net.minecraft.world.item.ItemStack(
+                    com.sekwah.narutomod.item.NarutoItems.SHARINGAN_EYE.get()));
         }
 
         // The missing-nin have no Mangekyo to hand over — they drop the blade that made

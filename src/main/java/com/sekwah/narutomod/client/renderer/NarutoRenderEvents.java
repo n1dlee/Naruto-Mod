@@ -58,6 +58,8 @@ public class NarutoRenderEvents {
         event.registerEntityRenderer(NarutoEntities.AMATERASU_FIRE.get(), NoopRenderer::new);
         event.registerEntityRenderer(NarutoEntities.RASENSHURIKEN.get(), NoopRenderer::new);
         event.registerEntityRenderer(NarutoEntities.SUMMON_BEAST.get(), SummonBeastRenderer::new);
+        event.registerEntityRenderer(NarutoEntities.ROGUE_NINJA.get(),
+                com.sekwah.narutomod.client.renderer.entity.RogueNinjaRenderer::new);
         event.registerEntityRenderer(NarutoEntities.MANGEKYO_BOSS.get(),
                 com.sekwah.narutomod.client.renderer.entity.MangekyoBossRenderer::new);
 
@@ -91,6 +93,8 @@ public class NarutoRenderEvents {
         event.registerLayerDefinition(KuramaTailModel.LAYER_LOCATION, KuramaTailModel::createLayer);
         event.registerLayerDefinition(KuramaAvatarModel.LAYER_LOCATION, KuramaAvatarModel::createLayer);
         event.registerLayerDefinition(SusanooModel.LAYER_LOCATION, SusanooModel::createLayer);
+        event.registerLayerDefinition(com.sekwah.narutomod.client.model.entity.BijuCloakModel.LAYER_LOCATION,
+                com.sekwah.narutomod.client.model.entity.BijuCloakModel::createBodyLayer);
         // Phase 18: the three detailed Susanoo bodies (skeleton / clothed / winged)
         event.registerLayerDefinition(com.sekwah.narutomod.client.model.entity.SusanooSkeletonModel.LAYER_LOCATION,
                 com.sekwah.narutomod.client.model.entity.SusanooSkeletonModel::createBodyLayer);
@@ -106,6 +110,9 @@ public class NarutoRenderEvents {
         KuramaTailRenderer.setModel(new KuramaTailModel(event.getEntityModels().bakeLayer(KuramaTailModel.LAYER_LOCATION)));
         KuramaTailRenderer.setAvatarModel(new KuramaAvatarModel(event.getEntityModels().bakeLayer(KuramaAvatarModel.LAYER_LOCATION)));
         SusanooRenderer.setModel(new SusanooModel(event.getEntityModels().bakeLayer(SusanooModel.LAYER_LOCATION)));
+        com.sekwah.narutomod.client.renderer.entity.BijuCloakRenderer.setModel(
+                new com.sekwah.narutomod.client.model.entity.BijuCloakModel(event.getEntityModels()
+                        .bakeLayer(com.sekwah.narutomod.client.model.entity.BijuCloakModel.LAYER_LOCATION)));
         SusanooRenderer.setDetailedModels(
                 new com.sekwah.narutomod.client.model.entity.SusanooSkeletonModel(event.getEntityModels()
                         .bakeLayer(com.sekwah.narutomod.client.model.entity.SusanooSkeletonModel.LAYER_LOCATION)),

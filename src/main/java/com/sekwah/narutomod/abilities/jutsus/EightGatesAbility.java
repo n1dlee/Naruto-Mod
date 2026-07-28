@@ -64,7 +64,7 @@ public class EightGatesAbility extends Ability {
                                nextGate <= 7 ? ChatFormatting.RED : ChatFormatting.DARK_RED;
 
         player.displayClientMessage(
-                Component.literal(gateName + " — OPEN! (Gate " + nextGate + "/8)")
+                Component.literal(gateName + " - OPEN! (Gate " + nextGate + "/8)")
                         .withStyle(color), true);
 
         // Escalating gate-open sound — mirrors the GREEN->RED->BLACK particle escalation below

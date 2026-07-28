@@ -103,13 +103,25 @@ public abstract class Ability {
      * Phase 15 C: scroll-taught jutsu must be learned before casting. Checked centrally
      * from the activation/channel packet handlers together with the element gate.
      */
+    /**
+     * True when the Sharingan has this exact technique stored as a stolen copy. A copy is
+     * a one-shot pass that waives both the scroll and the nature requirement — you are
+     * mimicking what you saw, not drawing on training you never had.
+     */
+    public boolean isCopiedBySharingan(INinjaData ninjaData) {
+        var resourceKey = NarutoRegistries.ABILITIES.getResourceKey(this);
+        return resourceKey.isPresent()
+                && resourceKey.get().location().getPath().equals(ninjaData.getCopiedJutsu());
+    }
+
     public boolean checkLearnedRequirement(Player player, INinjaData ninjaData) {
         var resourceKey = NarutoRegistries.ABILITIES.getResourceKey(this);
         if (resourceKey.isEmpty()) {
             return true;
         }
         String path = resourceKey.get().location().getPath();
-        if (!JutsuScrolls.requiresScroll(path) || ninjaData.isJutsuLearned(path)) {
+        if (!JutsuScrolls.requiresScroll(path) || ninjaData.isJutsuLearned(path)
+                || path.equals(ninjaData.getCopiedJutsu())) {
             return true;
         }
         player.displayClientMessage(Component.translatable("jutsu.fail.notlearned",
@@ -124,7 +136,7 @@ public abstract class Ability {
      */
     public boolean checkElementRequirement(Player player, INinjaData ninjaData) {
         String element = this.element();
-        if (element == null) {
+        if (element == null || this.isCopiedBySharingan(ninjaData)) {
             return true;
         }
         Component elementName = Component.translatable("element.narutomod." + element).withStyle(ChatFormatting.YELLOW);
@@ -169,44 +181,75 @@ public abstract class Ability {
     }
 
     /**
-     * Central dojutsu gate. Eye-agnostic jutsu always pass.
+     * Pure (no messaging, no side effects) version of the dojutsu check — same rules as
+     * {@link #checkEyeRequirement}, minus the chat message on failure. Used wherever code
+     * needs to know "could this player cast this eye-gated jutsu right now" without
+     * actually attempting the cast, e.g. JutsuScreen's live status colouring, which runs
+     * every frame and must never spam chat.
      */
-    public boolean checkEyeRequirement(Player player, INinjaData ninjaData) {
+    private String eyeMessageKey(String eye) {
+        return eye.startsWith("rinnegan_path:") ? "rinnegan_path" : eye;
+    }
+
+    private boolean hasEyeOwned(INinjaData ninjaData) {
         String eye = this.requiredEye();
         if (eye == null) {
             return true;
         }
-        boolean hasEye;
-        String eyeKey = eye;
         if (eye.startsWith("sharingan_tomoe")) {
             int tomoe = eye.charAt(eye.length() - 1) - '0';
-            hasEye = ninjaData.getSharinganTomoe() >= tomoe || ninjaData.isMangekyoAwakened();
-        } else if (eye.startsWith("rinnegan_path:")) {
-            String path = eye.substring("rinnegan_path:".length());
-            hasEye = ninjaData.isRinneganAwakened()
-                    && (ninjaData.isRinneganPathUnlocked(path) || ninjaData.isRinneSharinganAwakened());
-            eyeKey = "rinnegan_path";
-        } else {
-            hasEye = switch (eye) {
-                case "sharingan_ms" -> ninjaData.isMangekyoAwakened();
-                case "sharingan_ems" -> ninjaData.isEternalMangekyoAwakened();
-                case "byakugan" -> ninjaData.getByakuganLevel() >= 1;
-                case "rinnegan" -> ninjaData.isRinneganAwakened() || ninjaData.isRinneSharinganAwakened();
-                case "rinne_sharingan" -> ninjaData.isRinneSharinganAwakened();
-                default -> true;
-            };
+            return ninjaData.getSharinganTomoe() >= tomoe || ninjaData.isMangekyoAwakened();
         }
-        if (!hasEye) {
-            player.displayClientMessage(Component.translatable("jutsu.fail.eye." + eyeKey,
+        if (eye.startsWith("rinnegan_path:")) {
+            String path = eye.substring("rinnegan_path:".length());
+            return ninjaData.isRinneganAwakened()
+                    && (ninjaData.isRinneganPathUnlocked(path) || ninjaData.isRinneSharinganAwakened());
+        }
+        return switch (eye) {
+            case "sharingan_ms" -> ninjaData.isMangekyoAwakened();
+            case "sharingan_ems" -> ninjaData.isEternalMangekyoAwakened();
+            case "byakugan" -> ninjaData.getByakuganLevel() >= 1;
+            case "rinnegan" -> ninjaData.isRinneganAwakened() || ninjaData.isRinneSharinganAwakened();
+            case "rinne_sharingan" -> ninjaData.isRinneSharinganAwakened();
+            default -> true;
+        };
+    }
+
+    private boolean hasEyeForm(INinjaData ninjaData) {
+        String form = this.requiredEyeForm();
+        return form == null || ninjaData.hasSignatureForm(form);
+    }
+
+    /**
+     * Pure (no messaging, no side effects) version of the dojutsu check — same rules as
+     * {@link #checkEyeRequirement}, minus the chat message on failure. Used wherever code
+     * needs to know "could this player cast this eye-gated jutsu right now" without
+     * actually attempting the cast, e.g. JutsuScreen's live status colouring, which runs
+     * every frame and must never spam chat.
+     */
+    public boolean hasEyeAccess(INinjaData ninjaData) {
+        return this.hasEyeOwned(ninjaData) && this.hasEyeForm(ninjaData);
+    }
+
+    /**
+     * Central dojutsu gate, called from the activation/channel packet handlers. Same rule
+     * set as {@link #hasEyeAccess}, but also messages the player on failure.
+     */
+    public boolean checkEyeRequirement(Player player, INinjaData ninjaData) {
+        if (this.requiredEye() == null) {
+            return true;
+        }
+        if (!this.hasEyeOwned(ninjaData)) {
+            player.displayClientMessage(Component.translatable(
+                    "jutsu.fail.eye." + this.eyeMessageKey(this.requiredEye()),
                     Component.translatable(this.getTranslationKey(ninjaData)).withStyle(ChatFormatting.YELLOW))
                     .withStyle(ChatFormatting.RED), true);
             return false;
         }
-        String form = this.requiredEyeForm();
-        if (form != null && !ninjaData.hasSignatureForm(form)) {
+        if (!this.hasEyeForm(ninjaData)) {
             player.displayClientMessage(Component.translatable("jutsu.fail.eye.form",
                     Component.translatable(this.getTranslationKey(ninjaData)).withStyle(ChatFormatting.YELLOW),
-                    Component.translatable("mangekyo.form." + form).withStyle(ChatFormatting.YELLOW))
+                    Component.translatable("mangekyo.form." + this.requiredEyeForm()).withStyle(ChatFormatting.YELLOW))
                     .withStyle(ChatFormatting.RED), true);
             return false;
         }

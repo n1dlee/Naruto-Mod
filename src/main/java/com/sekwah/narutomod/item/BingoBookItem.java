@@ -57,7 +57,7 @@ public class BingoBookItem extends Item {
             player.displayClientMessage(Component.literal("New bounty: eliminate ")
                     .withStyle(ChatFormatting.GOLD)
                     .append(Component.literal(bounty.count() + "x " + prettyName(targetId)).withStyle(ChatFormatting.RED))
-                    .append(Component.literal(" — reward " + (int) bounty.rewardXp() + " chakra XP").withStyle(ChatFormatting.GREEN)), false);
+                    .append(Component.literal(" - reward " + (int) bounty.rewardXp() + " chakra XP").withStyle(ChatFormatting.GREEN)), false);
         });
         return InteractionResultHolder.consume(stack);
     }

@@ -60,18 +60,9 @@ public class NarutoConfig {
     private static final ForgeConfigSpec.IntValue CONFIG_JUTSU_CAST_DELAY;
     public static int jutsuCastDelay;
 
-    // Phase 16: roaming Mangekyo bosses (see MangekyoBossSpawner)
+    // Phase 16: roaming Mangekyo bosses (spawned by vanilla mob spawning, see the biome modifier)
     private static final ForgeConfigSpec.BooleanValue CONFIG_BOSS_SPAWN_ENABLED;
     public static boolean mangekyoBossSpawnEnabled;
-
-    private static final ForgeConfigSpec.DoubleValue CONFIG_BOSS_SPAWN_CHANCE;
-    public static double mangekyoBossSpawnChance;
-
-    private static final ForgeConfigSpec.IntValue CONFIG_BOSS_SPAWN_INTERVAL;
-    public static int mangekyoBossSpawnInterval;
-
-    private static final ForgeConfigSpec.IntValue CONFIG_BOSS_MAX_PER_WORLD;
-    public static int mangekyoBossMaxPerWorld;
 
     private static final ForgeConfigSpec.IntValue CONFIG_CHAKRA_BAR_DESIGN;
     public static int chakraBarDesign;
@@ -141,17 +132,10 @@ public class NarutoConfig {
         configBuilder.comment("Roaming Mangekyo wielders (Itachi, Sasuke, Madara, Shisui, Obito). "
                 + "Defeating one upgrades a Mangekyo Sharingan to Eternal.").push(CATEGORY_BOSSES);
 
+        // Rate and cap now come from vanilla mob spawning (see the forge biome modifier),
+        // so all that is left here is an on/off switch folded into the spawn predicate.
         CONFIG_BOSS_SPAWN_ENABLED = configBuilder.comment("Whether Mangekyo bosses spawn in the world at all")
                 .define("mangekyoBossSpawnEnabled", true);
-
-        CONFIG_BOSS_SPAWN_CHANCE = configBuilder.comment("Chance per spawn attempt that a boss appears")
-                .defineInRange("mangekyoBossSpawnChance", 0.05d, 0d, 1d);
-
-        CONFIG_BOSS_SPAWN_INTERVAL = configBuilder.comment("Ticks between spawn attempts per world (20 per second)")
-                .defineInRange("mangekyoBossSpawnInterval", 6000, 200, Integer.MAX_VALUE);
-
-        CONFIG_BOSS_MAX_PER_WORLD = configBuilder.comment("Never let more than this many bosses exist at once")
-                .defineInRange("mangekyoBossMaxPerWorld", 2, 1, 50);
 
         configBuilder.pop();
 
@@ -187,9 +171,6 @@ public class NarutoConfig {
         paperbombBlockDamage = CONFIG_PAPERBOMB_BLOCK_DAMAGE.get();
         jutsuKeybindHoldThreshold = CONFIG_JUTSU_KEYBIND_HOLD_THRESHOLD.get();
         mangekyoBossSpawnEnabled = CONFIG_BOSS_SPAWN_ENABLED.get();
-        mangekyoBossSpawnChance = CONFIG_BOSS_SPAWN_CHANCE.get();
-        mangekyoBossSpawnInterval = CONFIG_BOSS_SPAWN_INTERVAL.get();
-        mangekyoBossMaxPerWorld = CONFIG_BOSS_MAX_PER_WORLD.get();
         chakraBarDesign = CONFIG_CHAKRA_BAR_DESIGN.get();
         jutsuCastDelay = CONFIG_JUTSU_CAST_DELAY
                 .get();

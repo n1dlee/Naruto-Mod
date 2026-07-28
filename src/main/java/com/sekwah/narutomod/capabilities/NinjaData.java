@@ -230,6 +230,38 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
      */
     private String hiraishinEntityMark = "";
 
+    // --- Phase 23: transplanted Sharingan, copy-jutsu, dodge ---
+    /**
+     * A Sharingan taken from an Uchiha corpse and implanted into someone else (Kakashi's
+     * situation). The eye is NOT the wielder's own, so it can never be switched off — it
+     * burns chakra every second, forever. That permanent tax is the whole trade-off for a
+     * non-Uchiha getting the dojutsu at all.
+     */
+    @Sync
+    private boolean transplantedSharingan = false;
+
+    /**
+     * A single jutsu path the Sharingan has read off an enemy and can throw back once.
+     * Empty when nothing is stored. Consumed the moment it is cast.
+     */
+    @Sync
+    private String copiedJutsu = "";
+
+    /** Ticks until the eye can read an attack and sidestep it again. */
+    private int sharinganDodgeCooldown = 0;
+
+    /**
+     * Set for the instant the Mangekyo inflicts its own eye-strain blindness on the wielder.
+     * The genjutsu-resistance handler checks this so the Sharingan cannot shrug off its
+     * OWN drawback — without it, an active Sharingan would nullify the entire Mangekyo
+     * overuse penalty.
+     */
+    private transient boolean applyingEyeStrain = false;
+
+    private static final float TRANSPLANT_IDLE_DRAIN = 1.0f;   // per second, always on
+    private static final int SHARINGAN_DODGE_COOLDOWN = 30;    // 1.5s between dodges
+    private static final float SHARINGAN_DODGE_COST = 6.0f;
+
     private static final int MS_BLINDNESS_DECAY_TICKS = 1200; // 60s of rest per counter step
 
     // --- Bingo Book bounty (see BingoBookItem + PlayerEvents kill tracking) ---
@@ -643,17 +675,39 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
         return result;
     }
 
+    /** Ceiling for a Sharingan bearer - Kakashi's five natures, minus one for balance. */
+    public static final int SHARINGAN_MAX_ELEMENT_SLOTS = 4;
+
     /**
      * Total element slots this ninja can have open: 1 base, 2 from Jonin, 3 from Kage.
      * Clan defaults may exceed this (Senju start with two) — the cap only limits
      * chakra-paper unlocks.
+     *
+     * A Sharingan bearer reads the chakra shape of a technique as it is performed, which
+     * is exactly how Kakashi ended up with more natures than anyone trained him in. Two
+     * tomoe is where the eye starts resolving nature transformation (+1 slot), three is a
+     * full copy wheel (+2), hard-capped at {@link #SHARINGAN_MAX_ELEMENT_SLOTS}.
      */
     @Override
     public int getMaxElementSlots() {
-        if (this.ninjaRank >= 4) {
-            return 3;
+        int slots = this.ninjaRank >= 4 ? 3 : (this.ninjaRank >= 3 ? 2 : 1);
+        if (this.hasSharinganEye()) {
+            slots += this.getSharinganElementSlotBonus();
+            slots = Math.min(slots, SHARINGAN_MAX_ELEMENT_SLOTS);
         }
-        return this.ninjaRank >= 3 ? 2 : 1;
+        return slots;
+    }
+
+    /** Extra nature slots the eye itself grants. 0 below two tomoe. */
+    @Override
+    public int getSharinganElementSlotBonus() {
+        if (!this.hasSharinganEye()) {
+            return 0;
+        }
+        if (this.mangekyoAwakened || this.sharinganTomoe >= 3) {
+            return 2;
+        }
+        return this.sharinganTomoe >= 2 ? 1 : 0;
     }
 
     /**
@@ -782,7 +836,7 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
 
     @Override
     public int getSharinganLevel() {
-        if (!"uchiha".equals(this.clanId)) {
+        if (!this.hasSharinganEye()) {
             return 0;
         }
         // Mangekyo reads as "level 4" for legacy callers (overlay texture index, gates)
@@ -792,9 +846,127 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
         return Math.min(Math.max(this.sharinganTomoe, 0), 3);
     }
 
+    /** True for a born Uchiha or for anyone carrying a transplanted eye. */
+    @Override
+    public boolean hasSharinganEye() {
+        return "uchiha".equals(this.clanId) || this.transplantedSharingan;
+    }
+
+    @Override
+    public boolean isTransplantedSharingan() {
+        return this.transplantedSharingan;
+    }
+
+    /**
+     * Implants a mature Sharingan into a non-Uchiha. Comes in at three tomoe because the
+     * eye is already fully developed — what the recipient lacks is the Uchiha body to
+     * switch it off, which is exactly what the permanent chakra drain represents.
+     */
+    @Override
+    public void setTransplantedSharingan(boolean transplanted) {
+        this.transplantedSharingan = transplanted;
+        if (transplanted && this.sharinganTomoe < 3) {
+            this.sharinganTomoe = 3;
+        }
+    }
+
+    /**
+     * A transplanted eye is always open — it cannot be closed, which is the point. For a
+     * born Uchiha the eye is only live while the toggle is on.
+     */
     @Override
     public boolean isSharinganActive() {
+        return this.transplantedSharingan
+                || this.toggleAbilityData.getAbilitiesHashSet().contains(SHARINGAN_ABILITY);
+    }
+
+    /** True only when the wielder has deliberately switched the eye into combat mode. */
+    @Override
+    public boolean isSharinganToggled() {
         return this.toggleAbilityData.getAbilitiesHashSet().contains(SHARINGAN_ABILITY);
+    }
+
+    @Override
+    public String getCopiedJutsu() {
+        return this.copiedJutsu;
+    }
+
+    @Override
+    public void setCopiedJutsu(String jutsuPath) {
+        this.copiedJutsu = jutsuPath == null ? "" : jutsuPath;
+    }
+
+    @Override
+    public boolean isApplyingEyeStrain() {
+        return this.applyingEyeStrain;
+    }
+
+    /**
+     * Reads an attack a fraction of a second before it lands and steps out of its way.
+     * Costs chakra and has its own short cooldown, so it thins out incoming damage rather
+     * than granting free immunity. Returns true when the attack was actually evaded.
+     */
+    @Override
+    public boolean trySharinganDodge(Player player, float incomingDamage) {
+        if (!this.ninjaModeEnabled || !this.isSharinganActive() || this.sharinganDodgeCooldown > 0) {
+            return false;
+        }
+        int tomoe = Math.min(Math.max(this.sharinganTomoe, 0), 3);
+        if (this.mangekyoAwakened) {
+            tomoe = 3;
+        }
+        if (tomoe <= 0 || this.chakra < SHARINGAN_DODGE_COST) {
+            return false;
+        }
+        // 20% / 40% / 60% by tomoe - the fully matured eye matches the 1.12.2 mod's 60%.
+        float chance = 0.2f * tomoe;
+        if (player.getRandom().nextFloat() >= chance) {
+            return false;
+        }
+        this.useChakra(SHARINGAN_DODGE_COST, 10);
+        this.sharinganDodgeCooldown = SHARINGAN_DODGE_COOLDOWN;
+        return true;
+    }
+
+    private void updateSharinganUpkeep(Player player) {
+        if (this.sharinganDodgeCooldown > 0) {
+            this.sharinganDodgeCooldown--;
+        }
+        if (!this.transplantedSharingan) {
+            return;
+        }
+        // The implanted eye never closes, so it bills the host every second whether or not
+        // they are using it. Toggling it into combat mode costs extra on top (SharinganAbility).
+        if (player.tickCount % 20 == 0) {
+            if (this.chakra >= TRANSPLANT_IDLE_DRAIN) {
+                this.useChakra(TRANSPLANT_IDLE_DRAIN, 0);
+            } else {
+                // Running on empty with a foreign eye hurts.
+                player.hurt(player.damageSources().magic(), 1.0f);
+            }
+        }
+    }
+
+    /**
+     * Canon: tomoe open under extreme stress, not on a promotion schedule. Rank still
+     * grants them automatically (checkDojutsuPerks), but a near-death moment or a hard-won
+     * kill can open the next one EARLY. Returns true when a tomoe actually opened.
+     */
+    @Override
+    public boolean tryAwakenSharinganTomoe(Player player, float triggerChance) {
+        if (!this.hasSharinganEye() || this.sharinganTomoe >= 3 || this.mangekyoAwakened) {
+            return false;
+        }
+        if (player.getRandom().nextFloat() >= triggerChance) {
+            return false;
+        }
+        this.sharinganTomoe++;
+        player.displayClientMessage(Component.translatable("sharingan.awaken", this.sharinganTomoe)
+                .withStyle(ChatFormatting.DARK_RED), false);
+        player.level().playSound(null, player.blockPosition(),
+                com.sekwah.narutomod.sounds.NarutoSounds.SHARINGAN_ACTIVATE.get(),
+                net.minecraft.sounds.SoundSource.PLAYERS, 1.0f, 0.8f);
+        return true;
     }
 
     @Override
@@ -929,6 +1101,9 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
         this.rinneSharinganAwakened = false;
         this.phoenixSageChargeUsedDay = -1L;
         this.hiraishinEntityMark = "";
+        this.transplantedSharingan = false;
+        this.copiedJutsu = "";
+        this.sharinganDodgeCooldown = 0;
         this.ninjaModeEnabled = false;
         this.toggleAbilityData.getAbilitiesHashSet().clear();
         this.chidoriTicks = 0;
@@ -1126,6 +1301,7 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
         this.updateSusanoo(player);
         this.updateNinjaSprintStamina(player);
         this.updateNinjaSpeed(player);
+        this.updateSharinganUpkeep(player);
 
         if (this.currentlyChanneled != null) {
             Ability ability = NarutoRegistries.ABILITIES.getValue(this.currentlyChanneled);
@@ -1588,7 +1764,7 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
             this.kuramaCloakActive = false;
             this.kuramaCloakTicks = 0;
             this.kuramaTailCount = 0;
-            player.displayClientMessage(Component.literal("Kurama Cloak faded — Kurama's chakra is spent!")
+            player.displayClientMessage(Component.literal("Kurama Cloak faded - Kurama's chakra is spent!")
                     .withStyle(ChatFormatting.RED), true);
             return;
         }
@@ -1775,7 +1951,11 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
             return;
         }
         int durationTicks = Math.min(40 * (1 << Math.min(this.msUseCounter, 5)), 1280);
+        // Flagged so the Sharingan's genjutsu resistance does not cancel the eye's OWN
+        // punishment — otherwise having the eye open would erase the Mangekyo drawback.
+        this.applyingEyeStrain = true;
         player.addEffect(new MobEffectInstance(MobEffects.BLINDNESS, durationTicks, 0, false, true));
+        this.applyingEyeStrain = false;
         this.msUseCounter++;
         this.msBlindnessDecayTicks = MS_BLINDNESS_DECAY_TICKS;
         if (this.msUseCounter >= 3) {
@@ -2272,6 +2452,8 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
         nbt.putBoolean("rinneSharinganAwakened", this.rinneSharinganAwakened);
         nbt.putLong("phoenixSageChargeUsedDay", this.phoenixSageChargeUsedDay);
         nbt.putString("hiraishinEntityMark", this.hiraishinEntityMark);
+        nbt.putBoolean("transplantedSharingan", this.transplantedSharingan);
+        nbt.putString("copiedJutsu", this.copiedJutsu);
         nbt.putString("bountyTargetId", this.bountyTargetId);
         nbt.putInt("bountyRemaining", this.bountyRemaining);
         nbt.putFloat("bountyRewardXp", this.bountyRewardXp);
@@ -2328,6 +2510,8 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
                     ? compoundTag.getLong("phoenixSageChargeUsedDay")
                     : -1L;
             this.hiraishinEntityMark = compoundTag.getString("hiraishinEntityMark");
+            this.transplantedSharingan = compoundTag.getBoolean("transplantedSharingan");
+            this.copiedJutsu = compoundTag.getString("copiedJutsu");
             // Migration for worlds saved before Phase 16: dojutsu used to be derived from rank,
             // so bring existing Uchiha/Hyuga up to the tier their rank already earned them.
             this.checkDojutsuPerks();

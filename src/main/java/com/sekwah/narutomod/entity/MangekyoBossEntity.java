@@ -52,9 +52,11 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
 
     private float chakra = MAX_CHAKRA;
 
+    /** Set once a player actually trades blows, so a fight in progress can't despawn. */
+    private boolean engagedByPlayer = false;
+
     public MangekyoBossEntity(EntityType<MangekyoBossEntity> entityType, Level level) {
         super(entityType, level);
-        this.setPersistenceRequired();
         this.xpReward = 120;
     }
 
@@ -157,8 +159,47 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
         }
     }
 
+    /**
+     * Picks which wielder this is and announces the sighting. Runs for natural spawns, so
+     * the boss now arrives through the ordinary mob-spawning pipeline (rare weight in the
+     * biome modifier) instead of a bespoke timer.
+     */
+    @javax.annotation.Nullable
+    @Override
+    public net.minecraft.world.entity.SpawnGroupData finalizeSpawn(
+            net.minecraft.world.level.ServerLevelAccessor level,
+            net.minecraft.world.DifficultyInstance difficulty,
+            net.minecraft.world.entity.MobSpawnType reason,
+            @javax.annotation.Nullable net.minecraft.world.entity.SpawnGroupData data,
+            @javax.annotation.Nullable CompoundTag tag) {
+        MangekyoBossVariant variant = MangekyoBossVariant.values()[
+                level.getRandom().nextInt(MangekyoBossVariant.values().length)];
+        this.applyVariant(variant);
+        this.announceSighting(variant);
+        return super.finalizeSpawn(level, difficulty, reason, data, tag);
+    }
+
+    /** Everyone nearby should know an S-rank just walked into the region. */
+    private void announceSighting(MangekyoBossVariant variant) {
+        if (!(this.level() instanceof ServerLevel serverLevel)) {
+            return;
+        }
+        Component message = Component.translatable("mangekyo.boss.sighted",
+                        Component.translatable(variant.translationKey())
+                                .withStyle(net.minecraft.ChatFormatting.RED))
+                .withStyle(net.minecraft.ChatFormatting.DARK_RED);
+        for (net.minecraft.server.level.ServerPlayer player : serverLevel.players()) {
+            if (player.blockPosition().closerThan(this.blockPosition(), 160)) {
+                player.displayClientMessage(message, false);
+            }
+        }
+    }
+
     @Override
     public boolean hurt(DamageSource source, float amount) {
+        if (source.getEntity() instanceof Player) {
+            this.engagedByPlayer = true;
+        }
         // The Susanoo tanks part of every blow, same idea as the player-side damage sponge.
         int stage = this.getSusanooStage();
         if (stage > 0 && !source.isCreativePlayer()) {
@@ -167,10 +208,17 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
         return super.hurt(source, amount);
     }
 
-    /** Bosses are hunted deliberately — never let them wander off and vanish. */
+    /**
+     * Despawns like any other monster until a player actually engages it.
+     *
+     * These used to be flagged persistent forever, which quietly broke spawning: a boss the
+     * player never found would sit in the world permanently, and once a couple had piled up
+     * they filled the spawn cap and no further boss ever appeared. Letting unengaged ones
+     * despawn keeps the rotation alive; once you've hit it, it stays and the fight is real.
+     */
     @Override
     public boolean removeWhenFarAway(double distanceToClosestPlayer) {
-        return false;
+        return !this.engagedByPlayer;
     }
 
     @Override
@@ -179,6 +227,7 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
         tag.putByte("Variant", this.getVariantId());
         tag.putByte("SusanooStage", (byte) this.getSusanooStage());
         tag.putFloat("BossChakra", this.chakra);
+        tag.putBoolean("EngagedByPlayer", this.engagedByPlayer);
     }
 
     @Override
@@ -187,6 +236,7 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
         this.entityData.set(VARIANT, tag.getByte("Variant"));
         this.setSusanooStage(tag.getByte("SusanooStage"));
         this.chakra = tag.contains("BossChakra") ? tag.getFloat("BossChakra") : MAX_CHAKRA;
+        this.engagedByPlayer = tag.getBoolean("EngagedByPlayer");
     }
 
     @Override

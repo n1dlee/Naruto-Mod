@@ -85,6 +85,31 @@ public class BossJutsuGoal extends Goal {
             case SWORDSMAN -> castBladeRush(target);
             case EXPLOSIVE -> castDetonation(target);
         }
+        offerToSharingan();
+    }
+
+    /**
+     * Exposes the technique the boss just used to any Sharingan watching. This is what
+     * makes the copy-wheel meaningful in single player: standing in front of Itachi with
+     * the eye open is how you take Amaterasu off him, exactly as the eye is supposed to
+     * work. The boss AI doesn't run through the Ability system, so its kit is mapped onto
+     * the equivalent registered jutsu here.
+     */
+    private void offerToSharingan() {
+        var registryObject = switch (this.boss.getVariant().kit()) {
+            case CROWS_AND_FLAME -> com.sekwah.narutomod.abilities.NarutoAbilities.AMATERASU;
+            case LIGHTNING -> com.sekwah.narutomod.abilities.NarutoAbilities.LIGHTNING_SHOCK;
+            case GUNBAI -> com.sekwah.narutomod.abilities.NarutoAbilities.GUNBAI_WIND;
+            case ILLUSION -> com.sekwah.narutomod.abilities.NarutoAbilities.SHARINGAN_GENJUTSU;
+            case PHASE -> com.sekwah.narutomod.abilities.NarutoAbilities.KAMUI;
+            // The swordsmen and bombers use gear and explosives, not copyable ninjutsu.
+            case SWORDSMAN, EXPLOSIVE -> null;
+        };
+        if (registryObject == null) {
+            return;
+        }
+        com.sekwah.narutomod.util.SharinganCopy.onJutsuPerformed(
+                this.boss, registryObject.get(), registryObject.getId().getPath());
     }
 
     /** Kisame/Zabuza/Hidan: close in and land a brutal blade hit. */

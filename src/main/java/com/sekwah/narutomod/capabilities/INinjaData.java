@@ -100,6 +100,7 @@ public interface INinjaData extends INBTSerializable<Tag> {
     boolean isElementUnlocked(String element);
     java.util.List<String> getUnlockedElements();
     int getMaxElementSlots();
+    int getSharinganElementSlotBonus();
     boolean unlockElement(String element);
     float getElementXp(String element);
     void addElementXp(String element, float amount);
@@ -173,6 +174,21 @@ public interface INinjaData extends INBTSerializable<Tag> {
     // --- Phase 16: Dojutsu progression (stored, not rank-derived) ---
     int getSharinganTomoe();
     void setSharinganTomoe(int tomoe);
+    /** Born Uchiha, or anyone carrying a transplanted eye. */
+    boolean hasSharinganEye();
+    boolean isTransplantedSharingan();
+    void setTransplantedSharingan(boolean transplanted);
+    /** True only while the wielder has deliberately switched the eye into combat mode. */
+    boolean isSharinganToggled();
+    /** Single jutsu path read off an enemy and castable once, or empty. */
+    String getCopiedJutsu();
+    void setCopiedJutsu(String jutsuPath);
+    /** True for the instant the Mangekyo is inflicting its own eye strain on the wielder. */
+    boolean isApplyingEyeStrain();
+    /** Rolls the Sharingan's evasion; true when the incoming attack was dodged. */
+    boolean trySharinganDodge(Player player, float incomingDamage);
+    /** Rolls an early tomoe awakening from a stress trigger; true when one opened. */
+    boolean tryAwakenSharinganTomoe(Player player, float triggerChance);
     void setMangekyoAwakened(boolean awakened);
     String getMangekyoForm();
     void setMangekyoForm(String form);

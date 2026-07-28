@@ -212,6 +212,9 @@ public class NarutoKeyHandler {
         if (POWER_ADJUST_KEY != null) {
             POWER_ADJUST_KEY.update();
         }
+        if (HIRAISHIN_KEY != null) {
+            HIRAISHIN_KEY.update();
+        }
         handleWallWalkJumpDetach();
     }
 

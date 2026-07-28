@@ -61,7 +61,7 @@ public class ShadowStrangleAbility extends Ability implements Ability.Cooldown {
         }
         // Canon: the strangle is formed FROM the shadow already binding the victim
         if (!ninjaData.hasShadowTarget()) {
-            player.displayClientMessage(Component.literal("No target caught by your shadow — use Shadow Possession first!")
+            player.displayClientMessage(Component.literal("No target caught by your shadow - use Shadow Possession first!")
                     .withStyle(ChatFormatting.RED), true);
             return false;
         }

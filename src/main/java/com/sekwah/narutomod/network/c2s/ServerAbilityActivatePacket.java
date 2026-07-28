@@ -86,6 +86,8 @@ public class ServerAbilityActivatePacket {
                             ability.performServer(player, ninjaData);
                             ability.grantCastXp(ninjaData);
                             strainMangekyo(player, ninjaData, ability);
+                            spendCopiedJutsu(ninjaData, ability);
+                            broadcastForSharingan(player, ability);
                             ninjaData.setCastPoseTicks(8);
 
                             if (ability  instanceof Ability.Cooldown cooldownAbility) {
@@ -136,6 +138,23 @@ public class ServerAbilityActivatePacket {
          * caster for twice as long as the last. Eternal Mangekyo is immune (see
          * NinjaData#registerMangekyoUse), which is the whole reward for hunting the bosses.
          */
+        /**
+         * A stolen technique is good for exactly one throw — clear it the moment it is used
+         * so the Sharingan has to read a fresh one.
+         */
+        private static void spendCopiedJutsu(INinjaData ninjaData, Ability ability) {
+            if (ability.isCopiedBySharingan(ninjaData)) {
+                ninjaData.setCopiedJutsu("");
+            }
+        }
+
+        /** Lets any Sharingan watching this cast try to read and store it. */
+        private static void broadcastForSharingan(ServerPlayer player, Ability ability) {
+            NarutoRegistries.ABILITIES.getResourceKey(ability).ifPresent(key ->
+                    com.sekwah.narutomod.util.SharinganCopy.onJutsuPerformed(
+                            player, ability, key.location().getPath()));
+        }
+
         private static void strainMangekyo(ServerPlayer player, INinjaData ninjaData, Ability ability) {
             String eye = ability.requiredEye();
             if (eye != null && eye.startsWith("sharingan_ms")) {

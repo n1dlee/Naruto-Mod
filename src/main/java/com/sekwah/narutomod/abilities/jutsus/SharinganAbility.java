@@ -36,7 +36,7 @@ public class SharinganAbility extends Ability implements Ability.Toggled, Abilit
         if (!validateSharinganAccess(player, ninjaData) || !validateChakra(player, ninjaData)) {
             return false;
         }
-        ninjaData.useChakra(CHAKRA_COST, CHAKRA_COOLDOWN);
+        ninjaData.useChakra(toggleCost(ninjaData), CHAKRA_COOLDOWN);
         return true;
     }
 
@@ -88,8 +88,12 @@ public class SharinganAbility extends Ability implements Ability.Toggled, Abilit
         return NarutoSounds.SHARINGAN_ACTIVATE.get();
     }
 
+    /**
+     * Gated on owning the eye rather than on the clan, so a transplanted Sharingan works
+     * for a non-Uchiha (Kakashi's case) without a second code path.
+     */
     private boolean validateSharinganAccess(Player player, INinjaData ninjaData) {
-        if (!"uchiha".equals(ninjaData.getClanId())) {
+        if (!ninjaData.hasSharinganEye()) {
             player.displayClientMessage(Component.translatable("jutsu.fail.uchiha",
                     Component.translatable(this.getTranslationKey(ninjaData)).withStyle(ChatFormatting.YELLOW)), true);
             return false;
@@ -102,8 +106,17 @@ public class SharinganAbility extends Ability implements Ability.Toggled, Abilit
         return true;
     }
 
+    /**
+     * A foreign eye is far more expensive to actively drive — the host has no Uchiha body
+     * to run it efficiently. This is on TOP of the passive per-second drain the transplant
+     * already charges in NinjaData.
+     */
+    private static float toggleCost(INinjaData ninjaData) {
+        return ninjaData.isTransplantedSharingan() ? CHAKRA_COST * 3f : CHAKRA_COST;
+    }
+
     private boolean validateChakra(Player player, INinjaData ninjaData) {
-        if (ninjaData.getChakra() < CHAKRA_COST) {
+        if (ninjaData.getChakra() < toggleCost(ninjaData)) {
             player.displayClientMessage(Component.translatable("jutsu.fail.notenoughchakra",
                     Component.translatable(this.getTranslationKey(ninjaData)).withStyle(ChatFormatting.YELLOW)), true);
             return false;
