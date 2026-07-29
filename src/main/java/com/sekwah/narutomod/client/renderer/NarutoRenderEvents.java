@@ -62,6 +62,8 @@ public class NarutoRenderEvents {
                 com.sekwah.narutomod.client.renderer.entity.RogueNinjaRenderer::new);
         event.registerEntityRenderer(NarutoEntities.MANGEKYO_BOSS.get(),
                 com.sekwah.narutomod.client.renderer.entity.MangekyoBossRenderer::new);
+        event.registerEntityRenderer(NarutoEntities.WOOD_GOLEM.get(),
+                com.sekwah.narutomod.client.renderer.entity.WoodGolemRenderer::new);
 
     }
 

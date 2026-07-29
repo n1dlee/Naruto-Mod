@@ -2,18 +2,21 @@ package com.sekwah.narutomod.abilities.jutsus;
 
 import com.sekwah.narutomod.abilities.Ability;
 import com.sekwah.narutomod.capabilities.INinjaData;
+import com.sekwah.narutomod.entity.NarutoEntities;
+import com.sekwah.narutomod.entity.jutsuprojectile.EarthWallEntity;
+import com.sekwah.narutomod.util.EyeTargeting;
 import com.sekwah.narutomod.util.NarutoParticles;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundEvents;
-import net.minecraft.world.entity.Entity;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.world.effect.MobEffectInstance;
+import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
@@ -22,14 +25,25 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Wood Release (Mokuton) — combo 3312, INSTANT.
- * Creates a 3x3x3 cube of Oak Logs around target entity (10 block raycast).
- * Requires Senju clan. Cost: 50 chakra. Cooldown: 15 seconds.
+ * Wood Release: Wood Locking Wall - the cage Hashirama grows around someone to take them
+ * out of a fight without killing them.
+ *
+ * It does no damage at all: the point is containment, and anything sealed inside is slowed
+ * to a crawl and pinned down for as long as the wood stands.
+ *
+ * The timber is tracked by an EarthWallEntity rather than a delayed player tick event.
+ * That matters: the old scheduling hung the cleanup off the CASTER, so a player who logged
+ * out or died in the next ten seconds left the cage standing forever. The tracker entity
+ * lives in the world beside the blocks it placed and takes them back regardless.
  */
 public class WoodReleaseAbility extends Ability implements Ability.Cooldown {
 
-    private static final float CHAKRA_COST = 60f;
-    private static final double RANGE = 10.0;
+    private static final float CHAKRA_COST = 90f;
+    private static final double RANGE = 20.0;
+    /** Half-width of the cage, so 2 gives a 5x5 shell with room to stand inside. */
+    private static final int RADIUS = 2;
+    private static final int HEIGHT = 4;
+    private static final int LIFESPAN = 400; // 20 seconds
 
     @Override
     public ActivationType activationType() {
@@ -42,8 +56,33 @@ public class WoodReleaseAbility extends Ability implements Ability.Cooldown {
     }
 
     @Override
+    public String requiredClan() {
+        return "senju";
+    }
+
+    @Override
+    public String element() {
+        return "earth";
+    }
+
+    @Override
+    public int elementLevelRequired() {
+        return 6;
+    }
+
+    @Override
+    public String secondaryElement() {
+        return "water";
+    }
+
+    @Override
+    public int secondaryElementLevelRequired() {
+        return 6;
+    }
+
+    @Override
     public int getCooldown() {
-        return 15 * 20;
+        return 25 * 20;
     }
 
     @Override
@@ -53,87 +92,64 @@ public class WoodReleaseAbility extends Ability implements Ability.Cooldown {
 
     @Override
     public boolean handleCost(Player player, INinjaData ninjaData, int chargeAmount) {
-        if (!"senju".equals(ninjaData.getClanId())) {
-            player.displayClientMessage(Component.translatable("jutsu.fail.senju",
-                    Component.translatable(this.getTranslationKey(ninjaData)).withStyle(ChatFormatting.YELLOW)), true);
-            return false;
-        }
         if (ninjaData.getChakra() < CHAKRA_COST) {
             player.displayClientMessage(Component.translatable("jutsu.fail.notenoughchakra",
                     Component.translatable(this.getTranslationKey(ninjaData)).withStyle(ChatFormatting.YELLOW)), true);
             return false;
         }
-        ninjaData.useChakra(CHAKRA_COST, 20);
+        ninjaData.useChakra(CHAKRA_COST, 40);
         return true;
     }
 
     @Override
     public void performServer(Player player, INinjaData ninjaData, int ticksActive) {
-        Level level = player.level();
-        Vec3 eye = player.getEyePosition();
-        Vec3 look = player.getLookAngle();
-
-        // Find target entity via raycast
-        AABB searchBox = new AABB(eye, eye.add(look.scale(RANGE))).inflate(1.0);
-        List<Entity> entities = level.getEntities(player, searchBox,
-                e -> e instanceof LivingEntity && e.isAlive() && e != player);
-
-        LivingEntity target = null;
-        double closestDist = RANGE + 1;
-
-        for (Entity e : entities) {
-            Vec3 toEntity = e.position().add(0, e.getBbHeight() / 2, 0).subtract(eye);
-            double dot = toEntity.dot(look);
-            if (dot > 0 && dot < RANGE) {
-                Vec3 proj = eye.add(look.scale(dot));
-                double perpDist = proj.distanceTo(e.position().add(0, e.getBbHeight() / 2, 0));
-                if (perpDist < 1.5 && dot < closestDist) {
-                    closestDist = dot;
-                    target = (LivingEntity) e;
-                }
-            }
-        }
-
+        LivingEntity target = EyeTargeting.raycastLiving(player, RANGE);
         if (target == null) {
-            player.displayClientMessage(Component.literal("No target found!")
+            player.displayClientMessage(Component.translatable("jutsu.fail.notarget",
+                    Component.translatable(this.getTranslationKey(ninjaData)).withStyle(ChatFormatting.YELLOW))
                     .withStyle(ChatFormatting.RED), true);
             return;
         }
+        BlockPos centre = target.blockPosition();
 
-        // Create 3x3x3 wood cage around target
-        BlockPos center = target.blockPosition();
-        List<BlockPos> placedBlocks = new ArrayList<>();
-        for (int dx = -1; dx <= 1; dx++) {
-            for (int dy = 0; dy <= 2; dy++) {
-                for (int dz = -1; dz <= 1; dz++) {
-                    // Only place on the edges (shell), not fill the inside
-                    if (Math.abs(dx) == 1 || Math.abs(dz) == 1 || dy == 0 || dy == 2) {
-                        BlockPos pos = center.offset(dx, dy, dz);
-                        if (level.getBlockState(pos).isAir() || level.getBlockState(pos).canBeReplaced()) {
-                            level.setBlock(pos, Blocks.OAK_LOG.defaultBlockState(), 3);
-                            placedBlocks.add(pos.immutable());
-                        }
+        EarthWallEntity cage = new EarthWallEntity(NarutoEntities.EARTH_WALL.get(), player.level());
+        cage.setPos(Vec3.atCenterOf(centre));
+        cage.setLifespan(LIFESPAN);
+        player.level().addFreshEntity(cage);
+        cage.placeWall(hollowShell(centre), Blocks.OAK_LOG);
+
+        // Everything caught inside is pinned down rather than hurt. The absurd Jump
+        // amplifier is the standard trick for "cannot jump at all" - there is no vanilla
+        // rooting effect, and a wooden cage you could hop out of would be pointless.
+        for (LivingEntity caught : player.level().getEntitiesOfClass(LivingEntity.class,
+                new AABB(centre).inflate(RADIUS, HEIGHT * 0.5, RADIUS), e -> e != player && e.isAlive())) {
+            caught.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, LIFESPAN, 3, false, true));
+            caught.addEffect(new MobEffectInstance(MobEffects.JUMP, LIFESPAN, 128, false, false));
+        }
+
+        if (player.level() instanceof ServerLevel serverLevel) {
+            NarutoParticles.spawnSpiral(serverLevel, Vec3.atCenterOf(centre).subtract(0, 1, 0),
+                    RADIUS + 0.5, 0.25, 40, NarutoParticles.LOG_BROWN);
+            serverLevel.playSound(null, centre, SoundEvents.AZALEA_PLACE, SoundSource.PLAYERS, 1.4f, 0.7f);
+        }
+    }
+
+    /**
+     * The cage's surface only - walls, floor and roof, but nothing in the middle, or the
+     * technique would bury the target inside solid wood instead of containing them.
+     */
+    private List<BlockPos> hollowShell(BlockPos centre) {
+        List<BlockPos> positions = new ArrayList<>();
+        BlockPos base = centre.below();
+        for (int dy = 0; dy <= HEIGHT; dy++) {
+            for (int dx = -RADIUS; dx <= RADIUS; dx++) {
+                for (int dz = -RADIUS; dz <= RADIUS; dz++) {
+                    if (dy == 0 || dy == HEIGHT || Math.abs(dx) == RADIUS || Math.abs(dz) == RADIUS) {
+                        positions.add(base.offset(dx, dy, dz));
                     }
                 }
             }
         }
-
-        // Green leaf particles + a rising growth spiral around the cage shell
-        if (level instanceof ServerLevel serverLevel) {
-            serverLevel.sendParticles(ParticleTypes.COMPOSTER,
-                    center.getX() + 0.5, center.getY() + 1.5, center.getZ() + 0.5,
-                    30, 1.5, 1.5, 1.5, 0.05);
-            Vec3 base = Vec3.atCenterOf(center).subtract(0, 0.5, 0);
-            NarutoParticles.spawnSpiral(serverLevel, base, 1.8, 0.3, 12, NarutoParticles.LOG_BROWN);
-        }
-
-        // Schedule wood removal after 10 seconds
-        ninjaData.scheduleDelayedTickEvent(p -> {
-            for (BlockPos pos : placedBlocks) {
-                if (p.level().getBlockState(pos).is(Blocks.OAK_LOG)) {
-                    p.level().destroyBlock(pos, false);
-                }
-            }
-        }, 10 * 20);
+        return positions;
     }
 }

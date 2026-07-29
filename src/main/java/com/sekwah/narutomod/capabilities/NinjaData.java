@@ -71,7 +71,10 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
      * ServerScrollAdjustPacket), NOT automatic. Stays exactly where left; resets to 0 only
      * when the transformation ends entirely.
      */
-    @Sync(minTicks = 1)
+    // syncGlobally: this is the scroll-wheel "push" that decides how large a Susanoo or
+    // Kurama cloak is drawn. Without it every other client rendered the transformation at
+    // its smallest size no matter how far the owner had pushed it.
+    @Sync(minTicks = 1, syncGlobally = true)
     private float transformPower = 0f;
 
     @Sync
@@ -117,7 +120,11 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
     @Sync(minTicks = 1)
     private int ticksChanneled;
 
-    @Sync
+    // syncGlobally: the set of active toggles is what several renderers read to decide
+    // whether to draw anything at all - Akimichi's giant scale in RenderEvents, the Kamui
+    // and Byakugan phasing particles, chakra flow. Owner-only sync meant none of it was
+    // visible to anyone else, so an Akimichi grew to giant size on their own screen only.
+    @Sync(syncGlobally = true)
     private ToggleAbilityData toggleAbilityData;
 
 
@@ -186,7 +193,9 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
     private boolean mangekyoAwakened = false;
 
     /** Primary MS form chosen at awakening: "", "itachi", "sasuke", "madara", "shisui", "obito". */
-    @Sync
+    // syncGlobally: picks the Susanoo's canon colour, so without it every other player saw
+    // the default purple regardless of whose Mangekyo it was.
+    @Sync(syncGlobally = true)
     private String mangekyoForm = "";
 
     /** Drives escalating blindness on non-EMS Mangekyo casts. */
@@ -229,6 +238,17 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
      * only the server resolves it when the jump happens. Persisted manually like the rest.
      */
     private String hiraishinEntityMark = "";
+
+    /**
+     * Where the wielder was standing when they warped into the Kamui dimension, so the
+     * return trip puts them back rather than at world spawn. Server-only (nothing on the
+     * client needs it) and persisted by hand, because a player who logs out inside the
+     * pocket dimension must still have a way home.
+     */
+    private String kamuiReturnDimension = "";
+    private double kamuiReturnX;
+    private double kamuiReturnY;
+    private double kamuiReturnZ;
 
     // --- Phase 23: transplanted Sharingan, copy-jutsu, dodge ---
     /**
@@ -280,7 +300,16 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
     private static final ResourceLocation CHAKRA_DASH_ABILITY = new ResourceLocation("narutomod", "chakra_dash");
     private static final ResourceLocation LIGHTNING_ARMOR_ABILITY = new ResourceLocation("narutomod", "lightning_armor");
     private static final UUID NINJA_SPEED_UUID = UUID.fromString("a3f2c0e1-7b4d-4e8f-9c1a-5d6e7f8a9b0c");
-    private static final int[] BYAKUGAN_RANGE = {20, 50, 150, 400, 1000};
+    /**
+     * Byakugan sight radius by eye level.
+     *
+     * Capped at 600 on purpose rather than reaching for a bigger number: the radar is drawn
+     * client-side from entities the client actually knows about, and the client is only
+     * told about entities inside its own loaded chunks. Past roughly 512 blocks (a 32-chunk
+     * render distance) there is simply nothing more to report, so a larger figure would be
+     * a number in a tooltip rather than extra vision.
+     */
+    private static final int[] BYAKUGAN_RANGE = {20, 100, 300, 500, 600};
     private static final float CHIDORI_TICK_COST = 0.75F;
     private static final DustParticleOptions CHIDORI_PARTICLE = new DustParticleOptions(new Vector3f(0.45F, 0.85F, 1.0F), 1.0F);
 
@@ -765,6 +794,75 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
             case "lightning" -> this.elementXpLightning += amount;
             default -> { }
         }
+    }
+
+    /**
+     * Sets a nature's mastery outright by writing the XP that level implies, inverting
+     * the sqrt curve in getElementLevel. Command-only - normal play earns levels.
+     */
+    @Override
+    public void setElementLevel(String element, int level) {
+        if (!this.isElementUnlocked(element)) {
+            return;
+        }
+        float xp = (float) (Math.min(Math.max(level, 1), 20) * (double) level * 25.0);
+        switch (element) {
+            case "fire" -> this.elementXpFire = xp;
+            case "water" -> this.elementXpWater = xp;
+            case "earth" -> this.elementXpEarth = xp;
+            case "wind" -> this.elementXpWind = xp;
+            case "lightning" -> this.elementXpLightning = xp;
+            default -> { }
+        }
+    }
+
+    /**
+     * Takes a nature away again, wiping its training with it.
+     *
+     * Also repairs the affinity if this was it: the affinity is simply the first nature
+     * awakened, so removing it has to hand that title to whatever is still left, or the
+     * player would keep a damage bonus for an element they no longer have.
+     */
+    @Override
+    public boolean removeElement(String element) {
+        if (!this.isElementUnlocked(element)) {
+            return false;
+        }
+        StringBuilder remaining = new StringBuilder();
+        for (String unlocked : this.unlockedElements.split(",")) {
+            if (!unlocked.isEmpty() && !unlocked.equals(element)) {
+                if (remaining.length() > 0) {
+                    remaining.append(',');
+                }
+                remaining.append(unlocked);
+            }
+        }
+        this.unlockedElements = remaining.toString();
+        this.setElementXpDirect(element, 0f);
+        if (element.equals(this.natureAffinity)) {
+            this.natureAffinity = this.unlockedElements.isEmpty()
+                    ? ""
+                    : this.unlockedElements.split(",")[0];
+        }
+        return true;
+    }
+
+    /** Bypasses the unlocked check in setElementLevel, for wiping a removed nature. */
+    private void setElementXpDirect(String element, float xp) {
+        switch (element == null ? "" : element) {
+            case "fire" -> this.elementXpFire = xp;
+            case "water" -> this.elementXpWater = xp;
+            case "earth" -> this.elementXpEarth = xp;
+            case "wind" -> this.elementXpWind = xp;
+            case "lightning" -> this.elementXpLightning = xp;
+            default -> { }
+        }
+    }
+
+    /** Command-side unlock that ignores the rank slot cap, like the clan defaults do. */
+    @Override
+    public void grantElement(String element) {
+        this.forceUnlockElement(element);
     }
 
     /**
@@ -1509,7 +1607,7 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
     }
 
     // --- Sage Mode ---
-    @Sync(minTicks = 1)
+    @Sync(minTicks = 1, syncGlobally = true)
     private boolean sageModeActive = false;
 
     @Sync(minTicks = 1)
@@ -1696,13 +1794,13 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
     }
 
     // --- Kurama Cloak (Jinchuriki) ---
-    @Sync(minTicks = 1)
+    @Sync(minTicks = 1, syncGlobally = true)
     private boolean kuramaCloakActive = false;
 
     @Sync(minTicks = 1)
     private int kuramaCloakTicks = 0;
 
-    @Sync(minTicks = 20)
+    @Sync(minTicks = 20, syncGlobally = true)
     private int kuramaTailCount = 0; // 0=none, 1=Jonin, 4=Kage-partial, 9=Kage-max
 
     // Tuned so the 1,000,000-point bond pool drains in ~5 minutes (6000 ticks) at base tier:
@@ -1787,10 +1885,13 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
         this.useKuramaBond(KURAMA_CHAKRA_DONATION_PER_TICK);
         this.addChakra(KURAMA_CHAKRA_DONATION_PER_TICK);
 
-        // Buffs every second
+        // Buffs every second. The cloak is the armoured form: it trades raw personal power
+        // for a shell that grows into the Full Avatar, so it out-tanks KCM but does not
+        // out-fight it.
         if (player.tickCount % 20 == 0) {
-            player.addEffect(new MobEffectInstance(MobEffects.DAMAGE_BOOST, 30, 2, false, false));     // Strength III
+            player.addEffect(new MobEffectInstance(MobEffects.DAMAGE_BOOST, 30, 2, false, false));      // Strength III
             player.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 30, 0, false, false)); // Resistance I
+            player.addEffect(new MobEffectInstance(MobEffects.REGENERATION, 30, 0, false, false));      // Regeneration I
         }
 
         // Full Avatar crush aura — same reasoning as Susanoo's Complete Body (see
@@ -1838,7 +1939,7 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
     }
 
     // --- Kurama Chakra Mode (KCM): no shell, just the player glowing + huge speed ---
-    @Sync(minTicks = 1)
+    @Sync(minTicks = 1, syncGlobally = true)
     private boolean kcmActive = false;
 
     private static final float KCM_BOND_ACTIVATE = 10f;
@@ -1877,9 +1978,13 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
         this.useKuramaBond(KCM_CHAKRA_DONATION_PER_TICK);
         this.addChakra(KCM_CHAKRA_DONATION_PER_TICK);
 
+        // KCM is the mode a wielder reaches once Kurama actually cooperates, so it is the
+        // stronger of the two on the person: no shell, but flatly better numbers than the
+        // cloak across the board. The cloak's answer is the Full Avatar, not raw stats.
         if (player.tickCount % 20 == 0) {
-            player.addEffect(new MobEffectInstance(MobEffects.REGENERATION, 30, 1, false, false));
-            player.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 30, 0, false, false));
+            player.addEffect(new MobEffectInstance(MobEffects.REGENERATION, 30, 2, false, false));      // Regeneration III
+            player.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 30, 1, false, false)); // Resistance II
+            player.addEffect(new MobEffectInstance(MobEffects.DAMAGE_BOOST, 30, 3, false, false));      // Strength IV
         }
 
         // Golden-white glow directly on the player's own body — no shell, no avatar
@@ -1903,15 +2008,27 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
     }
 
     // --- Mangekyo Sharingan / Susanoo (Uchiha) ---
-    @Sync(minTicks = 1)
+    // syncGlobally because these drive what OTHER players see. Without it the capability
+    // only ever reaches its owner, so a transformation was visible to the person using it
+    // and to nobody else in the world - the one situation where a giant spectral avatar is
+    // pointless.
+    @Sync(minTicks = 1, syncGlobally = true)
     private boolean susanooActive = false;
 
-    @Sync(minTicks = 20)
+    @Sync(minTicks = 20, syncGlobally = true)
     private int susanooStage = 0; // 0=inactive, 1=ribcage (Jonin), 2=full Susanoo (Kage)
 
+    /**
+     * Gated on owning a Sharingan rather than on being born Uchiha: Kakashi drove a
+     * Mangekyo out of a transplanted eye, and there is no reason the mod should be
+     * stricter than the source. What still separates the two is HOW it opens - a born
+     * Uchiha grows into it with rank (see checkDojutsuPerks), while a transplant holder
+     * has only the bond-break path (see PlayerEvents.onBondBreakAwakening), exactly as
+     * in canon.
+     */
     @Override
     public boolean isMangekyoAwakened() {
-        return "uchiha".equals(this.clanId) && this.mangekyoAwakened;
+        return this.hasSharinganEye() && this.mangekyoAwakened;
     }
 
     @Override
@@ -1972,6 +2089,42 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
     @Override
     public void setHiraishinEntityMark(String entityUuid) {
         this.hiraishinEntityMark = entityUuid == null ? "" : entityUuid;
+    }
+
+    @Override
+    public void setKamuiReturnPoint(String dimensionId, double x, double y, double z) {
+        this.kamuiReturnDimension = dimensionId == null ? "" : dimensionId;
+        this.kamuiReturnX = x;
+        this.kamuiReturnY = y;
+        this.kamuiReturnZ = z;
+    }
+
+    @Override
+    public void clearKamuiReturnPoint() {
+        this.kamuiReturnDimension = "";
+        this.kamuiReturnX = 0;
+        this.kamuiReturnY = 0;
+        this.kamuiReturnZ = 0;
+    }
+
+    @Override
+    public String getKamuiReturnDimension() {
+        return this.kamuiReturnDimension;
+    }
+
+    @Override
+    public double getKamuiReturnX() {
+        return this.kamuiReturnX;
+    }
+
+    @Override
+    public double getKamuiReturnY() {
+        return this.kamuiReturnY;
+    }
+
+    @Override
+    public double getKamuiReturnZ() {
+        return this.kamuiReturnZ;
     }
 
     @Override
@@ -2452,6 +2605,10 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
         nbt.putBoolean("rinneSharinganAwakened", this.rinneSharinganAwakened);
         nbt.putLong("phoenixSageChargeUsedDay", this.phoenixSageChargeUsedDay);
         nbt.putString("hiraishinEntityMark", this.hiraishinEntityMark);
+        nbt.putString("kamuiReturnDimension", this.kamuiReturnDimension);
+        nbt.putDouble("kamuiReturnX", this.kamuiReturnX);
+        nbt.putDouble("kamuiReturnY", this.kamuiReturnY);
+        nbt.putDouble("kamuiReturnZ", this.kamuiReturnZ);
         nbt.putBoolean("transplantedSharingan", this.transplantedSharingan);
         nbt.putString("copiedJutsu", this.copiedJutsu);
         nbt.putString("bountyTargetId", this.bountyTargetId);
@@ -2510,6 +2667,10 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
                     ? compoundTag.getLong("phoenixSageChargeUsedDay")
                     : -1L;
             this.hiraishinEntityMark = compoundTag.getString("hiraishinEntityMark");
+            this.kamuiReturnDimension = compoundTag.getString("kamuiReturnDimension");
+            this.kamuiReturnX = compoundTag.getDouble("kamuiReturnX");
+            this.kamuiReturnY = compoundTag.getDouble("kamuiReturnY");
+            this.kamuiReturnZ = compoundTag.getDouble("kamuiReturnZ");
             this.transplantedSharingan = compoundTag.getBoolean("transplantedSharingan");
             this.copiedJutsu = compoundTag.getString("copiedJutsu");
             // Migration for worlds saved before Phase 16: dojutsu used to be derived from rank,

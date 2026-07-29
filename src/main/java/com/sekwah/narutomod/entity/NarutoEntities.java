@@ -101,6 +101,14 @@ public class NarutoEntities {
             EntityType.Builder.<RogueNinjaEntity>of(RogueNinjaEntity::new, MobCategory.MONSTER)
                     .sized(0.6F, 1.95F).clientTrackingRange(8));
 
+    /**
+     * Hashirama's wood golem. MobCategory.MISC because it is conjured by a technique and
+     * must never turn up through natural spawning, same as every other summon here.
+     */
+    public static final RegistryObject<EntityType<WoodGolemEntity>> WOOD_GOLEM = register("wood_golem",
+            EntityType.Builder.<WoodGolemEntity>of(WoodGolemEntity::new, MobCategory.MISC)
+                    .sized(1.8F, 4.5F).clientTrackingRange(12));
+
     private static <T extends Entity> RegistryObject<EntityType<T>> register(String key, EntityType.Builder<T> builder) {
         return ENTITIES.register(key, () -> builder.build(key));
     }
@@ -164,6 +172,7 @@ public class NarutoEntities {
         event.put(SUMMON_BEAST.get(), SummonBeastEntity.createAttributes().build());
         event.put(MANGEKYO_BOSS.get(), MangekyoBossEntity.createAttributes().build());
         event.put(ROGUE_NINJA.get(), RogueNinjaEntity.createAttributes().build());
+        event.put(WOOD_GOLEM.get(), WoodGolemEntity.createAttributes().build());
     }
 
 }

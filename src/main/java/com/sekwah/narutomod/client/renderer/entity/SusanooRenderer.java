@@ -103,8 +103,32 @@ public class SusanooRenderer {
         wingedModel = winged;
     }
 
-    private static boolean detailedReady() {
+    static boolean detailedReady() {
         return skeletonModel != null && clothedModel != null && wingedModel != null;
+    }
+
+    // --- Shared with BossSusanooLayer -------------------------------------------------
+    // The bosses manifest the same Susanoo the player does, so the model/texture/geometry
+    // choice per stage lives here once instead of being copied and drifting out of sync.
+
+    static Model detailedBodyForStage(int stage) {
+        return stage >= 4 ? wingedModel : stage == 3 ? clothedModel : skeletonModel;
+    }
+
+    static ResourceLocation detailedTextureForStage(int stage) {
+        return stage >= 4 ? WINGED_TEXTURE : stage == 3 ? CLOTHED_TEXTURE : SKELETON_TEXTURE;
+    }
+
+    static float detailedHeightForStage(int stage) {
+        return stage >= 4 ? WINGED_HEIGHT_U : stage == 3 ? CLOTHED_HEIGHT_U : SKELETON_HEIGHT_U;
+    }
+
+    static float detailedBottomForStage(int stage) {
+        return stage >= 4 ? WINGED_BOTTOM_U : stage == 3 ? CLOTHED_BOTTOM_U : SKELETON_BOTTOM_U;
+    }
+
+    static float targetHeightForStage(int stage) {
+        return STAGE_TARGET_HEIGHT[Mth.clamp(stage, 0, STAGE_TARGET_HEIGHT.length - 1)];
     }
 
     @SubscribeEvent

@@ -1,0 +1,26 @@
+{
+  "parent": "block/block",
+  "render_type": "minecraft:cutout",
+  "textures": {
+    "flame": "narutomod:blocks/amaterasu_flame",
+    "particle": "narutomod:blocks/amaterasu_flame"
+  },
+  "elements": [
+    {
+      "from": [0, 0, 8], "to": [16, 16, 8],
+      "shade": false,
+      "faces": {
+        "north": { "texture": "#flame" },
+        "south": { "texture": "#flame" }
+      }
+    },
+    {
+      "from": [8, 0, 0], "to": [8, 16, 16],
+      "shade": false,
+      "faces": {
+        "east": { "texture": "#flame" },
+        "west": { "texture": "#flame" }
+      }
+    }
+  ]
+}

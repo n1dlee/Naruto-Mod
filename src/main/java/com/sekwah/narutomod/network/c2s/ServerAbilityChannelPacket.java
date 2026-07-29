@@ -70,6 +70,7 @@ public class ServerAbilityChannelPacket {
                     // element unlocked + trained. Gating START also covers STOP.
                     // Phase 16 adds the dojutsu gate.
                     if (!ability.checkLearnedRequirement(player, ninjaData)
+                            || !ability.checkClanRequirement(player, ninjaData)
                             || !ability.checkElementRequirement(player, ninjaData)
                             || !ability.checkEyeRequirement(player, ninjaData)) {
                         if (ability.castingFailSound() != null) {
@@ -80,12 +81,26 @@ public class ServerAbilityChannelPacket {
                     // Just check if its
                     if (ability.activationType() == Ability.ActivationType.CHANNELED) {
                         if (msg.status == ChannelStatus.START) {
+                            // Cooldowns used to be checked only on the INSTANT path, so a
+                            // channeled ability that declared one silently never had it.
+                            // Gate the START here, where refusing costs the player nothing.
+                            if (ability instanceof Ability.Cooldown cooldownAbility
+                                    && cooldownAbility.checkCooldown(player, ninjaData,
+                                            ability.getTranslationKey(ninjaData))) {
+                                return;
+                            }
                             ninjaData.setCurrentlyChanneledAbility(player, ability);
                         } else if (msg.status == ChannelStatus.STOP) {
                             NarutoRegistries.ABILITIES.getResourceKey(ability).ifPresent(resourceKey -> {
                                 if(ninjaData.getCurrentlyChanneledAbility().equals(resourceKey.location())) {
-                                    ability.performServer(player, ninjaData, ninjaData.getCurrentlyChanneledTicks());
+                                    int channelledTicks = ninjaData.getCurrentlyChanneledTicks();
+                                    ability.performServer(player, ninjaData, channelledTicks);
                                     ability.grantCastXp(ninjaData);
+                                    if (ability instanceof Ability.Cooldown cooldownAbility
+                                            && ability.channelCommittedAt(channelledTicks)) {
+                                        cooldownAbility.registerCooldown(ninjaData,
+                                                ability.getTranslationKey(ninjaData));
+                                    }
                                     ninjaData.setCurrentlyChanneledAbility(player, null);
                                 }
                             });

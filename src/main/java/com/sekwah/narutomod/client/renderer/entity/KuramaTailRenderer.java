@@ -62,29 +62,22 @@ public class KuramaTailRenderer {
         avatarModel = bakedModel;
     }
 
+    /**
+     * Tails 1-8 are NOT drawn here any more.
+     *
+     * There were two tail implementations running at once: these procedural ones, and the
+     * nine tails baked into the imported BijuCloakModel that BijuCloakRenderer wears on the
+     * player. Both fired on RenderPlayerEvent.Post, so a cloaked player grew two overlapping
+     * sets of tails at slightly different angles - the "two in one" look.
+     *
+     * The worn shroud won: it is the authentic 1.12.2 silhouette, it has ears and body
+     * markings to match, and it retextures per tier. This class now owns only the Full
+     * Avatar at nine tails, which is a different thing entirely - a giant fox rendered in
+     * place of the hidden player, from the Pre handler (see renderFullAvatar).
+     */
     @SubscribeEvent
     public static void onRenderPlayer(RenderPlayerEvent.Post event) {
-        if (model == null) {
-            return;
-        }
-        Player player = event.getEntity();
-
-        Minecraft mc = Minecraft.getInstance();
-        if (player == mc.player && mc.options.getCameraType().isFirstPerson()) {
-            return;
-        }
-
-        player.getCapability(NinjaCapabilityHandler.NINJA_DATA).ifPresent(ninjaData -> {
-            int tailCount = ninjaData.getKuramaTailCount();
-            // Tail 9 (Full Avatar) is rendered via renderFullAvatar() from Pre instead,
-            // since the player is hidden at that point and Post won't fire for them.
-            if (tailCount <= 0 || tailCount >= 9) {
-                return;
-            }
-
-            render(event.getPoseStack(), event.getMultiBufferSource(), event.getPackedLight(),
-                    player, event.getPartialTick(), tailCount, ninjaData.getTransformPower());
-        });
+        // Intentionally empty - kept as the documented home of the tail-rendering decision.
     }
 
     /**

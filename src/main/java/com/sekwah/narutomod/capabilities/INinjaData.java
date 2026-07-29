@@ -105,6 +105,10 @@ public interface INinjaData extends INBTSerializable<Tag> {
     float getElementXp(String element);
     void addElementXp(String element, float amount);
     int getElementLevel(String element);
+    // --- Operator overrides (the /ninja command); normal play never calls these ---
+    void setElementLevel(String element, int level);
+    boolean removeElement(String element);
+    void grantElement(String element);
     boolean isJutsuLearned(String jutsuPath);
     void learnJutsu(String jutsuPath);
 
@@ -196,6 +200,14 @@ public interface INinjaData extends INBTSerializable<Tag> {
     /** UUID string of the creature branded with the Flying Thunder God seal, or empty. */
     String getHiraishinEntityMark();
     void setHiraishinEntityMark(String entityUuid);
+
+    // --- Kamui pocket dimension: where to put the wielder back when they leave ---
+    void setKamuiReturnPoint(String dimensionId, double x, double y, double z);
+    void clearKamuiReturnPoint();
+    String getKamuiReturnDimension();
+    double getKamuiReturnX();
+    double getKamuiReturnY();
+    double getKamuiReturnZ();
     /** How many un-rested Mangekyo casts have stacked up — drives the blindness duration. */
     int getMsUseCounter();
     /** Wipes accumulated Mangekyo eye strain — a full night's rest clears it. */

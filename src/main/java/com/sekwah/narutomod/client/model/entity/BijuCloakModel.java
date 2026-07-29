@@ -268,6 +268,25 @@ public class BijuCloakModel extends Model {
         this.bipedLeftLeg_r2 = root.getChild("bipedLeftLegWear").getChild("bipedLeftLeg_r2");
     }
 
+    /**
+     * Shows the first {@code count} tails and hides the rest.
+     *
+     * The imported model always carried all nine, which is why Kurama Chakra Mode - a form
+     * that canonically has no tails at all, just the marked cloak - still sprouted one, and
+     * why a one-tail cloak looked identical to a nine-tail one. Each tail is a chain hanging
+     * off its own root part, so hiding the root takes the whole tail with it.
+     */
+    public void setVisibleTails(int count) {
+        ModelPart[] tailRoots = {
+                this.tail_0_0, this.tail_1_0, this.tail_2_0, this.tail_3_0, this.tail_4_0,
+                this.tail_5_0, this.tail_6_0, this.tail_7_0, this.tail_8_0
+        };
+        this.allTails.visible = count > 0;
+        for (int i = 0; i < tailRoots.length; i++) {
+            tailRoots[i].visible = i < count;
+        }
+    }
+
     public static LayerDefinition createBodyLayer() {
         MeshDefinition mesh = new MeshDefinition();
         PartDefinition root = mesh.getRoot();

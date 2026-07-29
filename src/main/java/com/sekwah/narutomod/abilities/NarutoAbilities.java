@@ -173,6 +173,37 @@ public class NarutoAbilities {
     public static final RegistryObject<KotoamatsukamiAbility> KOTOAMATSUKAMI = ABILITY.register("kotoamatsukami", KotoamatsukamiAbility::new);
     public static final RegistryObject<KamuiPhaseAbility> KAMUI_PHASE = ABILITY.register("kamui_phase", KamuiPhaseAbility::new);
 
+    public static final RegistryObject<com.sekwah.narutomod.abilities.jutsus.KamuiWarpAbility> KAMUI_WARP =
+            ABILITY.register("kamui_warp", com.sekwah.narutomod.abilities.jutsus.KamuiWarpAbility::new);
+
+    public static final RegistryObject<com.sekwah.narutomod.abilities.jutsus.ByakuganScoutAbility> BYAKUGAN_SCOUT =
+            ABILITY.register("byakugan_scout", com.sekwah.narutomod.abilities.jutsus.ByakuganScoutAbility::new);
+
+    // --- Phase 17: Senju / Mokuton (Wood Release). The cage lives on as WOOD_RELEASE,
+    // which already existed and was already named "Wood Prison" - it was rewritten in
+    // place rather than duplicated. ---
+    public static final RegistryObject<com.sekwah.narutomod.abilities.jutsus.WoodBurialAbility> WOOD_BURIAL =
+            ABILITY.register("wood_burial", com.sekwah.narutomod.abilities.jutsus.WoodBurialAbility::new);
+    public static final RegistryObject<com.sekwah.narutomod.abilities.jutsus.WoodArmAbility> WOOD_ARM =
+            ABILITY.register("wood_arm", com.sekwah.narutomod.abilities.jutsus.WoodArmAbility::new);
+    public static final RegistryObject<com.sekwah.narutomod.abilities.jutsus.WoodHouseAbility> WOOD_HOUSE =
+            ABILITY.register("wood_house", com.sekwah.narutomod.abilities.jutsus.WoodHouseAbility::new);
+    public static final RegistryObject<com.sekwah.narutomod.abilities.jutsus.WoodGolemAbility> WOOD_GOLEM =
+            ABILITY.register("wood_golem", com.sekwah.narutomod.abilities.jutsus.WoodGolemAbility::new);
+
+    // --- Phase 17: kekkei genkai. No clan lock on these three - unlike Mokuton they are
+    // combination natures anyone who trains both parents can reach (see Ability.secondaryElement). ---
+    public static final RegistryObject<com.sekwah.narutomod.abilities.jutsus.IceSpikesAbility> ICE_SPIKES =
+            ABILITY.register("ice_spikes", com.sekwah.narutomod.abilities.jutsus.IceSpikesAbility::new);
+    public static final RegistryObject<com.sekwah.narutomod.abilities.jutsus.IceSpearBarrageAbility> ICE_SPEAR_BARRAGE =
+            ABILITY.register("ice_spear_barrage", com.sekwah.narutomod.abilities.jutsus.IceSpearBarrageAbility::new);
+    public static final RegistryObject<com.sekwah.narutomod.abilities.jutsus.StormAuraAbility> STORM_AURA =
+            ABILITY.register("storm_aura", com.sekwah.narutomod.abilities.jutsus.StormAuraAbility::new);
+    public static final RegistryObject<com.sekwah.narutomod.abilities.jutsus.ClayBombAbility> CLAY_BOMB =
+            ABILITY.register("clay_bomb", com.sekwah.narutomod.abilities.jutsus.ClayBombAbility::new);
+    public static final RegistryObject<com.sekwah.narutomod.abilities.jutsus.ExplosiveCloneAbility> EXPLOSIVE_CLONE =
+            ABILITY.register("explosive_clone", com.sekwah.narutomod.abilities.jutsus.ExplosiveCloneAbility::new);
+
     // --- Phase 16: Rinnegan — the Six Paths ---
     public static final RegistryObject<ShinraTenseiAbility> SHINRA_TENSEI = ABILITY.register("shinra_tensei", ShinraTenseiAbility::new);
     public static final RegistryObject<BanshoTeninAbility> BANSHO_TENIN = ABILITY.register("bansho_tenin", BanshoTeninAbility::new);

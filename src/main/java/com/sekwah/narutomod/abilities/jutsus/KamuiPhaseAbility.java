@@ -12,13 +12,23 @@ import net.minecraft.world.entity.player.Player;
 import org.joml.Vector3f;
 
 /**
- * Kamui: Intangibility — Obito's signature Mangekyo state (combo 1212, TOGGLE).
- * The user shifts part of themselves into the Kamui dimension: attacks pass straight
- * through them. Bought with a heavy continuous chakra drain, and the immunity itself is
- * applied centrally in PlayerEvents (which reads this toggle straight off the ability set,
- * the same way Chakra Scalpel does).
+ * Kamui: Intangibility - Obito's signature Mangekyo state (combo 1212, TOGGLE).
+ *
+ * The user shifts part of themselves into the Kamui dimension, so nothing in this world
+ * can touch them: attacks pass through (applied centrally in PlayerEvents, which reads the
+ * toggle straight off the ability set) and so does terrain - they drift through walls and
+ * floors exactly as in the anime.
+ *
+ * Deliberately NOT implemented as spectator mode, which would make the wielder invisible to
+ * everyone else. Obito phasing through a wall is something the people fighting him can see
+ * and be unsettled by, and that is the whole drama of the technique. So instead the entity
+ * keeps its normal rendering and only its collision is switched off: noPhysics for terrain,
+ * plus flight so there is a way to move once gravity has nothing to stand on.
+ *
+ * Bought with a heavy continuous chakra drain.
  */
-public class KamuiPhaseAbility extends Ability implements Ability.Toggled, Ability.ToggleStartCheck {
+public class KamuiPhaseAbility extends Ability
+        implements Ability.Toggled, Ability.ToggleStartCheck, Ability.HandleEnded {
 
     /** Per-tick chakra drain — deliberately steep, this is total damage immunity. */
     private static final float CHAKRA_COST = 12f;
@@ -66,7 +76,51 @@ public class KamuiPhaseAbility extends Ability implements Ability.Toggled, Abili
 
     @Override
     public void performServer(Player player, INinjaData ninjaData, int ticksActive) {
-        // Nothing to tick server-side: the immunity is applied in PlayerEvents.livingHurt.
+        // Damage immunity is applied in PlayerEvents.livingHurt, and the terrain phasing is
+        // driven by PlayerEvents.reconcileKamuiPhasing so that both sides agree.
+    }
+
+    @Override
+    public void handleAbilityEnded(Player player, INinjaData ninjaData, int ticksActive) {
+        // Server-side immediacy; the per-tick reconcile in PlayerEvents is what makes the
+        // client agree, and what repairs the state after a relog or a death.
+        clearPhasing(player);
+    }
+
+    /**
+     * Switches off block collision and grants flight.
+     *
+     * noPhysics is what actually lets the player move through terrain: Entity.move consults
+     * it client-side, and ServerGamePacketListenerImpl consults it before rubber-banding a
+     * player who appears to be inside a wall - without it the server would drag them back
+     * out every tick. It also makes Entity.isInWall report false, so phasing through stone
+     * does not suffocate you.
+     *
+     * Flight comes with it out of necessity: with collision gone, gravity would drop the
+     * wielder straight through the floor and into the void with no way back up.
+     */
+    public static void applyPhasing(Player player) {
+        player.noPhysics = true;
+        if (!player.getAbilities().mayfly) {
+            player.getAbilities().mayfly = true;
+            player.getAbilities().flying = true;
+            player.onUpdateAbilities();
+        }
+        player.fallDistance = 0f;
+        player.setNoGravity(true);
+    }
+
+    public static void clearPhasing(Player player) {
+        player.noPhysics = false;
+        player.setNoGravity(false);
+        player.fallDistance = 0f;
+        // Never strip flight from someone who is entitled to it anyway, or a creative-mode
+        // player would lose the ability to fly by using a jutsu.
+        if (!player.isCreative() && !player.isSpectator()) {
+            player.getAbilities().mayfly = false;
+            player.getAbilities().flying = false;
+            player.onUpdateAbilities();
+        }
     }
 
     @Override

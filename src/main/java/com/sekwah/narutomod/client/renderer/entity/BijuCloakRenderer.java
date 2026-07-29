@@ -75,6 +75,10 @@ public class BijuCloakRenderer {
                 return;
             }
 
+            // Kurama Chakra Mode is the refined form - the marked cloak and nothing else.
+            // Everything else shows exactly as many tails as the wielder has drawn out.
+            model.setVisibleTails(kcm ? 0 : tails);
+
             ResourceLocation texture;
             if (kcm) {
                 texture = CLOAK_KCM;

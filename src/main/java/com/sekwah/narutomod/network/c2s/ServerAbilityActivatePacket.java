@@ -58,6 +58,7 @@ public class ServerAbilityActivatePacket {
                     // Phase 15: scroll-taught jutsu must be learned; elemental jutsu need their
                     // element unlocked + trained. Phase 16 adds the dojutsu gate.
                     if (!ability.checkLearnedRequirement(player, ninjaData)
+                            || !ability.checkClanRequirement(player, ninjaData)
                             || !ability.checkElementRequirement(player, ninjaData)
                             || !ability.checkEyeRequirement(player, ninjaData)) {
                         if (ability.castingFailSound() != null) {

@@ -130,6 +130,11 @@ public class JutsuScreen extends Screen {
         if (entry.needsScroll() && !ninjaData.isJutsuLearned(entry.path())) {
             return COLOR_NO_SCROLL;
         }
+        if (entry.ability() != null && entry.ability().requiredClan() != null) {
+            // Clan gates are now declared on the ability instead of being buried inside
+            // handleCost(), so these no longer have to settle for a noncommittal grey.
+            return entry.ability().hasClanAccess(ninjaData) ? COLOR_READY : COLOR_ELEMENT_LOCKED;
+        }
         if (entry.ability() != null && entry.ability().requiredEye() != null) {
             return entry.ability().hasEyeAccess(ninjaData) ? COLOR_READY : COLOR_ELEMENT_LOCKED;
         }
@@ -379,11 +384,18 @@ public class JutsuScreen extends Screen {
                 break;
             }
             int color;
-            if (!unlocked) {
+            if (entry.ability() != null && !entry.ability().hasClanAccess(ninjaData)) {
+                // Wrong bloodline entirely - no amount of training opens this one.
+                color = COLOR_ELEMENT_LOCKED;
+            } else if (!unlocked) {
                 color = COLOR_ELEMENT_LOCKED;
             } else if (entry.needsScroll() && !ninjaData.isJutsuLearned(entry.path())) {
                 color = COLOR_NO_SCROLL;
             } else if (level < entry.levelRequired()) {
+                color = COLOR_LOW_LEVEL;
+            } else if (entry.ability() != null && !entry.ability().hasElementAccess(ninjaData)) {
+                // Reached only by kekkei genkai: this column's nature is trained enough, so
+                // what is missing has to be the second one the bloodline also demands.
                 color = COLOR_LOW_LEVEL;
             } else {
                 color = COLOR_READY;
@@ -410,6 +422,15 @@ public class JutsuScreen extends Screen {
                 badge.append(' ');
             }
             badge.append("Lv").append(entry.levelRequired());
+            // Kekkei genkai demand a second nature the column header cannot show. Without
+            // this the row just looks broken: the column says Lv 12, the row says Lv 8, and
+            // it is still orange.
+            String secondary = entry.ability() == null ? null : entry.ability().secondaryElement();
+            if (secondary != null) {
+                badge.append(" +")
+                        .append(Component.translatable("element.narutomod." + secondary).getString())
+                        .append(entry.ability().secondaryElementLevelRequired());
+            }
         }
 
         int rowRight = colX + colWidth;

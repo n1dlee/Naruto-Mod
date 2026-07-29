@@ -6,6 +6,7 @@ import com.sekwah.narutomod.capabilities.NinjaCapabilityHandler;
 import com.sekwah.narutomod.damagetypes.NarutoDamageTypes;
 import com.sekwah.narutomod.entity.MangekyoBossEntity;
 import com.sekwah.narutomod.entity.MangekyoBossVariant;
+import com.sekwah.narutomod.abilities.jutsus.KamuiPhaseAbility;
 import com.sekwah.narutomod.entity.RogueNinjaEntity;
 import com.sekwah.narutomod.sounds.NarutoSounds;
 import com.sekwah.narutomod.util.NarutoParticles;
@@ -46,7 +47,13 @@ public class PlayerEvents {
 
     @SubscribeEvent
     public static void onEntityUpdate(LivingEvent.LivingTickEvent event) {
+        // Every living thing, not just players: the black flame catches on mobs too, and
+        // that is most of what it is for.
+        com.sekwah.narutomod.util.AmaterasuFlames.tick(event.getEntity());
         if (event.getEntity() instanceof Player player) {
+            // Runs before the ninja-mode gate on purpose: if the mode is switched off while
+            // phased, the wielder still has to be put back into a solid body.
+            reconcileKamuiPhasing(player);
             player.getCapability(NinjaCapabilityHandler.NINJA_DATA).ifPresent(ninjaData -> {
                 if (!ninjaData.isNinjaModeEnabled()) {
                     syncNinjaHealth(player, 0);
@@ -54,6 +61,84 @@ public class PlayerEvents {
                 }
                 applyRankSurvivability(player, ninjaData);
             });
+        }
+    }
+
+    /**
+     * Single owner for every piece of the player's physics this mod switches off -
+     * collision (noPhysics), flight (mayfly), and gravity (noGravity).
+     *
+     * All three had the same bug in different clothes: the state was set in one place and
+     * cleared in several others, each guarded by a condition that could be false at the
+     * exact moment cleanup was due. Miss one path and the player is left permanently
+     * flying, floating, or walking through walls. Reconciling from the authoritative state
+     * once a tick removes the whole class of bug: no exit path has to remember anything,
+     * and a state that somehow got stuck repairs itself on the next tick.
+     *
+     * Two techniques now put the player outside the world's collision: Kamui intangibility
+     * and the Byakugan's scouting flight. They share one reconciliation because they share
+     * one piece of state - whichever is on, the player phases; when neither is, they must
+     * be put back, and doing that twice from two places is how desyncs get written.
+     *
+     * The toggle framework only fires handleAbilityEnded on the server - the client just
+     * watches the synced ability set shrink. Hanging the "stop phasing" cleanup off that
+     * callback would therefore leave a client permanently able to walk through walls after
+     * switching the jutsu off. Reconciling from the synced set instead is idempotent, works
+     * identically on both sides, and repairs itself after a relog, a death or a desync.
+     *
+     * Spectators are skipped outright: their noPhysics is vanilla's own and not ours to
+     * clear.
+     */
+    private static void reconcileKamuiPhasing(Player player) {
+        if (player.isSpectator()) {
+            return;
+        }
+        boolean shouldPhase = player.getCapability(NinjaCapabilityHandler.NINJA_DATA)
+                .map(data -> data.isNinjaModeEnabled()
+                        && (data.getToggleAbilityData().getAbilitiesHashSet().contains(KAMUI_PHASE_ABILITY)
+                                || data.getToggleAbilityData().getAbilitiesHashSet()
+                                        .contains(BYAKUGAN_SCOUT_ABILITY)))
+                .orElse(false);
+        if (shouldPhase) {
+            KamuiPhaseAbility.applyPhasing(player);
+        } else if (player.noPhysics) {
+            // Only ever unwinds a state we put the player into - a non-spectator player has
+            // no other reason to have noPhysics set.
+            KamuiPhaseAbility.clearPhasing(player);
+        }
+
+        // Gravity is the other piece of physics the mod switches off, for wall-walking, and
+        // it had the same disease: setNoGravity(false) was scattered across four exit paths
+        // (the ability's detach branch, the descend-to-ground branch, the tick decay, and
+        // the jump-off packet), each behind its own "am I still attached?" guard. Leave the
+        // wall in a way none of them covered - jump off at the same moment the jutsu is
+        // toggled off - and gravity was never handed back, so the player simply floated
+        // away. Reconciling it here means no exit path has to remember any more.
+        boolean shouldFloat = shouldPhase || player.getCapability(NinjaCapabilityHandler.NINJA_DATA)
+                .map(INinjaData::isWallWalkAttached)
+                .orElse(false);
+        if (!shouldFloat && player.isNoGravity()) {
+            player.setNoGravity(false);
+        }
+
+        // Last, so it wins over the flight teardown above: inside the pocket dimension
+        // everyone flies, exactly as the 1.12.2 EMS helmet did (mayfly = creative || in
+        // kamui). Without it the void is a prison - one slip off a slab and you fall
+        // forever with nothing to land on.
+        //
+        // The revoke half matters just as much. Granting flight on arrival but never taking
+        // it back meant one trip into Kamui left the player able to fly in the overworld
+        // forever, because the phasing teardown above only runs while noPhysics is set and
+        // by then it no longer is.
+        boolean inKamui = com.sekwah.narutomod.world.KamuiDimension.isKamui(player.level());
+        if (inKamui && !player.getAbilities().mayfly) {
+            player.getAbilities().mayfly = true;
+            player.onUpdateAbilities();
+        } else if (!inKamui && !shouldPhase && player.getAbilities().mayfly
+                && !player.isCreative()) {
+            player.getAbilities().mayfly = false;
+            player.getAbilities().flying = false;
+            player.onUpdateAbilities();
         }
     }
 
@@ -146,6 +231,9 @@ public class PlayerEvents {
 
     private static final net.minecraft.resources.ResourceLocation KAMUI_PHASE_ABILITY =
             new net.minecraft.resources.ResourceLocation(NarutoMod.MOD_ID, "kamui_phase");
+
+    private static final net.minecraft.resources.ResourceLocation BYAKUGAN_SCOUT_ABILITY =
+            new net.minecraft.resources.ResourceLocation(NarutoMod.MOD_ID, "byakugan_scout");
 
     /**
      * Kamui: Intangibility (Obito's Eternal Mangekyo form) — while the toggle is up the
@@ -839,6 +927,53 @@ public class PlayerEvents {
             }
             ninjaData.triggerSusanooArmSwipe(attacker, target);
             ninjaData.triggerKuramaTailLash(attacker, target);
+        });
+    }
+
+    /**
+     * The canon path to a Mangekyo: it opens through the trauma of killing someone you
+     * love, not through training. A wolf you tamed and raised yourself is the closest
+     * thing Minecraft has to that bond, so putting it down is what triggers the awakening.
+     *
+     * It has to be YOUR wolf, killed by YOUR hand - a stray wolf or someone else's pet
+     * costs you nothing, and the whole point is that it costs something.
+     *
+     * This runs alongside the rank path (Kage still awakens it) rather than replacing it,
+     * so it works as a shortcut: a Jonin with three tomoe can open the Mangekyo early if
+     * they are willing to pay for it.
+     */
+    @SubscribeEvent
+    public static void onBondBreakAwakening(net.minecraftforge.event.entity.living.LivingDeathEvent event) {
+        if (!(event.getEntity() instanceof net.minecraft.world.entity.animal.Wolf wolf)
+                || wolf.level().isClientSide) {
+            return;
+        }
+        if (!(event.getSource().getEntity() instanceof Player killer)) {
+            return;
+        }
+        if (!wolf.isTame() || !killer.getUUID().equals(wolf.getOwnerUUID())) {
+            return;
+        }
+        killer.getCapability(NinjaCapabilityHandler.NINJA_DATA).ifPresent(ninjaData -> {
+            // Gated on the same check isMangekyoAwakened() uses, so this can never silently
+            // set a flag that the getter then refuses to report. A transplanted eye counts:
+            // this is the only route to a Mangekyo for a non-Uchiha, since the rank path in
+            // checkDojutsuPerks stays blood-only.
+            if (!ninjaData.isNinjaModeEnabled() || !ninjaData.hasSharinganEye()) {
+                return;
+            }
+            if (ninjaData.isMangekyoAwakened() || ninjaData.getSharinganTomoe() < 3) {
+                return;
+            }
+            ninjaData.setMangekyoAwakened(true);
+            killer.displayClientMessage(Component.translatable("mangekyo.awaken.bond")
+                    .withStyle(ChatFormatting.DARK_RED), false);
+            killer.displayClientMessage(Component.translatable("mangekyo.awaken.bond.cost")
+                    .withStyle(ChatFormatting.GRAY), false);
+            if (killer.level() instanceof ServerLevel serverLevel) {
+                serverLevel.sendParticles(ParticleTypes.SOUL_FIRE_FLAME,
+                        killer.getX(), killer.getEyeY(), killer.getZ(), 40, 0.4, 0.4, 0.4, 0.05);
+            }
         });
     }
 

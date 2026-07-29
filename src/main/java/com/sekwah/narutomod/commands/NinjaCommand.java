@@ -5,13 +5,16 @@ import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.BoolArgumentType;
 import com.mojang.brigadier.arguments.FloatArgumentType;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import com.mojang.brigadier.suggestion.SuggestionProvider;
 import com.sekwah.narutomod.capabilities.INinjaData;
 import com.sekwah.narutomod.capabilities.NinjaCapabilityHandler;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.SharedSuggestionProvider;
 import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
@@ -100,11 +103,101 @@ public class NinjaCommand {
                                         .executes(ctx -> mutateTarget(ctx, "chakra XP",
                                                 data -> data.addChakraXp(FloatArgumentType.getFloat(ctx, "amount"))))))));
 
+        // --- Nature Release management ---
+        // Grants bypass the rank slot cap on purpose: this is the operator override, and
+        // being told "no free slot" by your own debug command would be useless.
+        ninja.then(Commands.literal("element")
+                .then(Commands.literal("add")
+                        .then(Commands.argument("target", EntityArgument.player())
+                                .then(Commands.argument("element", StringArgumentType.word())
+                                        .suggests(ELEMENT_SUGGESTIONS)
+                                        .executes(ctx -> {
+                                            String element = StringArgumentType.getString(ctx, "element")
+                                                    .toLowerCase(Locale.ROOT);
+                                            if (!isValidElement(element)) {
+                                                sendInvalid(ctx.getSource(), "element", String.join(", ", ELEMENTS));
+                                                return 0;
+                                            }
+                                            return mutateTarget(ctx, "element " + element,
+                                                    data -> data.grantElement(element));
+                                        }))))
+                .then(Commands.literal("remove")
+                        .then(Commands.argument("target", EntityArgument.player())
+                                .then(Commands.argument("element", StringArgumentType.word())
+                                        .suggests(ELEMENT_SUGGESTIONS)
+                                        .executes(ctx -> {
+                                            String element = StringArgumentType.getString(ctx, "element")
+                                                    .toLowerCase(Locale.ROOT);
+                                            if (!isValidElement(element)) {
+                                                sendInvalid(ctx.getSource(), "element", String.join(", ", ELEMENTS));
+                                                return 0;
+                                            }
+                                            return mutateTarget(ctx, "element " + element,
+                                                    data -> data.removeElement(element));
+                                        }))))
+                .then(Commands.literal("level")
+                        .then(Commands.argument("target", EntityArgument.player())
+                                .then(Commands.argument("element", StringArgumentType.word())
+                                        .suggests(ELEMENT_SUGGESTIONS)
+                                        .then(Commands.argument("level", IntegerArgumentType.integer(1, 20))
+                                                .executes(ctx -> {
+                                                    String element = StringArgumentType.getString(ctx, "element")
+                                                            .toLowerCase(Locale.ROOT);
+                                                    if (!isValidElement(element)) {
+                                                        sendInvalid(ctx.getSource(), "element",
+                                                                String.join(", ", ELEMENTS));
+                                                        return 0;
+                                                    }
+                                                    int level = IntegerArgumentType.getInteger(ctx, "level");
+                                                    return mutateTarget(ctx, element + " mastery",
+                                                            data -> {
+                                                                // Grant first, so setting a level on a nature
+                                                                // they lack just works instead of silently
+                                                                // doing nothing.
+                                                                data.grantElement(element);
+                                                                data.setElementLevel(element, level);
+                                                            });
+                                                })))))
+                .then(Commands.literal("list")
+                        .then(Commands.argument("target", EntityArgument.player())
+                                .executes(ctx -> {
+                                    ServerPlayer target = EntityArgument.getPlayer(ctx, "target");
+                                    return runForTarget(ctx.getSource(), target,
+                                            data -> sendElements(ctx.getSource(), target, data));
+                                }))));
+
         ninja.then(Commands.literal("reset")
                 .then(Commands.argument("target", EntityArgument.player())
                         .executes(ctx -> mutateTarget(ctx, "ninja data", INinjaData::resetProgression))));
 
         dispatcher.register(ninja);
+    }
+
+    private static final String[] ELEMENTS = {"fire", "water", "earth", "wind", "lightning"};
+
+    private static final SuggestionProvider<CommandSourceStack> ELEMENT_SUGGESTIONS =
+            (ctx, builder) -> SharedSuggestionProvider.suggest(ELEMENTS, builder);
+
+    private static boolean isValidElement(String element) {
+        for (String valid : ELEMENTS) {
+            if (valid.equals(element)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static void sendElements(CommandSourceStack source, ServerPlayer target, INinjaData data) {
+        StringBuilder summary = new StringBuilder();
+        for (String element : data.getUnlockedElements()) {
+            if (summary.length() > 0) {
+                summary.append(", ");
+            }
+            summary.append(element).append(" Lv").append(data.getElementLevel(element));
+        }
+        String text = summary.length() == 0 ? "none" : summary.toString();
+        source.sendSuccess(() -> Component.literal(target.getName().getString() + ": " + text)
+                .withStyle(ChatFormatting.YELLOW), false);
     }
 
     private static int runForSelf(CommandSourceStack source, Consumer<INinjaData> consumer) {

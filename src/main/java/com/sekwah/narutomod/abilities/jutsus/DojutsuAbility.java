@@ -70,11 +70,20 @@ public class DojutsuAbility extends Ability {
         toggles.addAbilityStarted(player, ninjaData, selected);
     }
 
+    /**
+     * Which eye this key drives. A clan's own dojutsu always wins - a Hyuga who also
+     * carries a transplanted Sharingan still keys their Byakugan, and the foreign eye
+     * keeps working the way it always does, passively and unclosably.
+     *
+     * The fallback is what matters: without it a non-Uchiha who transplanted a Sharingan
+     * had no way to switch it into combat mode at all, which made the whole transplant
+     * path half-dead.
+     */
     private Ability getClanDojutsu(INinjaData ninjaData) {
         return switch (ninjaData.getClanId()) {
             case "uchiha" -> NarutoAbilities.SHARINGAN.get();
             case "hyuga" -> NarutoAbilities.BYAKUGAN.get();
-            default -> null;
+            default -> ninjaData.isTransplantedSharingan() ? NarutoAbilities.SHARINGAN.get() : null;
         };
     }
 

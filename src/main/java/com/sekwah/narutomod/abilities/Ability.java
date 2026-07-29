@@ -93,6 +93,22 @@ public abstract class Ability {
     }
 
     /**
+     * Second nature this jutsu also demands, or null for an ordinary single-element
+     * technique. This is what makes kekkei genkai possible: Ice is not its own nature you
+     * can awaken, it is what a ninja who has trained BOTH Water and Wind can do with them.
+     * The bloodline is expressed as "you must own and have trained two natures at once",
+     * which the element-slot cap already makes a real investment.
+     */
+    public String secondaryElement() {
+        return null;
+    }
+
+    /** Mastery level required in {@link #secondaryElement()}, when one is set. */
+    public int secondaryElementLevelRequired() {
+        return 1;
+    }
+
+    /**
      * Element XP granted per successful cast of this jutsu.
      */
     public float elementXpReward() {
@@ -139,6 +155,42 @@ public abstract class Ability {
         if (element == null || this.isCopiedBySharingan(ninjaData)) {
             return true;
         }
+        if (!checkOneElement(player, ninjaData, element, this.elementLevelRequired())) {
+            return false;
+        }
+        String secondary = this.secondaryElement();
+        return secondary == null
+                || checkOneElement(player, ninjaData, secondary, this.secondaryElementLevelRequired());
+    }
+
+    /**
+     * Pure (no messaging, no side effects) version of the element gate, for callers that
+     * need to know "could this be cast right now" without attempting a cast - JutsuScreen
+     * recolours every row every frame and must never spam chat. Mirrors
+     * {@link #hasEyeAccess(INinjaData)}.
+     */
+    public boolean hasElementAccess(INinjaData ninjaData) {
+        String element = this.element();
+        if (element == null) {
+            return true;
+        }
+        if (!ninjaData.isElementUnlocked(element)
+                || ninjaData.getElementLevel(element) < this.elementLevelRequired()) {
+            return false;
+        }
+        String secondary = this.secondaryElement();
+        return secondary == null
+                || (ninjaData.isElementUnlocked(secondary)
+                        && ninjaData.getElementLevel(secondary) >= this.secondaryElementLevelRequired());
+    }
+
+    /**
+     * One nature's half of the gate: owned, and trained far enough. Split out so the
+     * kekkei genkai check reports the SECOND element by name when that is the one the
+     * caster is short on - being told "you need Water" when your Wind is what is lacking
+     * would be actively misleading.
+     */
+    private boolean checkOneElement(Player player, INinjaData ninjaData, String element, int levelRequired) {
         Component elementName = Component.translatable("element.narutomod." + element).withStyle(ChatFormatting.YELLOW);
         if (!ninjaData.isElementUnlocked(element)) {
             player.displayClientMessage(Component.translatable("jutsu.fail.element.locked",
@@ -147,15 +199,44 @@ public abstract class Ability {
             return false;
         }
         int level = ninjaData.getElementLevel(element);
-        if (level < this.elementLevelRequired()) {
+        if (level < levelRequired) {
             player.displayClientMessage(Component.translatable("jutsu.fail.element.level",
                     Component.translatable(this.getTranslationKey(ninjaData)).withStyle(ChatFormatting.YELLOW),
                     elementName,
-                    Component.literal(String.valueOf(this.elementLevelRequired())).withStyle(ChatFormatting.YELLOW),
+                    Component.literal(String.valueOf(levelRequired)).withStyle(ChatFormatting.YELLOW),
                     Component.literal(String.valueOf(level)).withStyle(ChatFormatting.YELLOW)).withStyle(ChatFormatting.RED), true);
             return false;
         }
         return true;
+    }
+
+    /**
+     * Clan whose bloodline this technique belongs to, or null when anyone may learn it.
+     *
+     * Clan-locked techniques used to hide their gate inside handleCost(), which spends
+     * chakra as a side effect and so could never be safely asked "would this work?" - that
+     * is why the jutsu screen has to paint them a noncommittal grey. Declaring the clan
+     * here instead makes the gate checkable without casting, exactly like requiredEye().
+     */
+    public String requiredClan() {
+        return null;
+    }
+
+    /** Pure, side-effect-free clan check, safe to call from the GUI every frame. */
+    public boolean hasClanAccess(INinjaData ninjaData) {
+        String clan = this.requiredClan();
+        return clan == null || clan.equals(ninjaData.getClanId());
+    }
+
+    public boolean checkClanRequirement(Player player, INinjaData ninjaData) {
+        if (this.hasClanAccess(ninjaData)) {
+            return true;
+        }
+        player.displayClientMessage(Component.translatable("jutsu.fail.clan",
+                Component.translatable(this.getTranslationKey(ninjaData)).withStyle(ChatFormatting.YELLOW),
+                Component.translatable("naruto.clan." + this.requiredClan()).withStyle(ChatFormatting.YELLOW))
+                .withStyle(ChatFormatting.RED), true);
+        return false;
     }
 
     // --- Phase 16: Dojutsu gating ---
@@ -339,6 +420,18 @@ public abstract class Ability {
 
     public interface ToggleStartCheck {
         boolean canStartToggle(Player player, INinjaData ninjaData);
+    }
+
+    /**
+     * Whether releasing a channel after this many ticks counts as a real cast where
+     * cooldowns are concerned. True by default.
+     *
+     * Abilities with a minimum wind-up (Kirin) return false for a release that came too
+     * early: the technique never happened, so charging it should not lock you out of it
+     * for the next forty-five seconds.
+     */
+    public boolean channelCommittedAt(int ticksChanneled) {
+        return true;
     }
 
     /**

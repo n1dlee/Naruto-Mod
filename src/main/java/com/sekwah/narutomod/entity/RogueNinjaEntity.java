@@ -46,11 +46,28 @@ public class RogueNinjaEntity extends Monster {
 
     private static final EntityDataAccessor<Byte> VARIANT =
             SynchedEntityData.defineId(RogueNinjaEntity.class, EntityDataSerializers.BYTE);
+    private static final EntityDataAccessor<Byte> ELEMENT =
+            SynchedEntityData.defineId(RogueNinjaEntity.class, EntityDataSerializers.BYTE);
 
     /** Skins carried over from the 1.12.2 mod's generic village ninja. */
     public static final String[] VARIANT_TEXTURES = {
             "ninja_konoha", "ninja_iwa", "ninja_kiri", "ninja_kumo", "ninja_suna"
     };
+
+    /**
+     * One nature each, rolled at spawn. A rank-and-file ninja never had the years or the
+     * talent for a second - that is what separates them from the player, who collects
+     * natures, and from the S-rank bosses, who have signature techniques instead.
+     */
+    public static final String[] ELEMENTS = {"fire", "water", "earth", "wind", "lightning"};
+
+    /**
+     * Dirt raised by an Earth Release volley, cleared on a timer so a world full of these
+     * mobs doesn't slowly fill with abandoned pillars. Server-side only and deliberately
+     * not persisted: if the chunk unloads mid-volley the blocks are ordinary dirt anyway.
+     */
+    private final java.util.List<net.minecraft.core.BlockPos> raisedSpikes = new java.util.ArrayList<>();
+    private int spikeClearTimer;
 
     public RogueNinjaEntity(EntityType<? extends RogueNinjaEntity> type, Level level) {
         super(type, level);
@@ -61,6 +78,7 @@ public class RogueNinjaEntity extends Monster {
     protected void defineSynchedData() {
         super.defineSynchedData();
         this.entityData.define(VARIANT, (byte) 0);
+        this.entityData.define(ELEMENT, (byte) 0);
     }
 
     public byte getVariant() {
@@ -71,9 +89,67 @@ public class RogueNinjaEntity extends Monster {
         this.entityData.set(VARIANT, (byte) Math.floorMod(variant, VARIANT_TEXTURES.length));
     }
 
+    /** Index into {@link #ELEMENTS}. */
+    public byte getElementId() {
+        return this.entityData.get(ELEMENT);
+    }
+
+    public String getElement() {
+        return ELEMENTS[Math.floorMod(this.getElementId(), ELEMENTS.length)];
+    }
+
+    public void setElementId(byte element) {
+        this.entityData.set(ELEMENT, (byte) Math.floorMod(element, ELEMENTS.length));
+    }
+
+    /**
+     * Raises a run of dirt and remembers it so it can be taken back down again. Calling
+     * this while an earlier volley is still standing clears that one first, so a single
+     * ninja can never leave more than one volley of terrain behind.
+     */
+    public void trackRaisedSpike(net.minecraft.core.BlockPos pos, int lifespanTicks) {
+        if (this.spikeClearTimer <= 0 && !this.raisedSpikes.isEmpty()) {
+            this.clearRaisedSpikes();
+        }
+        this.raisedSpikes.add(pos);
+        this.spikeClearTimer = lifespanTicks;
+    }
+
+    private void clearRaisedSpikes() {
+        if (this.level() instanceof ServerLevel serverLevel) {
+            for (net.minecraft.core.BlockPos pos : this.raisedSpikes) {
+                if (serverLevel.getBlockState(pos).is(net.minecraft.world.level.block.Blocks.DIRT)) {
+                    serverLevel.setBlockAndUpdate(pos, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState());
+                }
+            }
+        }
+        this.raisedSpikes.clear();
+        this.spikeClearTimer = 0;
+    }
+
+    @Override
+    public void tick() {
+        super.tick();
+        if (!this.level().isClientSide && this.spikeClearTimer > 0 && --this.spikeClearTimer <= 0) {
+            this.clearRaisedSpikes();
+        }
+    }
+
+    /** Terrain must not outlive the ninja who raised it. */
+    @Override
+    public void remove(RemovalReason reason) {
+        if (!this.level().isClientSide && !this.raisedSpikes.isEmpty()) {
+            this.clearRaisedSpikes();
+        }
+        super.remove(reason);
+    }
+
     @Override
     protected void registerGoals() {
         this.goalSelector.addGoal(0, new FloatGoal(this));
+        // Above melee: at range they open with ninjutsu and only close in once it is on
+        // cooldown, which is what makes them read as ninja rather than as armed zombies.
+        this.goalSelector.addGoal(1, new com.sekwah.narutomod.entity.goal.RogueNinjaJutsuGoal(this));
         this.goalSelector.addGoal(2, new MeleeAttackGoal(this, 1.15D, false));
         this.goalSelector.addGoal(6, new WaterAvoidingRandomStrollGoal(this, 0.8D));
         this.goalSelector.addGoal(7, new LookAtPlayerGoal(this, Player.class, 10.0F));
@@ -98,6 +174,7 @@ public class RogueNinjaEntity extends Monster {
                                         @Nullable CompoundTag tag) {
         RandomSource random = level.getRandom();
         this.setVariant((byte) random.nextInt(VARIANT_TEXTURES.length));
+        this.setElementId((byte) random.nextInt(ELEMENTS.length));
         // Armed like a real ninja — this is also what makes them worth farming.
         this.setItemSlot(net.minecraft.world.entity.EquipmentSlot.MAINHAND,
                 new ItemStack(random.nextInt(4) == 0 ? NarutoItems.KATANA.get() : NarutoItems.KUNAI.get()));
@@ -133,12 +210,14 @@ public class RogueNinjaEntity extends Monster {
     public void addAdditionalSaveData(CompoundTag tag) {
         super.addAdditionalSaveData(tag);
         tag.putByte("Variant", this.getVariant());
+        tag.putByte("Element", this.getElementId());
     }
 
     @Override
     public void readAdditionalSaveData(CompoundTag tag) {
         super.readAdditionalSaveData(tag);
         this.setVariant(tag.getByte("Variant"));
+        this.setElementId(tag.getByte("Element"));
     }
 
     @Override

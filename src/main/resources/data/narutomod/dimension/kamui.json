@@ -1,0 +1,13 @@
+{
+  "type": "narutomod:kamui",
+  "generator": {
+    "type": "minecraft:flat",
+    "settings": {
+      "biome": "narutomod:kamui",
+      "lakes": false,
+      "features": false,
+      "layers": [],
+      "structure_overrides": []
+    }
+  }
+}
