@@ -3,7 +3,7 @@
   "biomes": "#minecraft:is_overworld",
   "spawners": {
     "type": "narutomod:mangekyo_boss",
-    "weight": 3,
+    "weight": 7,
     "minCount": 1,
     "maxCount": 1
   }

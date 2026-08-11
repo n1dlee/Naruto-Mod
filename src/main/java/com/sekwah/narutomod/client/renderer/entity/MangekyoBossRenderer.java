@@ -26,6 +26,21 @@ public class MangekyoBossRenderer extends HumanoidMobRenderer<MangekyoBossEntity
         this.addLayer(new BossSusanooLayer(this, context));
     }
 
+    /**
+     * Without an arm pose the vanilla humanoid rig lets its arms swing free and the held
+     * weapon just floats alongside the fist. Switching to ITEM whenever the boss is actually
+     * carrying something makes Madara grip the fan and Zabuza shoulder the cleaver.
+     */
+    @Override
+    public void render(MangekyoBossEntity entity, float entityYaw, float partialTick,
+                       com.mojang.blaze3d.vertex.PoseStack poseStack,
+                       net.minecraft.client.renderer.MultiBufferSource bufferSource, int packedLight) {
+        this.getModel().rightArmPose = entity.getMainHandItem().isEmpty()
+                ? HumanoidModel.ArmPose.EMPTY
+                : HumanoidModel.ArmPose.ITEM;
+        super.render(entity, entityYaw, partialTick, poseStack, bufferSource, packedLight);
+    }
+
     @Override
     public ResourceLocation getTextureLocation(MangekyoBossEntity entity) {
         return entity.getVariant().texture();

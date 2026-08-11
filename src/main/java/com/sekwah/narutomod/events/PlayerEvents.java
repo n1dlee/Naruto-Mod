@@ -218,7 +218,9 @@ public class PlayerEvents {
      * zombies should stay far slower than hunting ninja.
      */
     private static final float BOSS_KILL_XP = 1500f;
+    /** Chunin rogue. A Jonin is worth the multiplier below, and a clan rogue is a Jonin. */
     private static final float ROGUE_NINJA_KILL_XP = 200f;
+    private static final float ROGUE_JONIN_XP_MULTIPLIER = 2.5f;
 
     /**
      * Chakra Scalpel (Haruno, toggled): while active, every melee strike severs muscle
@@ -633,6 +635,31 @@ public class PlayerEvents {
     }
 
     /**
+     * The player who should be credited for damage from this source, seeing through a
+     * shadow clone to the ninja who made it.
+     *
+     * Everything a clone learns flows back to the original the moment it disperses - that
+     * is the entire reason Kage Bunshin is a training technique and not just extra bodies.
+     * Mechanically the clone is its own entity, so every "instanceof Player" check silently
+     * dropped its kills on the floor: no chakra XP, no bounty credit, and (via
+     * lastHurtByPlayer) not even vanilla experience orbs.
+     *
+     * @return the player to credit, or null when nothing player-owned dealt the damage.
+     */
+    @javax.annotation.Nullable
+    private static Player creditedPlayer(net.minecraft.world.damagesource.DamageSource source,
+                                         net.minecraft.world.level.Level level) {
+        net.minecraft.world.entity.Entity attacker = source.getEntity();
+        if (attacker instanceof Player player) {
+            return player;
+        }
+        if (attacker instanceof com.sekwah.narutomod.entity.ShadowCloneEntity clone) {
+            return clone.getOwnerUUID().map(level::getPlayerByUUID).orElse(null);
+        }
+        return null;
+    }
+
+    /**
      * Phase 15 C: rank XP is earned in combat now, not by burning chakra into the air.
      * Landed jutsu hits (own damage types) pay double, plain melee pays face value.
      * No XP for hitting other players — PvP shouldn't be a training dummy exploit.
@@ -641,9 +668,15 @@ public class PlayerEvents {
         if (event.isCanceled() || event.getAmount() <= 0) {
             return;
         }
-        if (!(event.getSource().getEntity() instanceof Player attacker) || event.getEntity() instanceof Player) {
+        Player attacker = creditedPlayer(event.getSource(), event.getEntity().level());
+        if (attacker == null || event.getEntity() instanceof Player) {
             return;
         }
+        // Tell vanilla a player was responsible. Without this a mob a clone killed drops no
+        // experience orbs and no looting-enchanted loot at all, because both are gated on
+        // lastHurtByPlayer being set.
+        event.getEntity().setLastHurtByPlayer(attacker);
+
         boolean jutsuHit = event.getSource().is(NarutoDamageTypes.FIREBALL)
                 || event.getSource().is(NarutoDamageTypes.WATER_BULLET)
                 || event.getSource().is(NarutoDamageTypes.RASENGAN)
@@ -948,6 +981,9 @@ public class PlayerEvents {
                 || wolf.level().isClientSide) {
             return;
         }
+        // Deliberately NOT routed through creditedPlayer: the Mangekyo opens through doing
+        // the thing yourself. Ordering a clone to put the dog down is exactly the dodge the
+        // technique is supposed to refuse.
         if (!(event.getSource().getEntity() instanceof Player killer)) {
             return;
         }
@@ -988,7 +1024,8 @@ public class PlayerEvents {
         if (!(event.getEntity() instanceof MangekyoBossEntity boss) || boss.level().isClientSide) {
             return;
         }
-        if (!(event.getSource().getEntity() instanceof Player killer)) {
+        Player killer = creditedPlayer(event.getSource(), boss.level());
+        if (killer == null) {
             return;
         }
         MangekyoBossVariant variant = boss.getVariant();
@@ -1049,12 +1086,24 @@ public class PlayerEvents {
     }
 
     /**
+     * What a dead missing-nin was worth. Scales with their rank for the same reason the
+     * player's own rank matters: a Jonin took longer to become dangerous, so killing one
+     * teaches you more.
+     */
+    private static float rogueKillXp(RogueNinjaEntity rogue) {
+        return rogue.getNinjaRank() >= RogueNinjaEntity.RANK_JONIN
+                ? ROGUE_NINJA_KILL_XP * ROGUE_JONIN_XP_MULTIPLIER
+                : ROGUE_NINJA_KILL_XP;
+    }
+
+    /**
      * Bingo Book bounty tracking: every kill by a player is checked against their active
      * bounty; completing it pays out chakra XP (see BingoBookItem for issuing bounties).
      */
     @SubscribeEvent
     public static void onBountyKill(net.minecraftforge.event.entity.living.LivingDeathEvent event) {
-        if (!(event.getSource().getEntity() instanceof Player killer) || killer.level().isClientSide) {
+        Player killer = creditedPlayer(event.getSource(), event.getEntity().level());
+        if (killer == null || killer.level().isClientSide) {
             return;
         }
         String killedId = net.minecraft.world.entity.EntityType.getKey(event.getEntity().getType()).toString();
@@ -1064,8 +1113,8 @@ public class PlayerEvents {
             // A rogue ninja is worth far more than its 30 health would suggest: you learn
             // from fighting someone who fights back, not from swatting a zombie.
             if (ninjaData.isNinjaModeEnabled() && event.getEntity() instanceof net.minecraft.world.entity.monster.Monster) {
-                ninjaData.addChakraXp(event.getEntity() instanceof RogueNinjaEntity
-                        ? ROGUE_NINJA_KILL_XP
+                ninjaData.addChakraXp(event.getEntity() instanceof RogueNinjaEntity rogue
+                        ? rogueKillXp(rogue)
                         : 10f + event.getEntity().getMaxHealth() * 0.5f);
             }
             if (ninjaData.getBountyRemaining() <= 0 || !killedId.equals(ninjaData.getBountyTargetId())) {

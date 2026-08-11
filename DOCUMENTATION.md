@@ -14,7 +14,7 @@
 | Minecraft | 1.20.1 |
 | Mod Loader | NeoForge (Forge 47.x) |
 | Java | 17 |
-| Build | `gradlew.bat build` — outputs to `build/libs/NarutoMod-1.20-1.8.1-SNAPSHOT-universal.jar` |
+| Build | `gradlew.bat build` — outputs to `build/libs/NarutoMod-1.20-1.9-RELEASE-universal.jar` |
 | Datagen | `gradlew.bat runData` — must run before build when damage types change |
 | Dependency | SekCLib (bundled) — provides `@Sync` capability sync annotations |
 
@@ -561,7 +561,7 @@ $env:JAVA_HOME = "C:\Program Files\Java\jdk-17"
 $env:PATH = "$env:JAVA_HOME\bin;$env:PATH"
 ```
 
-Output: `build/libs/NarutoMod-1.20-1.8.1-SNAPSHOT-universal.jar`
+Output: `build/libs/NarutoMod-1.20-1.9-RELEASE-universal.jar`
 Place in: `.minecraft/mods/`
 Also requires: `SekCLib-1.20-1.0.2-universal.jar` in mods folder
 

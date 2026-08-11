@@ -46,8 +46,13 @@ def shaRef = githubSha != null ? "-${githubSha.substring(0, 8)}" : ""
 
 println "Branch ${branch}${shaRef} isRelease: '${isRelease}'"
 
-// Get version from file managed by please-release
-def versionString = (file('./version.txt').text + (isRelease ? "" : "-${snapshotName}${shaRef}")).replaceAll('\n', '')
+// Get version from file managed by please-release.
+// A build with no GITHUB_REF is someone building locally, and stamping that as a SNAPSHOT
+// of a version that already says RELEASE just produced the nonsense "1.9-RELEASE-SNAPSHOT".
+// Local builds now take version.txt verbatim; CI still tags branch builds as before.
+def localBuild = branch == null
+def versionString = (file('./version.txt').text
+        + ((isRelease || localBuild) ? "" : "-${snapshotName}${shaRef}")).replaceAll('\n', '')
 setVersion(versionString)
 println "Version: ${getVersion()}"
 

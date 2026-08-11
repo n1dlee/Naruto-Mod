@@ -96,6 +96,11 @@ public class ServerAbilityChannelPacket {
                                     int channelledTicks = ninjaData.getCurrentlyChanneledTicks();
                                     ability.performServer(player, ninjaData, channelledTicks);
                                     ability.grantCastXp(ninjaData);
+                                    // Channeled techniques were invisible to the copy wheel:
+                                    // only the instant-cast path ever offered itself up, so
+                                    // a watching Sharingan could never read one.
+                                    com.sekwah.narutomod.util.SharinganCopy.onJutsuPerformed(
+                                            player, ability, resourceKey.location().getPath());
                                     if (ability instanceof Ability.Cooldown cooldownAbility
                                             && ability.channelCommittedAt(channelledTicks)) {
                                         cooldownAbility.registerCooldown(ninjaData,

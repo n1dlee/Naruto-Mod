@@ -102,6 +102,14 @@ public class NarutoEntities {
                     .sized(0.6F, 1.95F).clientTrackingRange(8));
 
     /**
+     * Uchiha missing-nin. Its own type purely so it can carry a spawn weight distinct from
+     * the ordinary rogue's - see the biome modifiers in data/.
+     */
+    public static final RegistryObject<EntityType<UchihaRogueEntity>> UCHIHA_ROGUE = register("uchiha_rogue",
+            EntityType.Builder.<UchihaRogueEntity>of(UchihaRogueEntity::new, MobCategory.MONSTER)
+                    .sized(0.6F, 1.95F).clientTrackingRange(8));
+
+    /**
      * Hashirama's wood golem. MobCategory.MISC because it is conjured by a technique and
      * must never turn up through natural spawning, same as every other summon here.
      */
@@ -119,10 +127,20 @@ public class NarutoEntities {
 
     @SubscribeEvent
     public static void registerSpawnPlacements(net.minecraftforge.event.entity.SpawnPlacementRegisterEvent event) {
+        // checkAnyLightMonsterSpawnRules, not checkMonsterSpawnRules: missing-nin are living
+        // people, not undead, and nothing about them says "only after dark". Tying them to
+        // the vanilla darkness rule meant the whole ninja population vanished at sunrise and
+        // the world went back to being ordinary Minecraft for half of every day.
         event.register(ROGUE_NINJA.get(),
                 net.minecraft.world.entity.SpawnPlacements.Type.ON_GROUND,
                 net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
-                net.minecraft.world.entity.monster.Monster::checkMonsterSpawnRules,
+                net.minecraft.world.entity.monster.Monster::checkAnyLightMonsterSpawnRules,
+                net.minecraftforge.event.entity.SpawnPlacementRegisterEvent.Operation.REPLACE);
+
+        event.register(UCHIHA_ROGUE.get(),
+                net.minecraft.world.entity.SpawnPlacements.Type.ON_GROUND,
+                net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
+                net.minecraft.world.entity.monster.Monster::checkAnyLightMonsterSpawnRules,
                 net.minecraftforge.event.entity.SpawnPlacementRegisterEvent.Operation.REPLACE);
 
         // Bosses now ride the ordinary monster-spawning pipeline too, just at a far rarer
@@ -134,11 +152,13 @@ public class NarutoEntities {
                 // Monster::checkMonsterSpawnRules can't be used directly here: the boss extends
                 // PathfinderMob (it only implements Enemy), so it doesn't satisfy that method's
                 // `? extends Monster` bound. Same three checks, spelled out.
+                // No darkness check either, for the same reason as the rogues above plus a
+                // practical one: an S-rank appears rarely enough that halving its window to
+                // night only made it feel broken.
                 (type, level, spawnType, pos, random) ->
                         com.sekwah.narutomod.config.NarutoConfig.mangekyoBossSpawnEnabled
                                 && level.getDifficulty() != net.minecraft.world.Difficulty.PEACEFUL
                                 && isNearPlayerElevation(level, pos)
-                                && net.minecraft.world.entity.monster.Monster.isDarkEnoughToSpawn(level, pos, random)
                                 && net.minecraft.world.entity.Mob.checkMobSpawnRules(
                                         type, level, spawnType, pos, random),
                 net.minecraftforge.event.entity.SpawnPlacementRegisterEvent.Operation.REPLACE);
@@ -172,6 +192,7 @@ public class NarutoEntities {
         event.put(SUMMON_BEAST.get(), SummonBeastEntity.createAttributes().build());
         event.put(MANGEKYO_BOSS.get(), MangekyoBossEntity.createAttributes().build());
         event.put(ROGUE_NINJA.get(), RogueNinjaEntity.createAttributes().build());
+        event.put(UCHIHA_ROGUE.get(), RogueNinjaEntity.createAttributes().build());
         event.put(WOOD_GOLEM.get(), WoodGolemEntity.createAttributes().build());
     }
 

@@ -56,23 +56,28 @@ public class BossSusanooLayer extends RenderLayer<MangekyoBossEntity, HumanoidMo
             return;
         }
         MangekyoBossVariant variant = boss.getVariant();
-        float bodyYaw = Mth.rotLerp(partialTick, boss.yBodyRotO, boss.yBodyRot);
 
         poseStack.pushPose();
-        // The parent renderer has already rotated into the boss's body space, so undo that
-        // and re-apply the same yaw convention SusanooRenderer uses for players.
-        poseStack.mulPose(Axis.YP.rotationDegrees(bodyYaw));
-
         if (SusanooRenderer.detailedReady()) {
-            renderDetailed(poseStack, bufferSource, packedLight, variant, stage, bodyYaw);
+            renderDetailed(poseStack, bufferSource, packedLight, variant, stage);
         } else {
-            renderFallback(poseStack, bufferSource, packedLight, variant, stage, bodyYaw);
+            renderFallback(poseStack, bufferSource, packedLight, variant, stage);
         }
         poseStack.popPose();
     }
 
+    /**
+     * A render layer inherits the pose LivingEntityRenderer already set up: rotated into the
+     * body's facing, flipped by scale(-1,-1,1), and translated down by 1.501. So none of that
+     * may be applied a second time.
+     *
+     * Doing it anyway is what buried the boss's Susanoo underground - the second flip turned
+     * these +Y-downward models upside down, so instead of rising from the boss's feet they
+     * grew into the floor. Here the model only needs a positive scale and a vertical offset
+     * measured in that inherited space.
+     */
     private void renderDetailed(PoseStack poseStack, MultiBufferSource bufferSource, int packedLight,
-                                MangekyoBossVariant variant, int stage, float bodyYaw) {
+                                MangekyoBossVariant variant, int stage) {
         int clamped = Mth.clamp(stage, 1, 3);
         Model body = SusanooRenderer.detailedBodyForStage(clamped);
         ResourceLocation texture = SusanooRenderer.detailedTextureForStage(clamped);
@@ -82,11 +87,11 @@ public class BossSusanooLayer extends RenderLayer<MangekyoBossEntity, HumanoidMo
         VertexConsumer consumer = bufferSource.getBuffer(RenderType.entityTranslucent(texture));
         float scale = SusanooRenderer.targetHeightForStage(clamped) / (modelHeightU / 16f);
 
-        // Same lift the player-side renderer needs: these bodies are authored with +Y
-        // running downward, so without it the Susanoo sinks through the floor.
-        poseStack.translate(0.0D, (modelBottomU / 16f) * scale, 0.0D);
-        poseStack.mulPose(Axis.YP.rotationDegrees(180.0F - bodyYaw));
-        poseStack.scale(-scale, -scale, scale);
+        // Origin sits 1.501 above the feet in this space; back it off by however far the
+        // model's lowest geometry hangs below its own origin, so the Susanoo stands on the
+        // ground at any scale.
+        poseStack.translate(0.0D, 1.501D - (modelBottomU / 16f) * scale, 0.0D);
+        poseStack.scale(scale, scale, scale);
 
         // Tint only part-way toward white, or the painted artwork flattens to one hue.
         body.renderToBuffer(poseStack, consumer, packedLight, OverlayTexture.NO_OVERLAY,
@@ -98,11 +103,12 @@ public class BossSusanooLayer extends RenderLayer<MangekyoBossEntity, HumanoidMo
 
     /** Only reached if the ported bodies failed to bake; keeps bosses from rendering nothing. */
     private void renderFallback(PoseStack poseStack, MultiBufferSource bufferSource, int packedLight,
-                                MangekyoBossVariant variant, int stage, float bodyYaw) {
+                                MangekyoBossVariant variant, int stage) {
         VertexConsumer consumer = bufferSource.getBuffer(FALLBACK_TYPE);
-        poseStack.mulPose(Axis.YP.rotationDegrees(180.0F - bodyYaw));
         float scale = FALLBACK_STAGE_SCALE[Mth.clamp(stage, 1, FALLBACK_STAGE_SCALE.length - 1)];
-        poseStack.scale(-scale, -scale, scale);
+        // The blocky fallback is authored centred on the body rather than standing on the
+        // ground, so it only needs the scale.
+        poseStack.scale(scale, scale, scale);
 
         this.fallbackModel.setStage(stage);
         this.fallbackModel.renderToBuffer(poseStack, consumer, packedLight, OverlayTexture.NO_OVERLAY,

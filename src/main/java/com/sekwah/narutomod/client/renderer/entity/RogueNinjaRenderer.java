@@ -32,8 +32,17 @@ public class RogueNinjaRenderer extends HumanoidMobRenderer<RogueNinjaEntity, Hu
         this.addLayer(new ItemInHandLayer<>(this, context.getItemInHandRenderer()));
     }
 
+    private static final ResourceLocation UCHIHA_TEXTURE =
+            new ResourceLocation(NarutoMod.MOD_ID, "textures/entity/rogue/uchiha_rogue.png");
+
     @Override
     public ResourceLocation getTextureLocation(RogueNinjaEntity entity) {
+        // The Uchiha rogue subclasses the ordinary one and so lands here too. Its red eyes
+        // are the whole tell that this is the kill worth making, so it gets its own skin
+        // rather than a village one.
+        if (entity instanceof com.sekwah.narutomod.entity.UchihaRogueEntity) {
+            return UCHIHA_TEXTURE;
+        }
         return TEXTURES[Math.floorMod(entity.getVariant(), TEXTURES.length)];
     }
 }

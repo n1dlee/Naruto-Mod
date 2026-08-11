@@ -45,8 +45,13 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
     private static final EntityDataAccessor<Byte> SUSANOO_STAGE =
             SynchedEntityData.defineId(MangekyoBossEntity.class, EntityDataSerializers.BYTE);
 
-    private static final float MAX_CHAKRA = 300f;
-    private static final float CHAKRA_REGEN = 0.6f; // per tick — a boss casts often
+    private static final float MAX_CHAKRA = 400f;
+    /**
+     * Per tick. Sized so a wielder can sustain a technique roughly every 2-3 seconds: the
+     * old 0.6 paid for a cast every seven seconds or so, which combined with the goal's
+     * melee-range blind spot meant a boss you had actually closed with never cast at all.
+     */
+    private static final float CHAKRA_REGEN = 1.2f;
     /** Shell absorbs more the further the fight has gone; index = susanoo stage 0-3. */
     private static final float[] SUSANOO_ABSORB = {0f, 0.25f, 0.45f, 0.65f};
 
@@ -97,6 +102,21 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
         this.getAttribute(Attributes.MOVEMENT_SPEED).setBaseValue(variant.movementSpeed());
         this.setHealth(variant.maxHealth());
         this.setCustomName(Component.translatable(variant.translationKey()));
+        this.equipSignatureWeapon(variant);
+    }
+
+    /**
+     * Puts the wielder's own weapon in their hand. Vanilla applies the item's attack-damage
+     * modifier to any mob holding it, so this is a real combat change as well as a visual
+     * one — Madara's fan and Zabuza's cleaver add on top of the variant's base damage.
+     *
+     * The drop chance is deliberately low but non-zero: killing Zabuza and walking away with
+     * Kubikiribocho is a memorable outcome, and it should stay rare enough to feel like one.
+     */
+    private void equipSignatureWeapon(MangekyoBossVariant variant) {
+        this.setItemSlot(net.minecraft.world.entity.EquipmentSlot.MAINHAND,
+                new net.minecraft.world.item.ItemStack(variant.weapon().get()));
+        this.setDropChance(net.minecraft.world.entity.EquipmentSlot.MAINHAND, 0.10f);
     }
 
     public int getSusanooStage() {

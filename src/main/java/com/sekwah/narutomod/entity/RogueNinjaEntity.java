@@ -48,6 +48,29 @@ public class RogueNinjaEntity extends Monster {
             SynchedEntityData.defineId(RogueNinjaEntity.class, EntityDataSerializers.BYTE);
     private static final EntityDataAccessor<Byte> ELEMENT =
             SynchedEntityData.defineId(RogueNinjaEntity.class, EntityDataSerializers.BYTE);
+    private static final EntityDataAccessor<Byte> RANK =
+            SynchedEntityData.defineId(RogueNinjaEntity.class, EntityDataSerializers.BYTE);
+    private static final EntityDataAccessor<Byte> CLAN =
+            SynchedEntityData.defineId(RogueNinjaEntity.class, EntityDataSerializers.BYTE);
+
+    /**
+     * Rank uses the same scale the player is measured on, so a Jonin missing-nin is a Jonin
+     * in exactly the sense the player understands. Only these two appear in the wild:
+     * Genin are not worth deserting over, and a Kage-level defector is a boss, not a mob.
+     */
+    public static final int RANK_CHUNIN = 2;
+    public static final int RANK_JONIN = 3;
+
+    /**
+     * Bloodlines that show up among missing-nin. NONE is the common case - most rogues are
+     * ordinary ninja - and each of the others brings the technique that clan is known for
+     * (see RogueNinjaClanGoal).
+     */
+    public static final String[] CLANS = {"none", "hyuga", "nara", "akimichi"};
+    public static final int CLAN_NONE = 0;
+    public static final int CLAN_HYUGA = 1;
+    public static final int CLAN_NARA = 2;
+    public static final int CLAN_AKIMICHI = 3;
 
     /** Skins carried over from the 1.12.2 mod's generic village ninja. */
     public static final String[] VARIANT_TEXTURES = {
@@ -79,6 +102,40 @@ public class RogueNinjaEntity extends Monster {
         super.defineSynchedData();
         this.entityData.define(VARIANT, (byte) 0);
         this.entityData.define(ELEMENT, (byte) 0);
+        this.entityData.define(RANK, (byte) RANK_CHUNIN);
+        this.entityData.define(CLAN, (byte) CLAN_NONE);
+    }
+
+    public int getNinjaRank() {
+        return Math.min(Math.max(this.entityData.get(RANK), RANK_CHUNIN), RANK_JONIN);
+    }
+
+    /**
+     * Sets the rank and scales the body to match. Attributes are written here rather than
+     * in createAttributes because a Jonin has to be measurably tougher than a Chunin, and
+     * the registry only gets one shared baseline.
+     */
+    public void setNinjaRank(int rank) {
+        int clamped = Math.min(Math.max(rank, RANK_CHUNIN), RANK_JONIN);
+        this.entityData.set(RANK, (byte) clamped);
+        boolean jonin = clamped >= RANK_JONIN;
+        this.getAttribute(Attributes.MAX_HEALTH).setBaseValue(jonin ? 60.0D : 34.0D);
+        this.getAttribute(Attributes.ATTACK_DAMAGE).setBaseValue(jonin ? 9.0D : 5.5D);
+        this.getAttribute(Attributes.MOVEMENT_SPEED).setBaseValue(jonin ? 0.34D : 0.3D);
+        this.setHealth(this.getMaxHealth());
+        this.xpReward = jonin ? 18 : 10;
+    }
+
+    public int getClanId() {
+        return Math.floorMod(this.entityData.get(CLAN), CLANS.length);
+    }
+
+    public String getClanName() {
+        return CLANS[this.getClanId()];
+    }
+
+    public void setClanId(int clan) {
+        this.entityData.set(CLAN, (byte) Math.floorMod(clan, CLANS.length));
     }
 
     public byte getVariant() {
@@ -150,6 +207,9 @@ public class RogueNinjaEntity extends Monster {
         // Above melee: at range they open with ninjutsu and only close in once it is on
         // cooldown, which is what makes them read as ninja rather than as armed zombies.
         this.goalSelector.addGoal(1, new com.sekwah.narutomod.entity.goal.RogueNinjaJutsuGoal(this));
+        // Above the elemental jutsu: a bloodline technique is what that clan reaches for
+        // first. Self-disables for clanless rogues, so it costs them nothing.
+        this.goalSelector.addGoal(1, new com.sekwah.narutomod.entity.goal.RogueNinjaClanGoal(this));
         this.goalSelector.addGoal(2, new MeleeAttackGoal(this, 1.15D, false));
         this.goalSelector.addGoal(6, new WaterAvoidingRandomStrollGoal(this, 0.8D));
         this.goalSelector.addGoal(7, new LookAtPlayerGoal(this, Player.class, 10.0F));
@@ -175,11 +235,45 @@ public class RogueNinjaEntity extends Monster {
         RandomSource random = level.getRandom();
         this.setVariant((byte) random.nextInt(VARIANT_TEXTURES.length));
         this.setElementId((byte) random.nextInt(ELEMENTS.length));
+        // Jonin are the minority: most people who desert are competent, not exceptional.
+        this.setNinjaRank(random.nextInt(4) == 0 ? RANK_JONIN : RANK_CHUNIN);
+        this.rollClan(random);
         // Armed like a real ninja — this is also what makes them worth farming.
         this.setItemSlot(net.minecraft.world.entity.EquipmentSlot.MAINHAND,
                 new ItemStack(random.nextInt(4) == 0 ? NarutoItems.KATANA.get() : NarutoItems.KUNAI.get()));
         this.setDropChance(net.minecraft.world.entity.EquipmentSlot.MAINHAND, 0.12f);
         return super.finalizeSpawn(level, difficulty, reason, data, tag);
+    }
+
+    /**
+     * Most rogues are clanless. A bloodline is meant to be a nasty surprise, so roughly one
+     * in four carries one - common enough to meet, rare enough to notice.
+     */
+    protected void rollClan(RandomSource random) {
+        if (random.nextInt(4) != 0) {
+            this.setClanId(CLAN_NONE);
+            return;
+        }
+        this.setClanId(1 + random.nextInt(CLANS.length - 1));
+        applyClanIdentity();
+    }
+
+    /**
+     * Names a clan rogue after their bloodline. There is no separate skin per clan - these
+     * are generic village ninja - so the nameplate is what tells the player which technique
+     * is about to be used on them, which they need before it lands rather than after.
+     */
+    protected void applyClanIdentity() {
+        int clan = this.getClanId();
+        if (clan == CLAN_NONE) {
+            return;
+        }
+        this.setCustomName(net.minecraft.network.chat.Component.translatable(
+                "entity.narutomod.rogue_ninja." + CLANS[clan]));
+        // Bloodline users are trained fighters: never below Jonin.
+        if (this.getNinjaRank() < RANK_JONIN) {
+            this.setNinjaRank(RANK_JONIN);
+        }
     }
 
     @Override
@@ -211,6 +305,8 @@ public class RogueNinjaEntity extends Monster {
         super.addAdditionalSaveData(tag);
         tag.putByte("Variant", this.getVariant());
         tag.putByte("Element", this.getElementId());
+        tag.putByte("NinjaRank", (byte) this.getNinjaRank());
+        tag.putByte("RogueClan", (byte) this.getClanId());
     }
 
     @Override
@@ -218,6 +314,10 @@ public class RogueNinjaEntity extends Monster {
         super.readAdditionalSaveData(tag);
         this.setVariant(tag.getByte("Variant"));
         this.setElementId(tag.getByte("Element"));
+        // Rogues saved before ranks existed have no key; Chunin is the right default for
+        // them, and setNinjaRank re-derives the attribute scaling either way.
+        this.setNinjaRank(tag.contains("NinjaRank") ? tag.getByte("NinjaRank") : RANK_CHUNIN);
+        this.setClanId(tag.getByte("RogueClan"));
     }
 
     @Override

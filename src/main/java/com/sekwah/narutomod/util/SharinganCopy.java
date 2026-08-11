@@ -73,19 +73,26 @@ public final class SharinganCopy {
             if (tomoe == 2 && ability.element() == null) {
                 return;
             }
-            // Don't overwrite a stored copy the player hasn't spent yet.
-            if (!ninjaData.getCopiedJutsu().isEmpty()) {
-                return;
-            }
             float chance = tomoe >= 3 ? CHANCE_THREE_TOMOE : CHANCE_TWO_TOMOE;
             if (watcher.getRandom().nextFloat() >= chance) {
                 return;
             }
+            // Nothing to gain from reading a technique already committed to memory.
+            if (ninjaData.isJutsuLearned(path)) {
+                return;
+            }
 
+            // Learned outright, not stored as a single throw. The old one-shot slot is what
+            // broke this: it refused to overwrite an unspent copy, and it was only cleared
+            // by casting that exact technique - so copying anything whose hand seals the
+            // player never used left the slot jammed and the eye stopped reading forever.
+            ninjaData.learnJutsu(path);
             ninjaData.setCopiedJutsu(path);
             watcher.displayClientMessage(Component.translatable("sharingan.copied",
                     Component.translatable(ability.getTranslationKey(ninjaData)).withStyle(ChatFormatting.YELLOW))
                     .withStyle(ChatFormatting.LIGHT_PURPLE), true);
+
+            grantStudyXp(watcher, ninjaData, ability);
 
             if (watcher.level() instanceof ServerLevel serverLevel) {
                 Vec3 eye = watcher.getEyePosition();
@@ -93,4 +100,38 @@ public final class SharinganCopy {
             }
         });
     }
+
+    /**
+     * Reading a technique teaches you about its nature, so a copy advances that element's
+     * mastery. Worth several casts' worth of practice - watching someone who has already
+     * mastered it is a shortcut, which is the whole reason the eye is feared.
+     *
+     * It will NOT hand you a nature you never awakened: the Sharingan copies the form of a
+     * technique, not the chakra to fuel it. Kakashi still needed his own lightning affinity.
+     */
+    private static void grantStudyXp(Player watcher, com.sekwah.narutomod.capabilities.INinjaData ninjaData,
+                                     Ability ability) {
+        String element = ability.element();
+        if (element == null) {
+            return;
+        }
+        if (!ninjaData.isElementUnlocked(element)) {
+            watcher.displayClientMessage(Component.translatable("sharingan.copied.nonature",
+                    Component.translatable("element.narutomod." + element).withStyle(ChatFormatting.YELLOW))
+                    .withStyle(ChatFormatting.GRAY), true);
+            return;
+        }
+        int before = ninjaData.getElementLevel(element);
+        ninjaData.addElementXp(element, ability.elementXpReward() * STUDY_XP_MULTIPLIER);
+        int after = ninjaData.getElementLevel(element);
+        if (after > before) {
+            watcher.displayClientMessage(Component.translatable("sharingan.copied.mastery",
+                    Component.translatable("element.narutomod." + element).withStyle(ChatFormatting.YELLOW),
+                    Component.literal(String.valueOf(after)).withStyle(ChatFormatting.YELLOW))
+                    .withStyle(ChatFormatting.GREEN), false);
+        }
+    }
+
+    /** A read is worth this many ordinary casts of study. */
+    private static final float STUDY_XP_MULTIPLIER = 5f;
 }

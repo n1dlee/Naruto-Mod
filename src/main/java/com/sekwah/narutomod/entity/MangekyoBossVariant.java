@@ -131,6 +131,31 @@ public enum MangekyoBossVariant {
         return this.susanooBlue;
     }
 
+    /**
+     * What this wielder walks around holding. Resolved lazily through a switch rather than
+     * stored on the enum constant: the item registry is populated long after this enum is
+     * class-loaded, so a RegistryObject captured in the constructor would be a null hazard.
+     *
+     * The held weapon is not cosmetic — a mob's melee damage picks up the item's attribute
+     * modifiers, so Zabuza swinging Kubikiribocho genuinely hits harder than Deidara does.
+     */
+    public net.minecraftforge.registries.RegistryObject<net.minecraft.world.item.Item> weapon() {
+        return switch (this) {
+            // Itachi, Shisui and Obito all fought with a plain kunai far more often than
+            // with anything exotic.
+            case ITACHI, SHISUI, OBITO -> com.sekwah.narutomod.item.NarutoItems.KUNAI;
+            case SASUKE -> com.sekwah.narutomod.item.NarutoItems.KUSANAGI;
+            case MADARA -> com.sekwah.narutomod.item.NarutoItems.GUNBAI;
+            case KISAME -> com.sekwah.narutomod.item.NarutoItems.SAMEHADA;
+            case ZABUZA -> com.sekwah.narutomod.item.NarutoItems.KUBIKIRIBOCHO;
+            // No scythe exists in this mod; Kabutowari is the only two-handed executioner's
+            // weapon on the roster and reads correctly at a distance.
+            case HIDAN -> com.sekwah.narutomod.item.NarutoItems.KABUTOWARI;
+            case DEIDARA -> com.sekwah.narutomod.item.NarutoItems.EXPLOSIVE_KUNAI;
+            case SASORI -> com.sekwah.narutomod.item.NarutoItems.SENBON;
+        };
+    }
+
     public ResourceLocation texture() {
         return new ResourceLocation(NarutoMod.MOD_ID, "textures/entity/boss/" + this.formId + ".png");
     }

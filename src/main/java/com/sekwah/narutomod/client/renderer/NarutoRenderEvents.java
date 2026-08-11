@@ -60,6 +60,8 @@ public class NarutoRenderEvents {
         event.registerEntityRenderer(NarutoEntities.SUMMON_BEAST.get(), SummonBeastRenderer::new);
         event.registerEntityRenderer(NarutoEntities.ROGUE_NINJA.get(),
                 com.sekwah.narutomod.client.renderer.entity.RogueNinjaRenderer::new);
+        event.registerEntityRenderer(NarutoEntities.UCHIHA_ROGUE.get(),
+                com.sekwah.narutomod.client.renderer.entity.RogueNinjaRenderer::new);
         event.registerEntityRenderer(NarutoEntities.MANGEKYO_BOSS.get(),
                 com.sekwah.narutomod.client.renderer.entity.MangekyoBossRenderer::new);
         event.registerEntityRenderer(NarutoEntities.WOOD_GOLEM.get(),
