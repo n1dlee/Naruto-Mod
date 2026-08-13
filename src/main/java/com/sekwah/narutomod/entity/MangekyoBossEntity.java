@@ -56,7 +56,7 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
      * Kotoamatsukami, Tsukuyomi — came out as freely as a fireball. Now the cheap techniques
      * are still effectively unlimited and the expensive ones genuinely cost a pause.
      */
-    private static final float CHAKRA_REGEN = 0.9f;
+    private static final float CHAKRA_REGEN = 0.55f;
     /** Shell absorbs more the further the fight has gone; index = susanoo stage 0-4. */
     private static final float[] SUSANOO_ABSORB = {0f, 0.25f, 0.45f, 0.65f, 0.85f};
 
@@ -443,6 +443,18 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
      * player's Complete Body uses, for the same reason: a giant that can only hit what a
      * man could reach does not read as a giant.
      */
+    /** A shadow clone or a puppet this wielder put on the field. */
+    public boolean isOwnSummon(net.minecraft.world.entity.LivingEntity candidate) {
+        java.util.UUID self = this.getUUID();
+        if (candidate instanceof ShadowCloneEntity clone) {
+            return clone.getOwnerUUID().map(self::equals).orElse(false);
+        }
+        if (candidate instanceof PuppetEntity puppet) {
+            return puppet.getOwnerUUID().map(self::equals).orElse(false);
+        }
+        return false;
+    }
+
     private void crushUnderfoot() {
         net.minecraft.world.phys.AABB footprint = new net.minecraft.world.phys.AABB(
                 this.getX() - CRUSH_RADIUS, this.getY() - 1, this.getZ() - CRUSH_RADIUS,
@@ -450,7 +462,9 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
         float damage = this.getVariant().attackDamage() * 1.6f;
         for (net.minecraft.world.entity.LivingEntity caught : this.level().getEntitiesOfClass(
                 net.minecraft.world.entity.LivingEntity.class, footprint,
-                entity -> entity != this && entity.isAlive())) {
+                // Not its own summons: a Naruto in the Kurama avatar was stamping on the very
+                // clones his escalation had just put on the field.
+                entity -> entity != this && entity.isAlive() && !this.isOwnSummon(entity))) {
             caught.hurt(this.damageSources().mobAttack(this), damage);
             net.minecraft.world.phys.Vec3 push = caught.position().subtract(this.position())
                     .normalize().scale(1.1).add(0, 0.45, 0);
@@ -680,6 +694,10 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
             clone.moveTo(this.getX() + Math.cos(angle) * 2.5, this.getY(),
                     this.getZ() + Math.sin(angle) * 2.5, this.getYRot(), 0);
             clone.setOwner(this);
+            // A boss is not a Player, so the renderer's getPlayerByUUID lookup can never find
+            // it and every one of these came out wearing Steve. Hand the clone the wielder's
+            // own skin instead.
+            clone.setBossVariant(this.getVariant());
             clone.makeHostileToPlayers(BOSS_CLONE_HEALTH,
                     this.getVariant().attackDamage() * BOSS_CLONE_DAMAGE_SHARE);
             serverLevel.addFreshEntity(clone);

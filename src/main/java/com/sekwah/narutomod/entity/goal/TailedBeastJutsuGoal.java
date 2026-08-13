@@ -65,6 +65,8 @@ public class TailedBeastJutsuGoal extends Goal {
 
     private boolean charging;
     private int chargeTicks;
+    /** Snapshot of the beast's hurt clock, so a hit landing mid-charge is detectable. */
+    private int hurtStampAtChargeStart;
 
     public TailedBeastJutsuGoal(TailedBeastEntity beast) {
         this.beast = beast;
@@ -88,10 +90,52 @@ public class TailedBeastJutsuGoal extends Goal {
         return distance < CLOSE_RANGE || this.beast.getSensing().hasLineOfSight(target);
     }
 
+    /**
+     * The wind-up is the counterplay, so it has to be possible to actually take it away.
+     *
+     * Only checking that the target is alive meant neither advertised window existed: you
+     * could break line of sight, run behind a hill, close to point blank or hit the beast in
+     * the mouth and the sphere still went off. Three things end a charge now - losing sight
+     * of the target, the target getting outside the beast's reach, and the beast being hurt
+     * while it gathers. The last one is what makes hitting it during the wind-up mean
+     * something rather than being a worse choice than backing off.
+     */
     @Override
     public boolean canContinueToUse() {
+        if (!this.charging) {
+            return false;
+        }
         LivingEntity target = this.beast.getTarget();
-        return this.charging && target != null && target.isAlive();
+        if (target == null || !target.isAlive()) {
+            return false;
+        }
+        if (this.beast.getHurtCount() != this.hurtStampAtChargeStart) {
+            interrupt("hit");
+            return false;
+        }
+        if (this.beast.distanceTo(target) > MAX_RANGE) {
+            interrupt("range");
+            return false;
+        }
+        if (!this.beast.getSensing().hasLineOfSight(target)) {
+            interrupt("sight");
+            return false;
+        }
+        return true;
+    }
+
+    /** Drops the gathered sphere. Short cooldown - the beast has spent nothing but time. */
+    private void interrupt(String reason) {
+        this.charging = false;
+        this.chargeTicks = 0;
+        this.cooldown = 40;
+        if (this.beast.level() instanceof ServerLevel serverLevel) {
+            Vec3 mouth = this.mouthPosition();
+            serverLevel.sendParticles(ParticleTypes.LARGE_SMOKE,
+                    mouth.x, mouth.y, mouth.z, 30, 0.6, 0.6, 0.6, 0.03);
+        }
+        this.beast.level().playSound(null, this.beast.blockPosition(),
+                SoundEvents.FIRE_EXTINGUISH, SoundSource.HOSTILE, 2.0f, 0.6f);
     }
 
     @Override
@@ -172,6 +216,7 @@ public class TailedBeastJutsuGoal extends Goal {
     private void beginBijudama() {
         this.charging = true;
         this.chargeTicks = 0;
+        this.hurtStampAtChargeStart = this.beast.getHurtCount();
         this.beast.playSound(this.beast.getVariant().getRoar(), 5.0f, 0.8f);
     }
 

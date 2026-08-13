@@ -1,5 +1,6 @@
 package com.sekwah.narutomod.network.c2s;
 
+import com.mojang.logging.LogUtils;
 import com.sekwah.narutomod.abilities.Ability;
 import com.sekwah.narutomod.capabilities.INinjaData;
 import com.sekwah.narutomod.capabilities.NinjaCapabilityHandler;
@@ -22,6 +23,8 @@ import java.util.function.Supplier;
  * Tell the server that the user wants to cast a specific ability.
  */
 public class ServerAbilityActivatePacket {
+
+    private static final org.slf4j.Logger LOGGER = LogUtils.getLogger();
 
     private final int abilityId;
     /**
@@ -87,6 +90,13 @@ public class ServerAbilityActivatePacket {
                     // directional technique can read it inside performServer.
                     ninjaData.setMoveInput(msg.strafeInput, msg.forwardInput);
                     Ability ability = NarutoRegistries.ABILITIES.getValue(msg.abilityId);
+                    // An id that is not in the registry comes back null, and every check below
+                    // dereferences it. A modified client only had to send one bad int.
+                    if (ability == null) {
+                        LOGGER.warn("Discarding activate packet from {} for unknown ability id {}",
+                                player.getGameProfile().getName(), msg.abilityId);
+                        return;
+                    }
                     // Phase 15: scroll-taught jutsu must be learned; elemental jutsu need their
                     // element unlocked + trained. Phase 16 adds the dojutsu gate.
                     if (!ability.checkLearnedRequirement(player, ninjaData)

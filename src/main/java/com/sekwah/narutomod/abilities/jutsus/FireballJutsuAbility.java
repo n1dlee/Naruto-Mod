@@ -51,7 +51,7 @@ public class FireballJutsuAbility extends Ability implements Ability.Channeled, 
 
     @Override
     public int getCooldown() {
-        return 3 * 20; // base cooldown; no extra for charge to keep it spammable
+        return 2 * 20; // short enough to stay the workhorse fire technique, long enough to cost something
     }
     // --- Phase 15: Nature Release ---
     @Override
@@ -72,7 +72,12 @@ public class FireballJutsuAbility extends Ability implements Ability.Channeled, 
 
     @Override
     public boolean handleCost(Player player, INinjaData ninjaData, int chargeAmount) {
-        if (chargeAmount == 0) {
+        /*
+         * chargeAmount <= 0, not == 0. The tap-to-cast path passes -1, which fell through to
+         * the per-tick branch below and charged a tapped fireball 1.5 chakra instead of 30 -
+         * so the cheapest way to use this technique was to never charge it at all.
+         */
+        if (chargeAmount <= 0) {
             // Initial activation — pay base cost
             if (ninjaData.getChakra() < BASE_CHAKRA) {
                 player.displayClientMessage(Component.translatable("jutsu.fail.notenoughchakra",

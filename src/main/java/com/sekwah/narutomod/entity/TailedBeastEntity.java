@@ -61,6 +61,8 @@ public class TailedBeastEntity extends PathfinderMob implements Enemy {
     private static final int ROAR_INTERVAL = 180;
 
     private int roarCooldown = 60;
+    /** Monotonic count of landed hits; never persisted, only compared within a fight. */
+    private int hurtCount;
 
     public TailedBeastEntity(EntityType<TailedBeastEntity> entityType, Level level) {
         super(entityType, level);
@@ -194,7 +196,23 @@ public class TailedBeastEntity extends PathfinderMob implements Enemy {
         if (source.getEntity() instanceof TailedBeastEntity) {
             return false;
         }
-        return super.hurt(source, amount);
+        boolean landed = super.hurt(source, amount);
+        if (landed) {
+            this.hurtCount++;
+        }
+        return landed;
+    }
+
+    /**
+     * How many blows have actually landed on this beast.
+     *
+     * The Bijudama goal snapshots this when it starts gathering and compares each tick, which
+     * is how hitting a beast mid-charge cancels the sphere. Vanilla's own hurt clocks are not
+     * enough: getLastHurtByMobTimestamp ignores players entirely, and hurtTime is a countdown
+     * that a second hit resets rather than advances.
+     */
+    public int getHurtCount() {
+        return this.hurtCount;
     }
 
     @Override

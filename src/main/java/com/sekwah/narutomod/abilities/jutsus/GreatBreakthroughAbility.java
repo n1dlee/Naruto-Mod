@@ -50,7 +50,7 @@ public class GreatBreakthroughAbility extends Ability implements Ability.Cooldow
 
     @Override
     public int getCooldown() {
-        return 7 * 20;
+        return 2 * 20;
     }
 
     @Override

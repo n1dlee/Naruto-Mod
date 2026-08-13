@@ -33,6 +33,17 @@ public class ShadowCloneEntity extends PathfinderMob {
     /** Synced to client so the renderer can look up the player skin. */
     private static final EntityDataAccessor<Optional<UUID>> OWNER_UUID =
             SynchedEntityData.defineId(ShadowCloneEntity.class, EntityDataSerializers.OPTIONAL_UUID);
+    /**
+     * Which Mangekyo wielder's skin to wear, or -1 for a player's clone.
+     *
+     * The renderer resolves a player owner by UUID and falls back to Steve when it cannot -
+     * which is every clone a boss makes, because a boss is not a player and never will be
+     * found by getPlayerByUUID. Naruto's clones were therefore always Steve. Carrying the
+     * variant on the clone is cheaper than searching the entity list every frame, and it is
+     * synced, which the renderer needs.
+     */
+    private static final EntityDataAccessor<Byte> BOSS_VARIANT =
+            SynchedEntityData.defineId(ShadowCloneEntity.class, EntityDataSerializers.BYTE);
 
     private int aliveTicks = 0;
     private boolean dispelled = false;
@@ -45,10 +56,20 @@ public class ShadowCloneEntity extends PathfinderMob {
     protected void defineSynchedData() {
         super.defineSynchedData();
         this.entityData.define(OWNER_UUID, Optional.empty());
+        this.entityData.define(BOSS_VARIANT, (byte) -1);
     }
 
     public Optional<UUID> getOwnerUUID() {
         return this.entityData.get(OWNER_UUID);
+    }
+
+    /** Ordinal of the wielder whose skin this clone wears, or -1 when a player made it. */
+    public byte getBossVariant() {
+        return this.entityData.get(BOSS_VARIANT);
+    }
+
+    public void setBossVariant(MangekyoBossVariant variant) {
+        this.entityData.set(BOSS_VARIANT, variant == null ? (byte) -1 : (byte) variant.ordinal());
     }
 
     @Override
@@ -157,6 +178,7 @@ public class ShadowCloneEntity extends PathfinderMob {
     public void addAdditionalSaveData(CompoundTag tag) {
         super.addAdditionalSaveData(tag);
         tag.putInt("AliveTicks", aliveTicks);
+        tag.putByte("BossVariant", this.getBossVariant());
         this.getOwnerUUID().ifPresent(uuid -> tag.putUUID("OwnerUUID", uuid));
     }
 
@@ -164,6 +186,7 @@ public class ShadowCloneEntity extends PathfinderMob {
     public void readAdditionalSaveData(CompoundTag tag) {
         super.readAdditionalSaveData(tag);
         aliveTicks = tag.getInt("AliveTicks");
+        this.entityData.set(BOSS_VARIANT, tag.contains("BossVariant") ? tag.getByte("BossVariant") : (byte) -1);
         if (tag.hasUUID("OwnerUUID")) {
             this.entityData.set(OWNER_UUID, Optional.of(tag.getUUID("OwnerUUID")));
         }

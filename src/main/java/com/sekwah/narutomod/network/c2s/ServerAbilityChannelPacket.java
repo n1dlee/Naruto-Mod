@@ -46,7 +46,17 @@ public class ServerAbilityChannelPacket {
     public static ServerAbilityChannelPacket decode(FriendlyByteBuf inBuffer) {
         ResourceLocation abilityResource = inBuffer.readResourceLocation();
         int status = inBuffer.readInt();
-        return new ServerAbilityChannelPacket(abilityResource, ChannelStatus.values()[status]);
+        // Never index the enum with a number off the wire. A modified client sending any
+        // other int threw ArrayIndexOutOfBounds inside the decoder, which takes down the
+        // whole connection rather than dropping one bad packet.
+        ChannelStatus[] values = ChannelStatus.values();
+        ChannelStatus resolved = status >= 0 && status < values.length ? values[status] : null;
+        if (resolved == null) {
+            LOGGER.warn("Discarding channel packet for {} with out-of-range status {}",
+                    abilityResource, status);
+            resolved = ChannelStatus.STOP;
+        }
+        return new ServerAbilityChannelPacket(abilityResource, resolved);
     }
 
     public static class Handler {
@@ -91,8 +101,15 @@ public class ServerAbilityChannelPacket {
                             }
                             ninjaData.setCurrentlyChanneledAbility(player, ability);
                         } else if (msg.status == ChannelStatus.STOP) {
+                            // A STOP with nothing being channelled is what a modified client
+                            // sends to walk straight into this branch; the field is null then,
+                            // and the equals below was dereferencing it.
+                            ResourceLocation channelled = ninjaData.getCurrentlyChanneledAbility();
+                            if (channelled == null) {
+                                return;
+                            }
                             NarutoRegistries.ABILITIES.getResourceKey(ability).ifPresent(resourceKey -> {
-                                if(ninjaData.getCurrentlyChanneledAbility().equals(resourceKey.location())) {
+                                if(channelled.equals(resourceKey.location())) {
                                     int channelledTicks = ninjaData.getCurrentlyChanneledTicks();
                                     ability.performServer(player, ninjaData, channelledTicks);
                                     ability.grantCastXp(ninjaData);
@@ -111,6 +128,19 @@ public class ServerAbilityChannelPacket {
                             });
                         } else if(msg.status == ChannelStatus.MIN_ACTIVATE) {
                             if (ability instanceof Ability.Channeled channeled && channeled.canActivateBelowMinCharge()) {
+                                /*
+                                 * The tap-to-cast path had no cooldown at either end: it never
+                                 * refused a cast that was still on cooldown, and it never put
+                                 * one on afterwards. Every channeled technique that allows a
+                                 * tap - the Great Fireball above all - was therefore free to
+                                 * spam at whatever the tap happened to cost, which for the
+                                 * fireball was a single charging tick.
+                                 */
+                                if (ability instanceof Ability.Cooldown cooldownAbility
+                                        && cooldownAbility.checkCooldown(player, ninjaData,
+                                                ability.getTranslationKey(ninjaData))) {
+                                    return;
+                                }
                                 if(ability.handleCost(player, ninjaData, -1)) {
                                     if (ability.castingSound() != null) {
                                         player.level().playSound(null, player, ability.castingSound(), SoundSource.PLAYERS, 0.5f, 1.0f);
@@ -120,6 +150,15 @@ public class ServerAbilityChannelPacket {
                                     player.displayClientMessage(Component.translatable("jutsu.cast", Component.translatable(ability.getTranslationKey(ninjaData)).withStyle(ChatFormatting.YELLOW)).withStyle(ChatFormatting.GREEN), true);
                                     ability.performServer(player, ninjaData, -1);
                                     ability.grantCastXp(ninjaData);
+                                    if (ability instanceof Ability.Cooldown cooldownAbility) {
+                                        cooldownAbility.registerCooldown(ninjaData,
+                                                ability.getTranslationKey(ninjaData));
+                                    }
+                                    // A tapped cast is still a cast, so a watching Sharingan
+                                    // gets to read it - the same as the charged path does.
+                                    NarutoRegistries.ABILITIES.getResourceKey(ability).ifPresent(key ->
+                                            com.sekwah.narutomod.util.SharinganCopy.onJutsuPerformed(
+                                                    player, ability, key.location().getPath()));
                                 }
                             } else {
                                 player.displayClientMessage(Component.translatable("jutsu.channel.needed", Component.translatable(ability.getTranslationKey(ninjaData)).withStyle(ChatFormatting.YELLOW)).withStyle(ChatFormatting.RED), true);

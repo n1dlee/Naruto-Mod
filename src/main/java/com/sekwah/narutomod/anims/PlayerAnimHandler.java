@@ -84,7 +84,7 @@ public class PlayerAnimHandler {
             float wallWeight = PoseBlender.weight(entity, Track.WALL_CLIMB, wallClimbing, RAMP_WALL_CLIMB, ageInTicks);
             float sprintWeight = PoseBlender.weight(entity, Track.SPRINT, sprinting, RAMP_SPRINT, ageInTicks);
             if (wallWeight > PoseBlender.EPSILON) {
-                applyWallClimbPose(playerModel, wallWeight, limbSwing, limbSwingAmount);
+                applyWallRunPose(playerModel, entity, wallWeight, ageInTicks);
             }
             if (sprintWeight > PoseBlender.EPSILON) {
                 applyNarutoSprintPose(playerModel, sprintWeight);
@@ -143,25 +143,40 @@ public class PlayerAnimHandler {
     }
 
     /**
-     * Pressed-against-the-wall climbing stance: arms splayed up/out as if gripping the
-     * surface, legs alternating like a climb-cycle driven by the same limbSwing used for
-     * normal walking (so it animates while moving along the wall and holds still when idle).
+     * Running up the wall, not clinging to it.
+     *
+     * The old pose was a climb: arms splayed overhead gripping the surface, legs barely
+     * moving. That reads as Spider-Man, which is the one thing this technique is not - a
+     * ninja goes up a wall at a run, upright, arms trailing behind.
+     *
+     * The model is deliberately NOT rotated ninety degrees. A full rotation is right for
+     * "gravity now points at the wall"; for a wall run it lays the player out horizontally
+     * and reads as clinging again. The body only leans a little toward the surface.
+     *
+     * The leg cycle is driven by deltaMovement rather than limbSwing on purpose: limbSwing
+     * tracks horizontal travel, so going straight up a wall - the most common thing anyone
+     * does with this - left the legs frozen mid-stride. deltaMovement includes the vertical
+     * component, so the run keeps its rhythm going up, down or sideways, and falls to zero
+     * when the player stops, which stops the legs on its own.
      */
-    private static void applyWallClimbPose(PlayerModel playerModel, float weight,
-                                           float limbSwing, float limbSwingAmount) {
-        float cycle = net.minecraft.util.Mth.sin(limbSwing * 0.6662F) * limbSwingAmount;
+    private static void applyWallRunPose(PlayerModel playerModel, Entity player,
+                                         float weight, float ageInTicks) {
+        float speed = (float) net.minecraft.util.Mth.clamp(
+                player.getDeltaMovement().length() * 7.0D, 0.0D, 1.0D);
+        float stride = net.minecraft.util.Mth.cos(ageInTicks * 1.45F) * 0.95F * speed;
 
-        PoseBlender.rotate(playerModel.rightArm, weight, -1.9F + cycle * 0.3F, -0.25F, 0F);
-        PoseBlender.position(playerModel.rightArm, weight, -5F, 2.5F, -1.5F);
+        // A lean toward the wall, not a lie-down on it.
+        PoseBlender.rotate(playerModel.body, weight, 0.24F, 0F, 0F);
+        PoseBlender.addRotation(playerModel.head, weight, -0.10F, 0F, 0F);
 
-        PoseBlender.rotate(playerModel.leftArm, weight, -1.9F - cycle * 0.3F, 0.25F, 0F);
-        PoseBlender.position(playerModel.leftArm, weight, 5F, 2.5F, -1.5F);
+        PoseBlender.rotate(playerModel.rightLeg, weight, stride, 0F, 0F);
+        PoseBlender.rotate(playerModel.leftLeg, weight, -stride, 0F, 0F);
 
-        PoseBlender.rotate(playerModel.rightLeg, weight, -0.6F - cycle * 0.4F, 0F, 0F);
-        PoseBlender.rotate(playerModel.leftLeg, weight, -0.6F + cycle * 0.4F, 0F, 0F);
-
-        PoseBlender.rotate(playerModel.body, weight, -0.35F, 0F, 0F);
-        PoseBlender.addRotation(playerModel.head, weight, -0.15F, 0F, 0F);
+        // Arms back, the way he runs on the ground - not reaching for the blocks.
+        PoseBlender.rotate(playerModel.rightArm, weight, 1.35F, -0.12F, 0F);
+        PoseBlender.rotate(playerModel.leftArm, weight, 1.35F, 0.12F, 0F);
+        PoseBlender.position(playerModel.rightArm, weight, -5.0F, 3.7F, -4.0F);
+        PoseBlender.position(playerModel.leftArm, weight, 5.0F, 3.4F, -4.0F);
     }
 
     private static void applyChanneledJutsuPose(PlayerModel playerModel, float weight) {

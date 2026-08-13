@@ -54,8 +54,13 @@ public class BossJutsuGoal extends Goal {
      * Enough to cover the most expensive fallback in any rotation. Every branch ends in an
      * unconditional cast, so the floor has to clear that cast's cost or a drained boss would
      * be throwing techniques for free.
+     *
+     * It did not: the floor was 40 while the costliest unconditional cast is 70, so a boss
+     * between those two numbers went right on casting with chakra it did not have. The floor
+     * is now the real maximum across every pay() call in this file. Raise it if a more
+     * expensive technique is ever added to the bottom of a menu.
      */
-    private static final float MIN_CHAKRA = 40f;
+    private static final float MIN_CHAKRA = 70f;
 
     private static final DustParticleOptions CROW_BLACK =
             new DustParticleOptions(new Vector3f(0.08F, 0.08F, 0.12F), 1.4F);
@@ -2055,18 +2060,47 @@ public class BossJutsuGoal extends Goal {
     // ------------------------------------------------------------------ helpers
 
     /** Spends chakra if the reserve covers it. */
+    /**
+     * Spends chakra, and says whether it could.
+     *
+     * Callers deliberately ignore the result: every rotation ends in an unconditional cast,
+     * because a menu whose last option can fail is a menu that sometimes does nothing at all.
+     * What makes that safe is {@link #MIN_CHAKRA} - the goal refuses to start unless the boss
+     * can afford the most expensive unconditional fallback in any rotation, so by the time a
+     * technique is chosen the payment cannot fail. If a cheaper floor is ever wanted, the
+     * fallbacks have to start checking the result first.
+     */
     private boolean pay(float cost) {
         return this.boss.useChakra(cost);
     }
 
-    /** Everything hittable in a radius, excluding the boss itself. */
+    /**
+     * Everything hittable in a radius: not the boss, and not anything the boss put there.
+     *
+     * Excluding only the boss itself meant every area technique swept up its own side -
+     * Naruto trampling the clones he had just summoned, Sasori catching his own collection in
+     * a poison cloud. A boss that has to fight around its own summons is not harder, it is
+     * broken.
+     */
     private java.util.List<LivingEntity> nearby(Vec3 center, double radius) {
         return this.boss.level().getEntitiesOfClass(LivingEntity.class,
                 new net.minecraft.world.phys.AABB(
                         center.x - radius, center.y - radius, center.z - radius,
                         center.x + radius, center.y + radius, center.z + radius),
-                entity -> entity != this.boss && entity.isAlive()
+                entity -> entity != this.boss && entity.isAlive() && !isOwnSide(entity)
                         && entity.distanceToSqr(center) <= radius * radius);
+    }
+
+    /** A summon this boss called out: its shadow clones and its puppets. */
+    private boolean isOwnSide(LivingEntity candidate) {
+        java.util.UUID self = this.boss.getUUID();
+        if (candidate instanceof com.sekwah.narutomod.entity.ShadowCloneEntity clone) {
+            return clone.getOwnerUUID().map(self::equals).orElse(false);
+        }
+        if (candidate instanceof com.sekwah.narutomod.entity.PuppetEntity puppet) {
+            return puppet.getOwnerUUID().map(self::equals).orElse(false);
+        }
+        return false;
     }
 
     /**

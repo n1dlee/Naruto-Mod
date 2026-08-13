@@ -37,6 +37,12 @@ public class ShadowCloneRenderer extends HumanoidMobRenderer<ShadowCloneEntity, 
 
     @Override
     public ResourceLocation getTextureLocation(ShadowCloneEntity entity) {
+        // A boss's clone carries its wielder's variant, because the player lookup below can
+        // never resolve a boss - it is not a Player - and every one of them came out as Steve.
+        byte bossVariant = entity.getBossVariant();
+        if (bossVariant >= 0) {
+            return com.sekwah.narutomod.entity.MangekyoBossVariant.byId(bossVariant).texture();
+        }
         Optional<UUID> ownerUUID = entity.getOwnerUUID();
         if (ownerUUID.isEmpty()) {
             return STEVE_SKIN;
