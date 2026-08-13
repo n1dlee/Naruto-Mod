@@ -50,7 +50,12 @@ public enum MangekyoBossVariant {
     /** Byakugan and the Gentle Fist. She does not break your armour, she goes through it. */
     HINATA("hinata", 240f, 9f, 0.33f, 0.80f, 0.85f, 0.95f, 4),
     /** Nara tactician. He will not out-hit you; he will make sure you cannot move. */
-    SHIKAMARU("shikamaru", 230f, 9f, 0.32f, 0.10f, 0.05f, 0.20f, 4);
+    SHIKAMARU("shikamaru", 230f, 9f, 0.32f, 0.10f, 0.05f, 0.20f, 4),
+    /**
+     * Shukaku's jinchuriki. The sand answers before he does - it blocks what he never saw
+     * coming - and when the fight turns, the One Tail comes out through it.
+     */
+    GAARA("gaara", 300f, 10f, 0.29f, 0.85f, 0.72f, 0.38f, 4);
 
     /** What killing this wielder leaves behind. */
     public enum BossDrop {
@@ -80,7 +85,7 @@ public enum MangekyoBossVariant {
             case NAGATO -> BossDrop.RINNEGAN;
             case HINATA -> BossDrop.BYAKUGAN;
             case KAKASHI -> BossDrop.SHARINGAN;
-            case HASHIRAMA, NARUTO, SHIKAMARU -> BossDrop.SCROLL;
+            case HASHIRAMA, NARUTO, SHIKAMARU, GAARA -> BossDrop.SCROLL;
         };
     }
 
@@ -146,6 +151,23 @@ public enum MangekyoBossVariant {
     }
 
     /**
+     * Gaara's escalation is Shukaku coming out through the sand - the same ladder again, with
+     * the One Tail's own cloak instead of the fox's, and the One Tail itself at the top.
+     */
+    public boolean hasSandCloak() {
+        return this == GAARA;
+    }
+
+    /**
+     * The sand moves on its own. This is the trait Gaara is defined by, so it is a mechanic
+     * rather than a buff: a share of everything aimed at him is stopped before it lands, and
+     * the share grows as the fight forces more sand out of the gourd.
+     */
+    public boolean hasAutomaticDefence() {
+        return this == GAARA;
+    }
+
+    /**
      * Every wielder escalates now. A boss that fights identically at full health and at five
      * percent has no second act, and the whole appeal of these fights is watching someone
      * reach for the next thing when the first one stops working.
@@ -165,7 +187,7 @@ public enum MangekyoBossVariant {
      * building.
      */
     public boolean hasGiantForm() {
-        return this.hasSusanoo() || this.hasKuramaCloak();
+        return this.hasSusanoo() || this.hasKuramaCloak() || this.hasSandCloak();
     }
 
     public float maxHealth() {
@@ -254,7 +276,8 @@ public enum MangekyoBossVariant {
             // Hashirama, Nagato and Hinata all fought empty-handed - the wood, the gravity
             // and the Gentle Fist are the weapon. Giving them a knife would be wrong twice
             // over: wrong for the character, and it would quietly add its damage on top.
-            case HASHIRAMA, NAGATO, HINATA -> null;
+            // The gourd is the weapon, and it is never in his hands.
+            case HASHIRAMA, NAGATO, HINATA, GAARA -> null;
         };
     }
 

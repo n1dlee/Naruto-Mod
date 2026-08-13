@@ -565,6 +565,19 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
             // the fight at all. Without this he was a man throwing senbon, which is the one
             // thing the character is not.
             case SASORI -> this.summonPuppet(PuppetVariant.forSasoriStage(stage));
+            // More sand leaves the gourd every time he is pushed, so the shield thickens
+            // (see blockedBySand) and the sand starts carrying him instead of the ground.
+            case GAARA -> {
+                this.addEffect(new net.minecraft.world.effect.MobEffectInstance(
+                        net.minecraft.world.effect.MobEffects.DAMAGE_BOOST, 99999, amplifier, false, false));
+                if (stage >= 2) {
+                    // Sand Levitation: he stops walking anywhere he does not want to.
+                    this.addEffect(new net.minecraft.world.effect.MobEffectInstance(
+                            net.minecraft.world.effect.MobEffects.SLOW_FALLING, 99999, 0, false, false));
+                    this.addEffect(new net.minecraft.world.effect.MobEffectInstance(
+                            net.minecraft.world.effect.MobEffects.JUMP, 99999, 2, false, false));
+                }
+            }
             default -> this.addEffect(new net.minecraft.world.effect.MobEffectInstance(
                     net.minecraft.world.effect.MobEffects.DAMAGE_BOOST, 99999, amplifier, false, false));
         }
@@ -576,13 +589,15 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
             return;
         }
         boolean kurama = variant.hasKuramaCloak();
+        boolean sand = variant.hasSandCloak();
         String key = kurama ? "mangekyo.boss.kuramaavatar"
+                : sand ? "mangekyo.boss.shukaku"
                 : variant.hasSusanoo() ? "mangekyo.boss.completebody"
                 : "mangekyo.boss.finalform";
         serverLevel.playSound(null, this.blockPosition(),
-                kurama ? net.minecraft.sounds.SoundEvents.ENDER_DRAGON_GROWL
+                kurama || sand ? net.minecraft.sounds.SoundEvents.ENDER_DRAGON_GROWL
                         : net.minecraft.sounds.SoundEvents.WITHER_SPAWN,
-                net.minecraft.sounds.SoundSource.HOSTILE, 3.0f, kurama ? 0.5f : 0.6f);
+                net.minecraft.sounds.SoundSource.HOSTILE, 3.0f, kurama ? 0.5f : sand ? 0.8f : 0.6f);
         Component message = Component.translatable(key,
                         Component.translatable(variant.translationKey())
                                 .withStyle(net.minecraft.ChatFormatting.RED))
@@ -736,8 +751,47 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
             // would make the last twelve percent of his health longer than the rest of him.
             amount *= (1f - SUSANOO_ABSORB[Math.min(stage, SUSANOO_ABSORB.length - 1)]);
         }
+        if (this.blockedBySand(source, stage)) {
+            return false;
+        }
         return super.hurt(source, amount);
     }
+
+    /** Odds the Shield of Sand catches a blow, by escalation stage. */
+    private static final float[] SAND_SHIELD_CHANCE = {0.30f, 0.38f, 0.46f, 0.54f, 0.62f};
+
+    /**
+     * The Shield of Sand: it moves without being told to, and it stops what he never saw.
+     *
+     * Written as a chance to negate a hit outright rather than as flat damage reduction,
+     * because that is what it does in the story and because it plays differently: a
+     * percentage shave is invisible, while a blow that simply does not land is something you
+     * see and learn to work around. Never blocks starvation, drowning or a creative player.
+     */
+    private boolean blockedBySand(DamageSource source, int stage) {
+        if (!this.getVariant().hasAutomaticDefence() || source.isCreativePlayer()) {
+            return false;
+        }
+        if (source.is(net.minecraft.tags.DamageTypeTags.BYPASSES_ARMOR)) {
+            return false;
+        }
+        float chance = SAND_SHIELD_CHANCE[Math.min(stage, SAND_SHIELD_CHANCE.length - 1)];
+        if (this.random.nextFloat() >= chance) {
+            return false;
+        }
+        if (this.level() instanceof ServerLevel serverLevel) {
+            com.sekwah.narutomod.util.NarutoParticles.spawnRing(serverLevel,
+                    this.position().add(0, this.getBbHeight() * 0.5, 0), 1.4, 20, SAND_TAN);
+            serverLevel.playSound(null, this.blockPosition(),
+                    net.minecraft.sounds.SoundEvents.SAND_BREAK,
+                    net.minecraft.sounds.SoundSource.HOSTILE, 1.0f, 0.7f);
+        }
+        return true;
+    }
+
+    private static final net.minecraft.core.particles.DustParticleOptions SAND_TAN =
+            new net.minecraft.core.particles.DustParticleOptions(
+                    new org.joml.Vector3f(0.85F, 0.75F, 0.45F), 1.2F);
 
     /**
      * Despawns like any other monster until a player actually engages it.

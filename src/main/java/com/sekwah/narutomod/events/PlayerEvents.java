@@ -1168,6 +1168,8 @@ public class PlayerEvents {
                 net.minecraft.world.item.Item scroll = switch (variant) {
                     case HASHIRAMA -> com.sekwah.narutomod.item.NarutoItems.SCROLL_KUCHIYOSE.get();
                     case NARUTO -> com.sekwah.narutomod.item.NarutoItems.SCROLL_RASENSHURIKEN.get();
+                    // The sand technique closest to what this mod already has him doing.
+                    case GAARA -> com.sekwah.narutomod.item.NarutoItems.SCROLL_EARTH_SPIKES.get();
                     default -> com.sekwah.narutomod.item.NarutoItems.SCROLL_SHADOW_CLONE.get();
                 };
                 boss.spawnAtLocation(new net.minecraft.world.item.ItemStack(scroll));

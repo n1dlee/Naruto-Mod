@@ -151,6 +151,7 @@ public class BossJutsuGoal extends Goal {
             case NARUTO -> castNaruto(target, distance);
             case HINATA -> castHinata(target, distance);
             case SHIKAMARU -> castShikamaru(target, distance);
+            case GAARA -> castGaara(target, distance);
         };
     }
 
@@ -669,7 +670,103 @@ public class BossJutsuGoal extends Goal {
         return 70;
     }
 
+    /**
+     * Gaara: the sand does the fighting. Bullets at range, the Binding Coffin when he can
+     * reach you, and a wave of it when he cannot be bothered to aim.
+     */
+    private int castGaara(LivingEntity target, double distance) {
+        int roll = this.boss.getRandom().nextInt(100);
+        if (distance > CLOSE_RANGE) {
+            if (roll < 55 && pay(35f)) {
+                castSandBullet(target);
+                return 45;
+            }
+            pay(50f);
+            castSandTsunami(target);
+            return 70;
+        }
+        if (roll < 45 && pay(55f)) {
+            castSandBindingCoffin(target);
+            return 90;
+        }
+        if (roll < 80 && pay(50f)) {
+            castSandTsunami(target);
+            return 70;
+        }
+        pay(35f);
+        castSandBullet(target);
+        return 45;
+    }
+
     // ------------------------------------------------------------------ techniques
+
+    private static final DustParticleOptions SAND_TAN =
+            new DustParticleOptions(new Vector3f(0.85F, 0.75F, 0.45F), 1.2F);
+
+    /** Sand Shuriken, in effect: compressed sand fired hard enough to cut. */
+    private void castSandBullet(LivingEntity target) {
+        Vec3 origin = this.boss.position().add(0, this.boss.getBbHeight() * 0.8, 0);
+        Vec3 impact = target.position().add(0, target.getBbHeight() * 0.5, 0);
+        for (LivingEntity victim : this.boss.level().getEntitiesOfClass(LivingEntity.class,
+                new net.minecraft.world.phys.AABB(impact, impact).inflate(2.2),
+                candidate -> candidate != this.boss && candidate.isAlive())) {
+            victim.hurt(this.boss.damageSources().mobAttack(this.boss), 9f);
+            victim.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 60, 0));
+        }
+        if (this.boss.level() instanceof ServerLevel serverLevel) {
+            NarutoParticles.spawnBolt(serverLevel, origin, impact, 2, 0.3, SAND_TAN);
+            NarutoParticles.spawnBurst(serverLevel, impact, 30, 1.4, SAND_TAN);
+        }
+        this.boss.level().playSound(null, this.boss.blockPosition(),
+                SoundEvents.SAND_BREAK, SoundSource.HOSTILE, 1.3f, 0.6f);
+    }
+
+    /**
+     * Sabaku Kyu into Sabaku Sōsō - the sand closes on one target and crushes.
+     *
+     * Single-target and slow to come round again, because it is the technique that ends
+     * fights: pinned in place, unable to move, taking damage the whole time.
+     */
+    private void castSandBindingCoffin(LivingEntity target) {
+        target.hurt(this.boss.damageSources().mobAttack(this.boss), 16f);
+        target.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 100, 4));
+        target.addEffect(new MobEffectInstance(MobEffects.WEAKNESS, 100, 1));
+        target.addEffect(new MobEffectInstance(MobEffects.DIG_SLOWDOWN, 100, 2));
+        // Held where it stands: the coffin is about not being able to move at all.
+        target.setDeltaMovement(0, target.getDeltaMovement().y * 0.1, 0);
+        target.hurtMarked = true;
+        if (this.boss.level() instanceof ServerLevel serverLevel) {
+            Vec3 centre = target.position();
+            for (double r = 0.6; r <= 1.8; r += 0.6) {
+                NarutoParticles.spawnRing(serverLevel, centre.add(0, r, 0), 1.6 - r * 0.4, 18, SAND_TAN);
+            }
+            NarutoParticles.spawnBurst(serverLevel, centre.add(0, 1.0, 0), 60, 1.6, SAND_TAN);
+        }
+        this.boss.level().playSound(null, this.boss.blockPosition(),
+                SoundEvents.SAND_PLACE, SoundSource.HOSTILE, 1.6f, 0.5f);
+    }
+
+    /** Sand Tsunami: a wave rolled out from the gourd, wide and unaimed. */
+    private void castSandTsunami(LivingEntity target) {
+        Vec3 origin = this.boss.position();
+        Vec3 direction = target.position().subtract(origin).normalize();
+        for (double step = 2.0; step <= 16.0; step += 2.0) {
+            Vec3 point = origin.add(direction.scale(step));
+            for (LivingEntity victim : this.boss.level().getEntitiesOfClass(LivingEntity.class,
+                    new net.minecraft.world.phys.AABB(point, point).inflate(3.0),
+                    candidate -> candidate != this.boss && candidate.isAlive())) {
+                if (victim.hurt(this.boss.damageSources().mobAttack(this.boss), 8f)) {
+                    victim.setDeltaMovement(direction.x * 1.1, 0.45, direction.z * 1.1);
+                    victim.hurtMarked = true;
+                }
+            }
+            if (this.boss.level() instanceof ServerLevel serverLevel) {
+                NarutoParticles.spawnRing(serverLevel, point, 2.8, 20, SAND_TAN);
+            }
+        }
+        this.boss.level().playSound(null, this.boss.blockPosition(),
+                SoundEvents.SAND_BREAK, SoundSource.HOSTILE, 2.0f, 0.4f);
+    }
 
     /** Itachi: Amaterasu — the flame entity spreads on its own from where it lands. */
     private void castBlackFlame(LivingEntity target) {

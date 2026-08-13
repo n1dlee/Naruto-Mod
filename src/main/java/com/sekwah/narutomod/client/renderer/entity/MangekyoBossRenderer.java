@@ -56,6 +56,7 @@ public class MangekyoBossRenderer extends HumanoidMobRenderer<MangekyoBossEntity
         });
         this.addLayer(new BossSusanooLayer(this, context));
         this.addLayer(new BossKuramaLayer(this));
+        this.addLayer(new BossSandLayer(this, context));
     }
 
     /**
