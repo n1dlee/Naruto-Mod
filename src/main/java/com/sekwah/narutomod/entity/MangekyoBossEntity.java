@@ -98,6 +98,27 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
     private static final float[] SENJU_HEAL_THRESHOLDS = {0.50f, 0.30f, 0.15f};
     private static final float SENJU_HEAL_FRACTION = 0.22f;
 
+    /**
+     * How many times this wielder has been knocked down and got back up.
+     *
+     * Separate from the stage byte because the two can disagree: the phase advances the
+     * moment a killing blow is absorbed, while the form waits for enough headroom to stand
+     * up in. Not synced - only the server decides when a phase ends, and the stage byte is
+     * what the client actually needs.
+     */
+    private int phase = 0;
+
+    /**
+     * Max health per phase, as a multiple of the variant's own figure.
+     *
+     * Each phase is a full bar rather than a slice of one. The old ladder derived the stage
+     * from the health fraction, which meant the last form was entered at twelve percent -
+     * so the most interesting thing a boss could do was the thing you got two swings of.
+     * Gaara reached Shukaku with twenty health left. Now knocking him down is what triggers
+     * the transformation, and the transformation comes with a bigger bar than the last one.
+     */
+    private static final float[] PHASE_MAX_HEALTH = {1.0f, 1.2f, 1.5f, 2.0f, 3.0f};
+
     private float chakra = MAX_CHAKRA;
     private int phaseTicks = 0;
     private int phaseCooldown = 0;
@@ -329,12 +350,10 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
      * all stay in step instead of being reimplemented per character.
      */
     private void tickTransformation() {
-        float healthFraction = this.getHealth() / this.getMaxHealth();
-        int stage = healthFraction > 0.75f ? 0
-                : healthFraction > 0.5f ? 1
-                : healthFraction > 0.28f ? 2
-                : healthFraction > 0.12f ? 3
-                : 4;
+        // The phase is what the fight has actually done to this wielder; the stage is the form
+        // being shown. They are the same number except when there is no headroom for the
+        // giant, where the phase runs ahead until the sky opens up.
+        int stage = this.phase;
         int current = this.getSusanooStage();
         // Only the transition INTO the giant is gated on space. Once it is standing, walking
         // under a ledge must not fold it back down - that would flicker the hitbox every
@@ -815,7 +834,63 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
         if (this.blockedBySand(source, stage)) {
             return false;
         }
+        /*
+         * A blow that would end the fight ends a phase instead, while there is a phase left.
+         *
+         * Checked before super.hurt rather than after: once health reaches zero LivingEntity
+         * has already run die(), and bringing something back from that is a mess of half-set
+         * state. Absorbing the hit here means the last swing of a phase deals no damage - it
+         * knocks the wielder down, and they get back up bigger, which is what it should look
+         * like anyway.
+         */
+        if (amount >= this.getHealth() && this.canAdvancePhase(source)) {
+            this.advancePhase();
+            return true;
+        }
         return super.hurt(source, amount);
+    }
+
+    /** Phases are for a real fight, not for falling in lava or being /killed. */
+    private boolean canAdvancePhase(DamageSource source) {
+        return this.phase < PHASE_MAX_HEALTH.length - 1
+                && this.getVariant().transforms()
+                && !source.is(net.minecraft.tags.DamageTypeTags.BYPASSES_INVULNERABILITY)
+                && !this.level().isClientSide;
+    }
+
+    /**
+     * Knocked down, back up, and harder than before.
+     *
+     * The health pool is rewritten rather than healed so each phase reads as its own bar: the
+     * player sees it empty, sees the transformation, and starts again on a longer one.
+     */
+    private void advancePhase() {
+        this.phase++;
+        this.applyPhaseHealth();
+
+        if (this.level() instanceof ServerLevel serverLevel) {
+            serverLevel.sendParticles(ParticleTypes.TOTEM_OF_UNDYING,
+                    this.getX(), this.getY() + this.getBbHeight() * 0.6, this.getZ(),
+                    80, 0.8, 1.2, 0.8, 0.35);
+            serverLevel.playSound(null, this.blockPosition(),
+                    net.minecraft.sounds.SoundEvents.TOTEM_USE,
+                    net.minecraft.sounds.SoundSource.HOSTILE, 2.0f, 0.6f);
+        }
+        // Brief mercy window so the phase change is readable instead of being eaten by the
+        // same combo that ended the last one.
+        this.invulnerableTime = 20;
+    }
+
+    /** Sets the pool for the current phase and fills it. */
+    private void applyPhaseHealth() {
+        int index = Math.min(Math.max(this.phase, 0), PHASE_MAX_HEALTH.length - 1);
+        float pool = this.getVariant().maxHealth() * PHASE_MAX_HEALTH[index];
+        net.minecraft.world.entity.ai.attributes.AttributeInstance maxHealth =
+                this.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.MAX_HEALTH);
+        if (maxHealth != null) {
+            maxHealth.setBaseValue(pool);
+        }
+        this.setHealth(this.getMaxHealth());
     }
 
     /** Odds the Shield of Sand catches a blow, by escalation stage. */
@@ -872,6 +947,7 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
         super.addAdditionalSaveData(tag);
         tag.putByte("Variant", this.getVariantId());
         tag.putByte("SusanooStage", (byte) this.getSusanooStage());
+        tag.putInt("Phase", this.phase);
         tag.putFloat("BossChakra", this.chakra);
         tag.putInt("SenjuHealsUsed", this.senjuHealsUsed);
         tag.putBoolean("KamuiUnlocked", this.kamuiUnlocked);
@@ -883,6 +959,9 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
         super.readAdditionalSaveData(tag);
         this.entityData.set(VARIANT, tag.getByte("Variant"));
         this.setSusanooStage(tag.getByte("SusanooStage"));
+        // Falls back to the stage for bosses saved before phases existed, so a fight already
+        // in progress in an old world does not restart from a full first bar.
+        this.phase = tag.contains("Phase") ? tag.getInt("Phase") : tag.getByte("SusanooStage");
         this.chakra = tag.contains("BossChakra") ? tag.getFloat("BossChakra") : MAX_CHAKRA;
         // Persisted so relogging mid-fight cannot hand Hashirama his heals back.
         this.senjuHealsUsed = tag.getInt("SenjuHealsUsed");
