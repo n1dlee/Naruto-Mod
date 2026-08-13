@@ -60,18 +60,51 @@ public class ByakuganEntityVisionGUI implements PlayerGUI {
 
             int x = Math.round(halfWidth + vec.x() * halfWidth);
             int y = Math.round(halfHeight - vec.y() * halfHeight);
-            int size = Math.max(5, (int) (18.0D / Math.max(1.0D, distance / 20.0D)));
-            int alpha = Math.max(90, 190 - (int) Math.min(100, distance / Math.max(1, this.range) * 100));
+            int size = Math.max(4, (int) (14.0D / Math.max(1.0D, distance / 20.0D)));
+            int alpha = Math.max(60, 150 - (int) Math.min(110, distance / Math.max(1, this.range) * 110));
             int color = (alpha << 24) | 0xBFEFFF;
-            guiGraphics.fill(x - size, y - 1, x + size, y + 1, color);
-            guiGraphics.fill(x - 1, y - size, x + 1, y + size, color);
-            guiGraphics.fill(x - size, y - size, x + size, y - size + 1, color);
-            guiGraphics.fill(x - size, y + size - 1, x + size, y + size, color);
-            guiGraphics.fill(x - size, y - size, x - size + 1, y + size, color);
-            guiGraphics.fill(x + size - 1, y - size, x + size, y + size, color);
+
+            /*
+             * Four corner ticks, and nothing in the middle.
+             *
+             * This used to draw a full box with a crosshair through it, which at any real
+             * range turned into a screen of plus signs stacked on top of each other - the
+             * marker was louder than the thing it was marking. Corners read as "something is
+             * there" without covering it up, and they stay legible when a dozen overlap.
+             */
+            int arm = Math.max(2, size / 2);
+            // top-left
+            guiGraphics.fill(x - size, y - size, x - size + arm, y - size + 1, color);
+            guiGraphics.fill(x - size, y - size, x - size + 1, y - size + arm, color);
+            // top-right
+            guiGraphics.fill(x + size - arm, y - size, x + size, y - size + 1, color);
+            guiGraphics.fill(x + size - 1, y - size, x + size, y - size + arm, color);
+            // bottom-left
+            guiGraphics.fill(x - size, y + size - 1, x - size + arm, y + size, color);
+            guiGraphics.fill(x - size, y + size - arm, x - size + 1, y + size, color);
+            // bottom-right
+            guiGraphics.fill(x + size - arm, y + size - 1, x + size, y + size, color);
+            guiGraphics.fill(x + size - 1, y + size - arm, x + size, y + size, color);
         }
         RenderSystem.enableDepthTest();
         RenderSystem.disableBlend();
+    }
+
+    /**
+     * Whether a chakra sense should bother reporting this.
+     *
+     * It used to report every living thing in range, which at forty-eight blocks means every
+     * cow, sheep, chicken, fish and squid in a small village - the screen in the report was
+     * mostly markers on water. A chakra sense is for finding people and things that can hurt
+     * you, so passive vanilla animals are dropped and everything else stays.
+     */
+    private static boolean worthMarking(LivingEntity entity) {
+        if (entity instanceof Player) {
+            return true;
+        }
+        return !(entity instanceof net.minecraft.world.entity.animal.Animal)
+                && !(entity instanceof net.minecraft.world.entity.animal.WaterAnimal)
+                && !(entity instanceof net.minecraft.world.entity.ambient.AmbientCreature);
     }
 
     @Override
@@ -102,6 +135,7 @@ public class ByakuganEntityVisionGUI implements PlayerGUI {
                                 && entity.isAlive()
                                 && !entity.isSpectator()
                                 && !entity.isInvisible()
+                                && worthMarking(entity)
                                 && entity.distanceToSqr(player) <= (double) this.range * this.range)
                 .stream()
                 .sorted(Comparator.comparingDouble(entity -> entity.position().distanceToSqr(playerPos)))
