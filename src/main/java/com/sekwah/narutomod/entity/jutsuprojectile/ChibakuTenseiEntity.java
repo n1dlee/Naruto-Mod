@@ -43,9 +43,23 @@ public class ChibakuTenseiEntity extends Entity {
     private static final EntityDataAccessor<Float> SIZE =
             SynchedEntityData.defineId(ChibakuTenseiEntity.class, EntityDataSerializers.FLOAT);
 
-    private static final int RISE_TICKS = 25;
+    /** Roughly forty-five blocks up, so it clears the treeline and reads from the ground. */
+    private static final int RISE_TICKS = 90;
     private static final int HOLD_TICKS = 8 * 20;
-    private static final double RISE_SPEED = 0.35;
+    private static final double RISE_SPEED = 0.5;
+
+    // --- Building the moon -------------------------------------------------------------
+    /** How wide a circle it tears out of the ground beneath itself. */
+    private static final double EXCAVATE_RADIUS = 12.0;
+    /** Ticks between excavation passes, and how many blocks each pass lifts. */
+    private static final int GATHER_INTERVAL = 3;
+    private static final int GATHER_PER_PASS = 6;
+    /** Hard ceiling on how much earth one core can ever move. */
+    private static final int MAX_GATHERED = 420;
+
+    /** Where every lifted block was put, so the sphere can be taken apart when it falls. */
+    private final java.util.List<net.minecraft.core.BlockPos> gathered = new java.util.ArrayList<>();
+    private int gatherRing = 1;
     /**
      * How far the core reaches, in blocks. This is a regional technique, not a room-sized
      * one - at this range the whole area is being dragged toward one point, which is the
@@ -117,12 +131,120 @@ public class ChibakuTenseiEntity extends Entity {
             if (this.age % PULL_INTERVAL == 0) {
                 this.tickPull();
             }
+            // Only once it has stopped climbing: the sphere is built around a fixed point,
+            // because blocks placed while the core was still moving would be left behind it.
+            if (this.age % GATHER_INTERVAL == 0 && this.age < RISE_TICKS + HOLD_TICKS) {
+                this.gatherEarth();
+            }
         }
         // Once it has gathered for long enough it stops holding itself up and drops. The
         // landing is the technique's actual finish - a core this size does not fade out.
         if (this.age >= RISE_TICKS + HOLD_TICKS) {
             this.tickFall();
         }
+    }
+
+    /**
+     * Tears earth out of the ground in a widening circle and packs it around the core.
+     *
+     * This is the part of the technique the name is actually about, so unlike everything else
+     * in this mod it does move terrain. It is bounded on purpose: a twelve-block circle, a
+     * hard ceiling on how much it can ever lift, and it refuses anything with a block entity
+     * behind it - chests, furnaces, spawners - so a core going off next to a base takes the
+     * garden and not the storage room. Bedrock and fluids are left alone too.
+     *
+     * Everything it lifts is remembered, because the sphere has to come apart again when the
+     * core falls; otherwise the moon would simply hang there once the fight was over.
+     */
+    private void gatherEarth() {
+        if (this.gathered.size() >= MAX_GATHERED || !(this.level() instanceof ServerLevel serverLevel)) {
+            return;
+        }
+        int lifted = 0;
+        int attempts = 0;
+        while (lifted < GATHER_PER_PASS && attempts < GATHER_PER_PASS * 8) {
+            attempts++;
+            // Sample a random point on the current ring, so the crater widens evenly rather
+            // than eating one wedge at a time.
+            double angle = this.random.nextDouble() * Math.PI * 2;
+            double radius = Math.min(EXCAVATE_RADIUS, this.gatherRing) * Math.sqrt(this.random.nextDouble());
+            int x = net.minecraft.util.Mth.floor(this.getX() + Math.cos(angle) * radius);
+            int z = net.minecraft.util.Mth.floor(this.getZ() + Math.sin(angle) * radius);
+            int y = serverLevel.getHeight(
+                    net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z) - 1;
+            net.minecraft.core.BlockPos from = new net.minecraft.core.BlockPos(x, y, z);
+
+            net.minecraft.world.level.block.state.BlockState state = serverLevel.getBlockState(from);
+            if (!this.canLift(serverLevel, from, state)) {
+                continue;
+            }
+            net.minecraft.core.BlockPos to = this.nextShellPosition();
+            if (!serverLevel.getBlockState(to).isAir()) {
+                continue;
+            }
+
+            serverLevel.removeBlock(from, false);
+            serverLevel.setBlock(to, state, net.minecraft.world.level.block.Block.UPDATE_CLIENTS);
+            this.gathered.add(to);
+            lifted++;
+
+            NarutoParticles.spawnBolt(serverLevel,
+                    Vec3.atCenterOf(from), Vec3.atCenterOf(to), 1, 0.4, NarutoParticles.SHADOW_PURPLE);
+        }
+        if (lifted > 0) {
+            this.gatherRing = Math.min((int) EXCAVATE_RADIUS, this.gatherRing + 1);
+            serverLevel.playSound(null, this.blockPosition(),
+                    net.minecraft.sounds.SoundEvents.STONE_BREAK, SoundSource.HOSTILE, 2.5f, 0.4f);
+        }
+    }
+
+    /** Anything that is not someone's belongings, the world floor, or liquid. */
+    private boolean canLift(ServerLevel level, net.minecraft.core.BlockPos pos,
+                            net.minecraft.world.level.block.state.BlockState state) {
+        if (state.isAir() || !state.getFluidState().isEmpty()) {
+            return false;
+        }
+        if (state.hasBlockEntity()) {
+            return false;
+        }
+        // Unbreakable by design, and anything the world says cannot be destroyed at all.
+        return state.getDestroySpeed(level, pos) >= 0.0f;
+    }
+
+    /**
+     * The next free spot on the shell around the core, walked outward in layers so the mass
+     * builds as a ball rather than a spike.
+     */
+    private net.minecraft.core.BlockPos nextShellPosition() {
+        int index = this.gathered.size();
+        // Fibonacci sphere: successive indices land far apart on the surface, which fills the
+        // shell evenly without needing to track which spots are already taken.
+        double golden = Math.PI * (3.0 - Math.sqrt(5.0));
+        int perShell = 60;
+        int shell = index / perShell;
+        int within = index % perShell;
+        double y = 1.0 - (within / (double) (perShell - 1)) * 2.0;
+        double ringRadius = Math.sqrt(Math.max(0.0, 1.0 - y * y));
+        double theta = golden * within;
+        double r = 2.0 + shell * 1.6;
+
+        return net.minecraft.core.BlockPos.containing(
+                this.getX() + Math.cos(theta) * ringRadius * r,
+                this.getY() + y * r,
+                this.getZ() + Math.sin(theta) * ringRadius * r);
+    }
+
+    /** Lets the gathered mass go, so nothing is left floating once the core is gone. */
+    private void releaseEarth() {
+        if (!(this.level() instanceof ServerLevel serverLevel)) {
+            return;
+        }
+        for (net.minecraft.core.BlockPos pos : this.gathered) {
+            if (!serverLevel.getBlockState(pos).isAir()) {
+                serverLevel.removeBlock(pos, false);
+            }
+        }
+        this.gathered.clear();
     }
 
     /**
@@ -133,6 +255,11 @@ public class ChibakuTenseiEntity extends Entity {
      * mid-flight would have it fight its own collision box on the way down.
      */
     private void tickFall() {
+        // The mass it gathered lets go the moment it starts down, so the moon does not stay
+        // hanging in the sky after the core has landed.
+        if (!this.gathered.isEmpty()) {
+            this.releaseEarth();
+        }
         this.fallSpeed = Math.min(MAX_FALL_SPEED, this.fallSpeed + FALL_ACCELERATION);
         double next = this.getY() - this.fallSpeed;
         net.minecraft.core.BlockPos below = net.minecraft.core.BlockPos.containing(
@@ -188,6 +315,9 @@ public class ChibakuTenseiEntity extends Entity {
      * follows, because these get cast next to whatever someone has built.
      */
     private void impact() {
+        // Belt and braces: if the core is destroyed some other way than falling, whatever it
+        // was still holding up must not be left in the air.
+        this.releaseEarth();
         if (this.level() instanceof ServerLevel serverLevel) {
             Vec3 core = this.position();
 
