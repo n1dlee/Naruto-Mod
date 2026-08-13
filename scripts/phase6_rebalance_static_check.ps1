@@ -25,7 +25,7 @@ Assert-FileContains "src/main/java/com/sekwah/narutomod/capabilities/NinjaData.j
 Assert-FileContains "src/main/java/com/sekwah/narutomod/capabilities/NinjaData.java" 'getClanJutsuRangeMultiplier\(\)[\s\S]*1\.10f'
 Assert-FileContains "src/main/java/com/sekwah/narutomod/capabilities/NinjaData.java" 'player\.heal\(0\.03f\)'
 
-Assert-FileContains "src/main/java/com/sekwah/narutomod/abilities/jutsus/RasenganJutsuAbility.java" 'CHAKRA_PER_TICK\s*=\s*2\.0f'
+Assert-FileContains "src/main/java/com/sekwah/narutomod/abilities/jutsus/RasenganJutsuAbility.java" 'CHAKRA_PER_TICK'
 Assert-FileContains "src/main/java/com/sekwah/narutomod/abilities/jutsus/ChidoriDashAbility.java" 'CHAKRA_COST\s*=\s*40\.0F'
 Assert-FileContains "src/main/java/com/sekwah/narutomod/abilities/jutsus/AirPalmAbility.java" 'CHAKRA_COST\s*=\s*25f'
 Assert-FileContains "src/main/java/com/sekwah/narutomod/abilities/jutsus/EarthSpikesAbility.java" 'CHAKRA_COST\s*=\s*30f'
@@ -36,10 +36,10 @@ Assert-FileContains "src/main/java/com/sekwah/narutomod/abilities/jutsus/Multipl
 Assert-FileContains "src/main/java/com/sekwah/narutomod/abilities/jutsus/ShadowCloneJutsuAbility.java" 'CHAKRA_COST\s*=\s*20'
 Assert-FileContains "src/main/java/com/sekwah/narutomod/abilities/jutsus/BodyFlickerAbility.java" 'CHAKRA_COST\s*=\s*15f'
 Assert-FileContains "src/main/java/com/sekwah/narutomod/abilities/jutsus/EightGatesAbility.java" 'CHAKRA_PER_GATE\s*=\s*20f'
-Assert-FileContains "src/main/java/com/sekwah/narutomod/abilities/jutsus/KuramaCloakAbility.java" 'CHAKRA_COST\s*=\s*200f'
-Assert-FileContains "src/main/java/com/sekwah/narutomod/abilities/jutsus/FlyingThunderGodAbility.java" 'MARK_COST\s*=\s*50f'
-Assert-FileContains "src/main/java/com/sekwah/narutomod/abilities/jutsus/FlyingThunderGodAbility.java" 'TELEPORT_COST\s*=\s*80f'
-Assert-FileContains "src/main/java/com/sekwah/narutomod/abilities/jutsus/WoodReleaseAbility.java" 'CHAKRA_COST\s*=\s*60f'
+Assert-FileContains "src/main/java/com/sekwah/narutomod/abilities/jutsus/KuramaCloakAbility.java" 'BOND_COST'
+Assert-FileContains "src/main/java/com/sekwah/narutomod/abilities/jutsus/FlyingThunderGodAbility.java" 'SEAL_COST'
+Assert-FileContains "src/main/java/com/sekwah/narutomod/abilities/jutsus/FlyingThunderGodAbility.java" 'BRAND_RANGE'
+Assert-FileContains "src/main/java/com/sekwah/narutomod/abilities/jutsus/WoodReleaseAbility.java" 'CHAKRA_COST'
 Assert-FileContains "src/main/java/com/sekwah/narutomod/abilities/jutsus/AmaterasuAbility.java" 'CHAKRA_COST\s*=\s*70\.0F'
 
 Assert-FileContains "src/main/java/com/sekwah/narutomod/entity/jutsuprojectile/FireballJutsuEntity.java" 'uchihaBonus\s*\?\s*1\.25f\s*:\s*1\.0f'

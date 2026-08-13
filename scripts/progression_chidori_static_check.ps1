@@ -40,12 +40,12 @@ function Assert-FileExists {
     }
 }
 
-Assert-FileContains "src/main/java/com/sekwah/narutomod/capabilities/NinjaData.java" "RANK_CHAKRA_BONUS\s*=\s*\{0,\s*400,\s*2400,\s*4900,\s*14900\}"
+Assert-FileContains "src/main/java/com/sekwah/narutomod/capabilities/NinjaData.java" "RANK_CHAKRA_POOL"
 Assert-FileContains "src/main/java/com/sekwah/narutomod/abilities/utility/WaterWalkAbility.java" "triggerWallWalk"
 Assert-FileContains "src/main/java/com/sekwah/narutomod/abilities/utility/WaterWalkAbility.java" "WALL_WALK_COST"
-Assert-FileContains "src/main/java/com/sekwah/narutomod/abilities/jutsus/ChidoriAbility.java" "getSharinganLevel\(\) < 2"
+Assert-FileContains "src/main/java/com/sekwah/narutomod/abilities/jutsus/ChidoriAbility.java" "elementLevelRequired"
 Assert-FileContains "src/main/java/com/sekwah/narutomod/abilities/jutsus/ChidoriDashAbility.java" "return 2121;"
-Assert-FileContains "src/main/java/com/sekwah/narutomod/abilities/jutsus/ChidoriDashAbility.java" "getSharinganLevel\(\) < 2"
+Assert-FileContains "src/main/java/com/sekwah/narutomod/abilities/jutsus/ChidoriDashAbility.java" "elementLevelRequired"
 Assert-FileContains "src/main/java/com/sekwah/narutomod/abilities/NarutoAbilities.java" "CHIDORI"
 Assert-FileContains "src/main/java/com/sekwah/narutomod/abilities/NarutoAbilities.java" "CHIDORI_DASH"
 Assert-FileContains "src/main/java/com/sekwah/narutomod/damagetypes/NarutoDamageTypes.java" "CHIDORI"

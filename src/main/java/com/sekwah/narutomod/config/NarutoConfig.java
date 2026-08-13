@@ -100,8 +100,11 @@ public class NarutoConfig {
         CONFIG_MAX_SUBSTITUTIONS = configBuilder.comment("Max Substitutions")
                 .defineInRange("maxSubstitutions",  3 ,  0, Integer.MAX_VALUE);
 
+        // Floor of one second, not zero. The rate below is 1/(time*20), and at zero that is a
+        // float divide by zero - which in Java is Infinity rather than an exception, so
+        // nothing crashed and substitutions simply came back instantly and forever.
         CONFIG_SUBSTITUTION_REGEN_TIME = configBuilder.comment("Substitution Regen Time (Seconds)")
-                        .defineInRange("substitutionRegenTime",  60 ,  0, Integer.MAX_VALUE);
+                        .defineInRange("substitutionRegenTime",  60 ,  1, Integer.MAX_VALUE);
 
         configBuilder.pop();
 
@@ -163,7 +166,10 @@ public class NarutoConfig {
         staminaRegen = CONFIG_STAMINA_REGEN.get().floatValue();
         chakraRegen = CONFIG_CHAKRA_REGEN.get().floatValue();
         maxSubstitutions = CONFIG_MAX_SUBSTITUTIONS.get();
-        substitutionRegenRate = 1f / (CONFIG_SUBSTITUTION_REGEN_TIME.get() * 20f);
+        // Clamped here as well as in the range above: an existing config file written before
+        // that floor existed still holds a zero, and Forge only corrects values it rejects on
+        // load - a belt-and-braces guard is cheaper than an Infinity leaking into the tick.
+        substitutionRegenRate = 1f / (Math.max(1, CONFIG_SUBSTITUTION_REGEN_TIME.get()) * 20f);
         kunaiBlockDamage = CONFIG_KUNAI_BLOCK_DAMAGE.get();
         kunaiBlockDamage = CONFIG_KUNAI_BLOCK_DAMAGE.get();
         kunaiExplosionRadius = CONFIG_KUNAI_EXPLOSION_RADIUS.get().floatValue();

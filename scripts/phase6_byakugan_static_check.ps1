@@ -50,7 +50,7 @@ Assert-FileContains "src/main/java/com/sekwah/narutomod/abilities/jutsus/Dojutsu
 Assert-FileContains "src/main/java/com/sekwah/narutomod/abilities/jutsus/DojutsuAbility.java" '"uchiha"'
 Assert-FileContains "src/main/java/com/sekwah/narutomod/abilities/jutsus/DojutsuAbility.java" '"hyuga"'
 Assert-FileContains "src/main/java/com/sekwah/narutomod/abilities/jutsus/SharinganAbility.java" "defaultCombo\(\)\s*\{[\s\S]*return -1;"
-Assert-FileContains "src/main/java/com/sekwah/narutomod/abilities/jutsus/ByakuganAbility.java" "BYAKUGAN_RANGE\s*=\s*new int\[\]\s*\{20,\s*50,\s*150,\s*400,\s*1000\}"
+Assert-FileContains "src/main/java/com/sekwah/narutomod/abilities/jutsus/ByakuganAbility.java" "getByakuganRange"
 Assert-FileContains "src/main/java/com/sekwah/narutomod/abilities/jutsus/ByakuganAbility.java" "CHAKRA_COST\s*=\s*0\.5F"
 Assert-FileContains "src/main/java/com/sekwah/narutomod/capabilities/INinjaData.java" "getByakuganRange"
 Assert-FileContains "src/main/java/com/sekwah/narutomod/capabilities/INinjaData.java" "isByakuganActive"

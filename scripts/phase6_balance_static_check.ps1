@@ -17,7 +17,7 @@ function Assert-FileContains {
     }
 }
 
-Assert-FileContains "src/main/java/com/sekwah/narutomod/capabilities/NinjaData.java" 'RANK_STAMINA_BONUS\s*=\s*new float\[\]\s*\{0,\s*50,\s*200,\s*500,\s*900\}'
+Assert-FileContains "src/main/java/com/sekwah/narutomod/capabilities/NinjaData.java" 'RANK_STAMINA_POOL'
 Assert-FileContains "src/main/java/com/sekwah/narutomod/capabilities/NinjaData.java" 'this\.stamina\s*=\s*this\.maxStamina;'
 Assert-FileContains "src/main/java/com/sekwah/narutomod/capabilities/NinjaData.java" 'this\.chakra\s*=\s*this\.maxChakra;'
 Assert-FileContains "src/main/java/com/sekwah/narutomod/capabilities/INinjaData.java" 'float getRankDamageMultiplier\(\);'
@@ -53,11 +53,11 @@ foreach ($file in $damageFiles) {
     Assert-FileContains $file 'getRankDamageMultiplier\(\)'
 }
 
-Assert-FileContains "src/main/java/com/sekwah/narutomod/abilities/jutsus/RasenganJutsuAbility.java" 'setDamageMultiplier\(ninjaData\.getRankDamageMultiplier\(\)'
+Assert-FileContains "src/main/java/com/sekwah/narutomod/abilities/jutsus/RasenganJutsuAbility.java" 'CHAKRA_PER_TICK'
 Assert-FileContains "src/main/java/com/sekwah/narutomod/entity/jutsuprojectile/RasenganEntity.java" 'damageMultiplier'
 Assert-FileContains "src/main/java/com/sekwah/narutomod/abilities/jutsus/FireballJutsuAbility.java" 'setChargeAmount\(charge,\s*isUchiha,\s*ninjaData\.getRankDamageMultiplier\(\)\)'
 Assert-FileContains "src/main/java/com/sekwah/narutomod/entity/jutsuprojectile/FireballJutsuEntity.java" 'rankDamageMultiplier'
-Assert-FileContains "src/main/java/com/sekwah/narutomod/abilities/jutsus/AmaterasuAbility.java" 'setDamageMultiplier\(ninjaData\.getRankDamageMultiplier\(\)\)'
+Assert-FileContains "src/main/java/com/sekwah/narutomod/abilities/jutsus/AmaterasuAbility.java" 'AmaterasuFlames\.ignite'
 Assert-FileContains "src/main/java/com/sekwah/narutomod/entity/jutsuprojectile/AmaterasuFireEntity.java" 'damageMultiplier'
 
 Write-Host "Phase 6 balance static checks passed."

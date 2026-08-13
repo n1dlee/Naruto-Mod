@@ -15,6 +15,12 @@ import java.util.function.Supplier;
 
 /**
  * Balance against {@link net.minecraft.world.item.ArmorMaterial}
+ *
+ * Every material here used to hand back a null repair ingredient. ArmorItem#isValidRepairItem
+ * calls {@code material.getRepairIngredient().test(stack)} with no null check, so putting any
+ * of this armour in an anvil threw before it could tell you the repair was invalid. None of
+ * it is craftable, so the repair materials are chosen to match what the piece is made of:
+ * plate for the armoured sets, cloth for the clothes.
  */
 public enum NarutoArmorMaterial implements ArmorMaterial {
 
@@ -23,49 +29,43 @@ public enum NarutoArmorMaterial implements ArmorMaterial {
         type.put(ArmorItem.Type.LEGGINGS, 5);
         type.put(ArmorItem.Type.CHESTPLATE, 7);
         type.put(ArmorItem.Type.HELMET, 2);
-    }), 8, SoundEvents.ARMOR_EQUIP_IRON, 2.1F, 0.0F, () -> {
-        return null;//Ingredient.of(Items.LEATHER);
-    }),
+    }), 8, SoundEvents.ARMOR_EQUIP_IRON, 2.1F, 0.0F,
+            () -> Ingredient.of(com.sekwah.narutomod.item.NarutoItems.ARMOR_PLATE.get())),
     FLAK_MAT("flak", 35, Util.make(new EnumMap<>(ArmorItem.Type.class), (type) -> {
         type.put(ArmorItem.Type.BOOTS, 2);
         type.put(ArmorItem.Type.LEGGINGS, 5);
         type.put(ArmorItem.Type.CHESTPLATE, 6);
         type.put(ArmorItem.Type.HELMET, 2);
-    }), 8, SoundEvents.ARMOR_EQUIP_IRON, 2.1F, 0.0F, () -> {
-        return null;//Ingredient.of(Items.LEATHER);
-    }),
+    }), 8, SoundEvents.ARMOR_EQUIP_IRON, 2.1F, 0.0F,
+            () -> Ingredient.of(com.sekwah.narutomod.item.NarutoItems.ARMOR_PLATE.get())),
     FLAK_STRONGER_MAT("flak_strong", 35, Util.make(new EnumMap<>(ArmorItem.Type.class), (type) -> {
         type.put(ArmorItem.Type.BOOTS, 2);
         type.put(ArmorItem.Type.LEGGINGS, 7);
         type.put(ArmorItem.Type.CHESTPLATE, 7);
         type.put(ArmorItem.Type.HELMET, 2);
-    }), 8, SoundEvents.ARMOR_EQUIP_IRON, 2.1F, 0.0F, () -> {
-        return null;//Ingredient.of(Items.LEATHER);
-    }),
+    }), 8, SoundEvents.ARMOR_EQUIP_IRON, 2.1F, 0.0F,
+            () -> Ingredient.of(com.sekwah.narutomod.item.NarutoItems.ARMOR_PLATE.get())),
     CHARACTER_CLOTHES("character_clothes", 35, Util.make(new EnumMap<>(ArmorItem.Type.class), (type) -> {
         type.put(ArmorItem.Type.BOOTS, 2);
         type.put(ArmorItem.Type.LEGGINGS, 5);
         type.put(ArmorItem.Type.CHESTPLATE, 7);
         type.put(ArmorItem.Type.HELMET, 2);
-    }), 8, SoundEvents.ARMOR_EQUIP_LEATHER, 2.1F, 0.0F, () -> {
-        return null;//Ingredient.of(Items.LEATHER);
-    }),
+    }), 8, SoundEvents.ARMOR_EQUIP_LEATHER, 2.1F, 0.0F,
+            () -> Ingredient.of(com.sekwah.narutomod.item.NarutoItems.FABRIC.get())),
     FULL_CHARACTER_CLOTHES("full_character_clothes", 35, Util.make(new EnumMap<>(ArmorItem.Type.class), (type) -> {
         type.put(ArmorItem.Type.BOOTS, 2);
         type.put(ArmorItem.Type.LEGGINGS, 5);
         type.put(ArmorItem.Type.CHESTPLATE, 10);
         type.put(ArmorItem.Type.HELMET, 2);
-    }), 6, SoundEvents.ARMOR_EQUIP_LEATHER, 2.1F, 0.0F, () -> {
-        return null;//Ingredient.of(Items.LEATHER);
-    }),
+    }), 6, SoundEvents.ARMOR_EQUIP_LEATHER, 2.1F, 0.0F,
+            () -> Ingredient.of(com.sekwah.narutomod.item.NarutoItems.FABRIC.get())),
     HEADBAND("headband", 35, Util.make(new EnumMap<>(ArmorItem.Type.class), (type) -> {
         type.put(ArmorItem.Type.BOOTS, 2);
         type.put(ArmorItem.Type.LEGGINGS, 5);
         type.put(ArmorItem.Type.CHESTPLATE, 5);
         type.put(ArmorItem.Type.HELMET, 2);
-    }), 6, SoundEvents.ARMOR_EQUIP_LEATHER, 2.1F, 0.0F, () -> {
-        return null;//Ingredient.of(Items.LEATHER);
-    }),
+    }), 6, SoundEvents.ARMOR_EQUIP_LEATHER, 2.1F, 0.0F,
+            () -> Ingredient.of(com.sekwah.narutomod.item.NarutoItems.FABRIC_REINFORCED.get())),
     ;
 
     public static final StringRepresentable.EnumCodec<ArmorMaterials> CODEC = StringRepresentable.fromEnum(ArmorMaterials::values);

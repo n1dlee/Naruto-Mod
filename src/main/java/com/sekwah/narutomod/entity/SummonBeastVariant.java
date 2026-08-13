@@ -17,23 +17,29 @@ import net.minecraft.resources.ResourceLocation;
 public enum SummonBeastVariant {
 
     /** Chief Toad of Mount Myoboku. The bruiser: huge, tanky, spits water bullets. */
-    GAMABUNTA("gamabunta", "Gamabunta", 220f, 22f, 0.30f, 0.85f,
+    GAMABUNTA("gamabunta", "Gamabunta", "gamabunta", 220f, 22f, 0.30f, 0.85f,
             4.4f, 5.0f, 4.0f, 1.5913f),
 
     /** The serpent of Ryuchi Cave. Fast, fragile for its size, and venomous. */
-    MANDA("manda", "Manda", 170f, 26f, 0.42f, 0.35f,
+    MANDA("manda", "Manda", "snake_purple", 170f, 26f, 0.42f, 0.35f,
             2.2f, 1.7f, 4.0f, 1.5250f),
 
     /** Katsuyu of Shikkotsu Forest. A support summon: she heals, she does not brawl. */
-    KATSUYU("katsuyu", "Katsuyu", 260f, 6f, 0.24f, 0.90f,
+    KATSUYU("katsuyu", "Katsuyu", "slug", 260f, 6f, 0.24f, 0.90f,
             1.6f, 4.1f, 1.4f, 2.8906f),
 
     /** Enma, the Monkey King. Fights with the Adamantine Staff, so he outreaches everything. */
-    ENMA("enma", "Enma", 190f, 18f, 0.36f, 0.55f,
+    ENMA("enma", "Enma", "enma", 190f, 18f, 0.36f, 0.55f,
             1.6f, 3.0f, 1.2f, 1.8125f);
 
     private final String name;
     private final String displayName;
+    /**
+     * The imported skin's own file name, which is not always the contract's name: the legacy
+     * mod shipped Katsuyu as slug.png and Manda as snake_purple.png. Spelled out per contract
+     * rather than derived, because deriving it silently gave Katsuyu a missing texture.
+     */
+    private final String textureName;
     private final float health;
     private final float damage;
     private final float speed;
@@ -49,11 +55,12 @@ public enum SummonBeastVariant {
      */
     private final float feetOffset;
 
-    SummonBeastVariant(String name, String displayName, float health, float damage, float speed,
-                       float knockbackResistance, float width, float height,
-                       float renderScale, float feetOffset) {
+    SummonBeastVariant(String name, String displayName, String textureName, float health,
+                       float damage, float speed, float knockbackResistance, float width,
+                       float height, float renderScale, float feetOffset) {
         this.name = name;
         this.displayName = displayName;
+        this.textureName = textureName;
         this.health = health;
         this.damage = damage;
         this.speed = speed;
@@ -106,9 +113,7 @@ public enum SummonBeastVariant {
     }
 
     public ResourceLocation getTexture() {
-        // Manda reuses the legacy purple serpent skin; the rest have their own.
-        String file = this == MANDA ? "snake_purple" : this.name;
-        return new ResourceLocation(NarutoMod.MOD_ID, "textures/entity/summon/" + file + ".png");
+        return new ResourceLocation(NarutoMod.MOD_ID, "textures/entity/summon/" + this.textureName + ".png");
     }
 
     /** Katsuyu mends rather than fights, so the melee goals stand down for her. */

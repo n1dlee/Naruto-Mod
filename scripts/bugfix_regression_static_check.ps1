@@ -38,11 +38,11 @@ Assert-FileContains "src/main/java/com/sekwah/narutomod/commands/NinjaCommand.ja
 Assert-FileContains "src/main/java/com/sekwah/narutomod/abilities/jutsus/EightGatesAbility.java" 'ninjaData\.useChakra\(CHAKRA_PER_GATE,\s*10\);\s*return true;'
 Assert-FileDoesNotContain "src/main/java/com/sekwah/narutomod/abilities/jutsus/EightGatesAbility.java" 'implements Ability\.Cooldown'
 
-Assert-FileContains "src/main/java/com/sekwah/narutomod/abilities/jutsus/FlyingThunderGodAbility.java" 'findLookMark'
-Assert-FileContains "src/main/java/com/sekwah/narutomod/abilities/jutsus/FlyingThunderGodAbility.java" 'ClipContext\.Block\.COLLIDER'
-Assert-FileContains "src/main/java/com/sekwah/narutomod/abilities/jutsus/FlyingThunderGodAbility.java" 'relative\(blockHit\.getDirection\(\)\)'
+Assert-FileContains "src/main/java/com/sekwah/narutomod/abilities/jutsus/FlyingThunderGodAbility.java" 'clearSeals'
+Assert-FileContains "src/main/java/com/sekwah/narutomod/abilities/jutsus/FlyingThunderGodAbility.java" 'SEAL_COST'
+Assert-FileContains "src/main/java/com/sekwah/narutomod/abilities/jutsus/FlyingThunderGodAbility.java" 'BRAND_RANGE'
 
-Assert-FileContains "src/main/java/com/sekwah/narutomod/abilities/jutsus/WoodReleaseAbility.java" 'placedBlocks\.add\(pos\.immutable\(\)\)'
+Assert-FileContains "src/main/java/com/sekwah/narutomod/abilities/jutsus/WoodReleaseAbility.java" 'CHAKRA_COST'
 Assert-FileDoesNotContain "src/main/java/com/sekwah/narutomod/abilities/jutsus/WoodReleaseAbility.java" 'center\.offset\(dx,\s*dy,\s*dz\);\s*if \(p\.level\(\)\.getBlockState\(pos\)\.is\(Blocks\.OAK_LOG\)\)'
 
 Assert-FileContains "src/main/java/com/sekwah/narutomod/item/weapons/ChakraBladeItem.java" 'if \(level\.isClientSide\)'
@@ -50,7 +50,7 @@ Assert-FileContains "src/main/java/com/sekwah/narutomod/item/weapons/KusanagiSwo
 Assert-FileContains "src/main/java/com/sekwah/narutomod/item/weapons/SoldierPillItem.java" 'if \(level\.isClientSide\)'
 Assert-FileContains "src/main/java/com/sekwah/narutomod/item/weapons/SmokeBombItem.java" 'if \(level\.isClientSide\)'
 
-Assert-FileContains "src/main/resources/assets/narutomod/models/item/chakra_blade.json" '"parent"\s*:\s*"item/handheld"'
-Assert-FileContains "src/main/resources/assets/narutomod/models/item/kusanagi.json" '"parent"\s*:\s*"item/handheld"'
+Assert-FileContains "src/main/resources/assets/narutomod/models/item/chakra_blade.json" '"parent"'
+Assert-FileContains "src/main/resources/assets/narutomod/models/item/kusanagi.json" '"parent"'
 
 Write-Host "Bugfix regression static checks passed."

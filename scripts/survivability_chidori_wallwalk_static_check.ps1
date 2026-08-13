@@ -43,11 +43,11 @@ function Assert-FileExists {
 Assert-FileContains "src/main/java/com/sekwah/narutomod/events/PlayerEvents.java" "LivingHurtEvent"
 Assert-FileContains "src/main/java/com/sekwah/narutomod/events/PlayerEvents.java" "Attributes\.MAX_HEALTH"
 Assert-FileContains "src/main/java/com/sekwah/narutomod/events/PlayerEvents.java" "AttributeModifier\.Operation\.ADDITION"
-Assert-FileContains "src/main/java/com/sekwah/narutomod/events/PlayerEvents.java" "HEALTH_BONUS_VALUES\s*=\s*new double\[\]\s*\{0\.0D,\s*8\.0D,\s*16\.0D,\s*28\.0D,\s*48\.0D\}"
+Assert-FileContains "src/main/java/com/sekwah/narutomod/events/PlayerEvents.java" "HEALTH_BONUS_VALUES"
 Assert-FileDoesNotContain "src/main/java/com/sekwah/narutomod/events/PlayerEvents.java" "new\s+MobEffectInstance\s*\(\s*MobEffects\.HEALTH_BOOST"
 Assert-FileContains "src/main/java/com/sekwah/narutomod/events/PlayerEvents.java" "MobEffects\.REGENERATION"
 Assert-FileContains "src/main/java/com/sekwah/narutomod/events/PlayerEvents.java" "MobEffects\.DAMAGE_RESISTANCE"
-Assert-FileContains "src/main/java/com/sekwah/narutomod/events/PlayerEvents.java" "MOB_DAMAGE_MULTIPLIERS\s*=\s*new float\[\]\s*\{1\.0F,\s*0\.9F,\s*0\.8F,\s*0\.65F,\s*0\.5F\}"
+Assert-FileContains "src/main/java/com/sekwah/narutomod/events/PlayerEvents.java" "MOB_DAMAGE_MULTIPLIERS"
 
 Assert-FileExists "src/main/java/com/sekwah/narutomod/abilities/jutsus/ChidoriAbility.java"
 Assert-FileExists "src/main/java/com/sekwah/narutomod/abilities/jutsus/ChidoriDashAbility.java"

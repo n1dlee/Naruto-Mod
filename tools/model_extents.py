@@ -14,10 +14,10 @@ box = re.compile(r"addBox\(([^)]*?), new CubeDeformation")
 parts = {}
 for m in pat.finditer(src):
     name, parent, cubes, kind, pose = m.groups()
-    nums = [float(v.strip().rstrip("f")) for v in pose.split(",")]
+    nums = [float(v.strip().rstrip("fF")) for v in pose.split(",")]
     boxes = []
     for b in box.finditer(cubes):
-        boxes.append([float(v.strip().rstrip("f")) for v in b.group(1).split(",")])
+        boxes.append([float(v.strip().rstrip("fF")) for v in b.group(1).split(",")])
     parts[name] = (parent, nums[:3], boxes)
 
 lo = [1e9] * 3

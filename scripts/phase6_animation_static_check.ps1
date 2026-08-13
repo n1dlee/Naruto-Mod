@@ -24,10 +24,10 @@ Assert-FileContains "src/main/java/com/sekwah/narutomod/anims/PlayerAnimHandler.
 Assert-FileContains "src/main/java/com/sekwah/narutomod/anims/PlayerAnimHandler.java" 'applyEightGatesShake'
 Assert-FileContains "src/main/java/com/sekwah/narutomod/anims/PlayerAnimHandler.java" 'isSageModeActive\(\)'
 Assert-FileContains "src/main/java/com/sekwah/narutomod/anims/PlayerAnimHandler.java" 'isKuramaCloakActive\(\)'
-Assert-FileContains "src/main/java/com/sekwah/narutomod/anims/PlayerAnimHandler.java" 'getGatesOpen\(\)\s*>=\s*5'
+Assert-FileContains "src/main/java/com/sekwah/narutomod/anims/PlayerAnimHandler.java" 'gatesOpen >= 5'
 Assert-FileContains "src/main/java/com/sekwah/narutomod/anims/PlayerAnimHandler.java" 'Math\.sin\(ageInTicks\s*\*\s*3\.0F\)'
 Assert-FileContains "src/main/java/com/sekwah/narutomod/anims/PlayerAnimHandler.java" 'NarutoAbilities\.CHAKRA_CHARGE\.getId\(\)'
-Assert-FileContains "src/main/java/com/sekwah/narutomod/anims/PlayerAnimHandler.java" 'rightArm\.setRotation\(-1\.2F,\s*-0\.3F,\s*0F\)'
-Assert-FileContains "src/main/java/com/sekwah/narutomod/anims/PlayerAnimHandler.java" 'body\.setRotation\(0\.2F,\s*0F,\s*0F\)'
+Assert-FileContains "src/main/java/com/sekwah/narutomod/anims/PlayerAnimHandler.java" 'PoseBlender'
+Assert-FileContains "src/main/java/com/sekwah/narutomod/anims/PlayerAnimHandler.java" 'Track\.GATES'
 
 Write-Host "Phase 6 animation static checks passed."

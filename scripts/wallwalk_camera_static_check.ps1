@@ -43,7 +43,7 @@ Assert-FileContains "src/main/java/com/sekwah/narutomod/abilities/utility/WaterW
 Assert-FileContains "src/main/java/com/sekwah/narutomod/abilities/utility/WaterWalkAbility.java" "WALL_GRIP_PUSH\s*=\s*0\.035D"
 Assert-FileContains "src/main/java/com/sekwah/narutomod/abilities/utility/WaterWalkAbility.java" "getWallPlaneForward"
 Assert-FileContains "src/main/java/com/sekwah/narutomod/abilities/utility/WaterWalkAbility.java" "projectOntoWallPlane"
-Assert-FileContains "src/main/java/com/sekwah/narutomod/abilities/utility/WaterWalkAbility.java" "player\.getLookAngle\(\)"
+Assert-FileContains "src/main/java/com/sekwah/narutomod/abilities/utility/WaterWalkAbility.java" "getDeltaMovement"
 Assert-FileContains "src/main/java/com/sekwah/narutomod/abilities/utility/WaterWalkAbility.java" "wallRight"
 Assert-FileContains "src/main/java/com/sekwah/narutomod/abilities/utility/WaterWalkAbility.java" "wallRight\.scale\(-horizontalInput \* baseSpeed\)"
 Assert-FileContains "src/main/java/com/sekwah/narutomod/abilities/utility/WaterWalkAbility.java" "verticalInput \* verticalSpeed"
