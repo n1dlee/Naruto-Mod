@@ -51,6 +51,20 @@ class Part:
         self.children = []
 
 
+# ModelBiped's own fields, as javap prints them. Models that extend it re-declare all the
+# geometry themselves, so nothing needs injecting -- but the obfuscated names make the
+# emitted model unreadable, so they are given back their meaning here.
+BIPED_ALIASES = {
+    "field_78116_c": "head",
+    "field_178720_f": "hat",
+    "field_78115_e": "body",
+    "field_178723_h": "right_arm",
+    "field_178724_i": "left_arm",
+    "field_178721_j": "right_leg",
+    "field_178722_k": "left_leg",
+}
+
+
 def descriptor_arg_count(signature):
     """Number of operand-stack values a call's arguments occupy.
 
@@ -112,6 +126,7 @@ def parse(path):
     synthetic = [0]
 
     def part(name):
+        name = BIPED_ALIASES.get(name, name)
         if name not in parts:
             parts[name] = Part(name)
         return parts[name]
@@ -129,7 +144,9 @@ def parse(path):
             if not isinstance(x, Field):
                 raise SystemExit("expected a part ref, got %r\nlast instructions:\n  %s\nstack: %r"
                                  % (x, "\n  ".join(trace), stack))
-            return x.name
+            # Aliased here as well as in part(), or the hierarchy would be recorded under the
+            # obfuscated names while the parts themselves live under the readable ones.
+            return BIPED_ALIASES.get(x.name, x.name)
 
         def ar(x):
             """The ModelRenderer[] an array instruction is addressing."""
@@ -165,7 +182,15 @@ def parse(path):
         elif op == "pop":
             stack.pop()
         elif op == "new":
-            stack.append(New("ModelBox" if "ModelBox" in comment else "ModelRenderer"))
+            if "ModelBox" in comment:
+                stack.append(New("ModelBox"))
+            elif "ModelRenderer" in comment:
+                stack.append(New("ModelRenderer"))
+            else:
+                # Anything else the constructor allocates -- a Random, a Vector3f -- is not
+                # geometry. Treating every allocation as a ModelRenderer produced phantom
+                # empty parts named after unrelated fields.
+                stack.append(Data())
         elif op.startswith("iconst_"):
             stack.append(int(op[-1]))
         elif op == "iconst_m1":

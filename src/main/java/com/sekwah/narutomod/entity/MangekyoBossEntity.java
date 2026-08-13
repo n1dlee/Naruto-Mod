@@ -559,6 +559,12 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
             // it goes for you.
             case HIDAN -> this.addEffect(new net.minecraft.world.effect.MobEffectInstance(
                     net.minecraft.world.effect.MobEffects.DAMAGE_BOOST, 99999, stage, false, false));
+            // Sasori does not fight with his hands. Each stage he reaches into the collection
+            // and puts another puppet on the field - Karasu, then Sanshouo, then the Third
+            // Kazekage, and finally the Hundred, which is where he stops being a person in
+            // the fight at all. Without this he was a man throwing senbon, which is the one
+            // thing the character is not.
+            case SASORI -> this.summonPuppet(PuppetVariant.forSasoriStage(stage));
             default -> this.addEffect(new net.minecraft.world.effect.MobEffectInstance(
                     net.minecraft.world.effect.MobEffects.DAMAGE_BOOST, 99999, amplifier, false, false));
         }
@@ -626,6 +632,50 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
             serverLevel.playSound(null, this.blockPosition(),
                     net.minecraft.sounds.SoundEvents.PLAYER_ATTACK_STRONG,
                     net.minecraft.sounds.SoundSource.HOSTILE, 1.6f, 1.2f);
+        }
+    }
+
+    /** Standing limit on a puppeteer's collection, for the same reason clones have one. */
+    private static final int MAX_BOSS_PUPPETS = 7;
+
+    /**
+     * Puts one of Sasori's puppets on the field, on his strings.
+     *
+     * The Hundred arrive in fours because that is the whole idea of them; everything else is
+     * a single piece. Capped like the clones are - a fight that runs long must not leave a
+     * standing army behind it.
+     */
+    public void summonPuppet(PuppetVariant variant) {
+        if (!(this.level() instanceof ServerLevel serverLevel)) {
+            return;
+        }
+        long existing = serverLevel.getEntities(
+                        com.sekwah.narutomod.entity.NarutoEntities.PUPPET.get(),
+                        puppet -> puppet.getOwnerUUID().map(this.getUUID()::equals).orElse(false))
+                .size();
+        int room = (int) Math.max(0, MAX_BOSS_PUPPETS - existing);
+        int spawning = Math.min(variant.summonCount(), room);
+
+        for (int i = 0; i < spawning; i++) {
+            double angle = (Math.PI * 2 * i) / Math.max(1, spawning) + this.random.nextDouble();
+            double reach = 2.5 + variant.getWidth();
+            PuppetEntity puppet = new PuppetEntity(
+                    com.sekwah.narutomod.entity.NarutoEntities.PUPPET.get(), serverLevel);
+            puppet.moveTo(this.getX() + Math.cos(angle) * reach, this.getY(),
+                    this.getZ() + Math.sin(angle) * reach, this.getYRot(), 0);
+            puppet.setOwner(this);
+            // Order matters: setVariant rewrites max health, so the top-up comes after it.
+            puppet.setVariant(variant);
+            puppet.setHealth(puppet.getMaxHealth());
+            puppet.setCustomName(Component.literal(variant.getDisplayName()));
+            serverLevel.addFreshEntity(puppet);
+            serverLevel.sendParticles(ParticleTypes.CLOUD,
+                    puppet.getX(), puppet.getY() + 1.0, puppet.getZ(), 24, 0.5, 0.7, 0.5, 0.02);
+        }
+        if (spawning > 0) {
+            serverLevel.playSound(null, this.blockPosition(),
+                    net.minecraft.sounds.SoundEvents.WOOD_PLACE,
+                    net.minecraft.sounds.SoundSource.HOSTILE, 1.8f, 0.7f);
         }
     }
 

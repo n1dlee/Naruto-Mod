@@ -70,6 +70,8 @@ public class NarutoRenderEvents {
                 com.sekwah.narutomod.client.renderer.entity.TailedBeastRenderer::new);
         event.registerEntityRenderer(NarutoEntities.TAILED_BEAST_BOMB.get(),
                 com.sekwah.narutomod.client.renderer.entity.TailedBeastBombRenderer::new);
+        event.registerEntityRenderer(NarutoEntities.PUPPET.get(),
+                com.sekwah.narutomod.client.renderer.entity.PuppetRenderer::new);
 
     }
 
@@ -139,6 +141,18 @@ public class NarutoRenderEvents {
                 com.sekwah.narutomod.client.model.entity.EightTailsModel::createBodyLayer);
         event.registerLayerDefinition(com.sekwah.narutomod.client.model.entity.BijudamaModel.LAYER_LOCATION,
                 com.sekwah.narutomod.client.model.entity.BijudamaModel::createBodyLayer);
+
+        // Phase 20: Sasori's puppets, geometry imported from 1.12.2
+        event.registerLayerDefinition(com.sekwah.narutomod.client.model.entity.HirukoModel.LAYER_LOCATION,
+                com.sekwah.narutomod.client.model.entity.HirukoModel::createBodyLayer);
+        event.registerLayerDefinition(com.sekwah.narutomod.client.model.entity.KarasuModel.LAYER_LOCATION,
+                com.sekwah.narutomod.client.model.entity.KarasuModel::createBodyLayer);
+        event.registerLayerDefinition(com.sekwah.narutomod.client.model.entity.SanshouoModel.LAYER_LOCATION,
+                com.sekwah.narutomod.client.model.entity.SanshouoModel::createBodyLayer);
+        event.registerLayerDefinition(com.sekwah.narutomod.client.model.entity.ThirdKazekageModel.LAYER_LOCATION,
+                com.sekwah.narutomod.client.model.entity.ThirdKazekageModel::createBodyLayer);
+        event.registerLayerDefinition(com.sekwah.narutomod.client.model.entity.HundredPuppetModel.LAYER_LOCATION,
+                com.sekwah.narutomod.client.model.entity.HundredPuppetModel::createBodyLayer);
     }
 
     @SubscribeEvent

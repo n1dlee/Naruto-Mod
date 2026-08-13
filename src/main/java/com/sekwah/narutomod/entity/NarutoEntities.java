@@ -128,6 +128,14 @@ public class NarutoEntities {
                     .sized(2.0F, 2.0F).clientTrackingRange(20).updateInterval(2));
 
     /**
+     * Phase 20: Sasori's puppets. MobCategory.MISC - they are put on the field by a puppeteer,
+     * never by the world. Registered at Hiruko's size; each variant overrides getDimensions.
+     */
+    public static final RegistryObject<EntityType<PuppetEntity>> PUPPET = register("puppet",
+            EntityType.Builder.<PuppetEntity>of(PuppetEntity::new, MobCategory.MISC)
+                    .sized(1.5F, 2.9F).clientTrackingRange(12));
+
+    /**
      * Hashirama's wood golem. MobCategory.MISC because it is conjured by a technique and
      * must never turn up through natural spawning, same as every other summon here.
      */
@@ -344,6 +352,7 @@ public class NarutoEntities {
         event.put(UCHIHA_ROGUE.get(), RogueNinjaEntity.createAttributes().build());
         event.put(WOOD_GOLEM.get(), WoodGolemEntity.createAttributes().build());
         event.put(TAILED_BEAST.get(), TailedBeastEntity.createAttributes().build());
+        event.put(PUPPET.get(), PuppetEntity.createAttributes().build());
     }
 
 }
