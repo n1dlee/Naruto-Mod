@@ -1124,23 +1124,41 @@ public class BossJutsuGoal extends Goal {
             return;
         }
         Vec3 centre = target.position();
-        // Three appearances, each cutting once, ending behind the target.
-        for (int i = 0; i < 3; i++) {
-            double angle = (Math.PI * 2 * i) / 3.0 + this.boss.getRandom().nextDouble();
-            Vec3 spot = centre.add(Math.cos(angle) * 3.0, 0, Math.sin(angle) * 3.0);
-            NarutoParticles.spawnRing(serverLevel, spot.add(0, 1.0, 0), 1.0, 14, NarutoParticles.ICE_PALE);
-            target.invulnerableTime = 0;
-            target.hurt(this.boss.damageSources().mobAttack(this.boss), 7f);
+        java.util.List<com.sekwah.narutomod.entity.jutsuprojectile.IceMirrorEntity> standing =
+                this.standingMirrors(centre);
+
+        // The ring goes up once and then stands until it is broken. Re-raising it every cast
+        // would make the mirrors decoration again; leaving them up is what turns the technique
+        // into a structure the player has to dismantle.
+        if (standing.isEmpty()) {
+            standing = com.sekwah.narutomod.entity.jutsuprojectile.IceMirrorEntity
+                    .raiseRing(this.boss, centre);
         }
-        double landingAngle = this.boss.getRandom().nextDouble() * Math.PI * 2;
-        // randomTeleport, not teleportTo: it refuses positions inside blocks, so he cannot
-        // step out of a mirror into a wall and suffocate there.
-        this.boss.randomTeleport(centre.x + Math.cos(landingAngle) * 2.5, centre.y,
-                centre.z + Math.sin(landingAngle) * 2.5, false);
+
+        // Step into one of the surviving panes, and cut once from it on the way through.
+        com.sekwah.narutomod.entity.jutsuprojectile.IceMirrorEntity into =
+                standing.get(this.boss.getRandom().nextInt(standing.size()));
+        this.boss.randomTeleport(into.getX(), into.getY(), into.getZ(), false);
         this.boss.getLookControl().setLookAt(target, 30f, 30f);
+
+        target.invulnerableTime = 0;
+        target.hurt(this.boss.damageSources().mobAttack(this.boss), 7f);
         target.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 80, 1));
+        NarutoParticles.spawnBolt(serverLevel, into.position().add(0, 1.2, 0),
+                target.position().add(0, target.getBbHeight() * 0.5, 0), 2, 0.2,
+                NarutoParticles.ICE_PALE);
         this.boss.level().playSound(null, this.boss.blockPosition(),
                 SoundEvents.GLASS_BREAK, SoundSource.HOSTILE, 1.6f, 1.2f);
+    }
+
+    /** This wielder's own mirrors that are still standing near a point. */
+    private java.util.List<com.sekwah.narutomod.entity.jutsuprojectile.IceMirrorEntity> standingMirrors(Vec3 centre) {
+        return this.boss.level().getEntitiesOfClass(
+                com.sekwah.narutomod.entity.jutsuprojectile.IceMirrorEntity.class,
+                new net.minecraft.world.phys.AABB(centre, centre).inflate(
+                        com.sekwah.narutomod.entity.jutsuprojectile.IceMirrorEntity.RING_RADIUS + 4.0),
+                mirror -> mirror.isAlive()
+                        && mirror.getOwnerUUID().map(this.boss.getUUID()::equals).orElse(false));
     }
 
     /** A Thousand Flying Water Needles, frozen. A cone of them, and they all land. */
@@ -1722,17 +1740,15 @@ public class BossJutsuGoal extends Goal {
 
     /** Chibaku Tensei: a core drops and everything is dragged into it. */
     private void castChibakuTensei(LivingEntity target) {
-        Vec3 core = target.position().add(0, 2.0, 0);
-        for (LivingEntity caught : nearby(core, 10.0)) {
-            Vec3 pull = core.subtract(caught.position()).normalize().scale(1.6);
-            caught.setDeltaMovement(caught.getDeltaMovement().add(pull));
-            caught.hurtMarked = true;
-            caught.hurt(this.boss.damageSources().indirectMagic(this.boss, this.boss), 9f);
-        }
+        // A real core now, rather than one frame of pull and a puff of particles: it rises,
+        // hangs for eight seconds dragging everything toward it, and then comes down. The
+        // entity owns all of that, so the player's version and Nagato's are the same thing.
+        Vec3 origin = target.position().add(0, 3.0, 0);
+        this.boss.level().addFreshEntity(
+                new com.sekwah.narutomod.entity.jutsuprojectile.ChibakuTenseiEntity(this.boss, origin));
         playCastSound(SoundEvents.END_PORTAL_SPAWN, 1.3f);
         if (this.boss.level() instanceof ServerLevel serverLevel) {
-            NarutoParticles.spawnSpiral(serverLevel, core, 4.0, -0.25, 40, NarutoParticles.SHADOW_PURPLE);
-            serverLevel.sendParticles(ParticleTypes.PORTAL, core.x, core.y, core.z, 60, 1.5, 1.5, 1.5, 0.6);
+            NarutoParticles.spawnSpiral(serverLevel, origin, 4.0, -0.25, 40, NarutoParticles.SHADOW_PURPLE);
         }
     }
 

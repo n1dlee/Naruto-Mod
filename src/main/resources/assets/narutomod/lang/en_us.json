@@ -1,4 +1,8 @@
 {
+  "narutomod:chibaku_tensei": "Chibaku Tensei",
+  "narutomod:ice_mirrors": "Demonic Mirroring Ice Crystals",
+  "entity.narutomod.chibaku_tensei": "Chibaku Tensei",
+  "entity.narutomod.ice_mirror": "Ice Mirror",
   "entity.narutomod.puppet": "Puppet",
   "entity.narutomod.tailed_beast": "Tailed Beast",
   "entity.narutomod.tailed_beast_bomb": "Tailed Beast Bomb",

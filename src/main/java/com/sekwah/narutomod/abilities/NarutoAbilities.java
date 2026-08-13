@@ -205,6 +205,9 @@ public class NarutoAbilities {
             ABILITY.register("ice_spikes", com.sekwah.narutomod.abilities.jutsus.IceSpikesAbility::new);
     public static final RegistryObject<com.sekwah.narutomod.abilities.jutsus.IceSpearBarrageAbility> ICE_SPEAR_BARRAGE =
             ABILITY.register("ice_spear_barrage", com.sekwah.narutomod.abilities.jutsus.IceSpearBarrageAbility::new);
+    /** Phase 22: the mirrors themselves, as a ring of entities you can break. */
+    public static final RegistryObject<com.sekwah.narutomod.abilities.jutsus.IceMirrorsAbility> ICE_MIRRORS =
+            ABILITY.register("ice_mirrors", com.sekwah.narutomod.abilities.jutsus.IceMirrorsAbility::new);
     public static final RegistryObject<com.sekwah.narutomod.abilities.jutsus.StormAuraAbility> STORM_AURA =
             ABILITY.register("storm_aura", com.sekwah.narutomod.abilities.jutsus.StormAuraAbility::new);
     public static final RegistryObject<com.sekwah.narutomod.abilities.jutsus.ClayBombAbility> CLAY_BOMB =
@@ -215,6 +218,9 @@ public class NarutoAbilities {
     // --- Phase 16: Rinnegan — the Six Paths ---
     public static final RegistryObject<ShinraTenseiAbility> SHINRA_TENSEI = ABILITY.register("shinra_tensei", ShinraTenseiAbility::new);
     public static final RegistryObject<BanshoTeninAbility> BANSHO_TENIN = ABILITY.register("bansho_tenin", BanshoTeninAbility::new);
+    /** Phase 22: the Deva Path's last word, as a core that hangs and pulls. */
+    public static final RegistryObject<com.sekwah.narutomod.abilities.jutsus.ChibakuTenseiAbility> CHIBAKU_TENSEI =
+            ABILITY.register("chibaku_tensei", com.sekwah.narutomod.abilities.jutsus.ChibakuTenseiAbility::new);
     public static final RegistryObject<PretaPathAbility> PRETA_PATH = ABILITY.register("preta_path", PretaPathAbility::new);
     public static final RegistryObject<NarakaPathAbility> NARAKA_PATH = ABILITY.register("naraka_path", NarakaPathAbility::new);
     public static final RegistryObject<AnimalPathAbility> ANIMAL_PATH = ABILITY.register("animal_path", AnimalPathAbility::new);

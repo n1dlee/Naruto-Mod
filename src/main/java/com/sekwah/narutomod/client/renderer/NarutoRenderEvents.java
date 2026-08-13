@@ -72,6 +72,10 @@ public class NarutoRenderEvents {
                 com.sekwah.narutomod.client.renderer.entity.TailedBeastBombRenderer::new);
         event.registerEntityRenderer(NarutoEntities.PUPPET.get(),
                 com.sekwah.narutomod.client.renderer.entity.PuppetRenderer::new);
+        event.registerEntityRenderer(NarutoEntities.CHIBAKU_TENSEI.get(),
+                com.sekwah.narutomod.client.renderer.entity.ChibakuTenseiRenderer::new);
+        event.registerEntityRenderer(NarutoEntities.ICE_MIRROR.get(),
+                com.sekwah.narutomod.client.renderer.entity.IceMirrorRenderer::new);
 
     }
 
@@ -153,6 +157,12 @@ public class NarutoRenderEvents {
                 com.sekwah.narutomod.client.model.entity.ThirdKazekageModel::createBodyLayer);
         event.registerLayerDefinition(com.sekwah.narutomod.client.model.entity.HundredPuppetModel.LAYER_LOCATION,
                 com.sekwah.narutomod.client.model.entity.HundredPuppetModel::createBodyLayer);
+
+        // Phase 22: the Chibaku Tensei core and Haku's mirrors
+        event.registerLayerDefinition(com.sekwah.narutomod.client.model.entity.ChibakuCoreModel.LAYER_LOCATION,
+                com.sekwah.narutomod.client.model.entity.ChibakuCoreModel::createBodyLayer);
+        event.registerLayerDefinition(com.sekwah.narutomod.client.model.entity.IceMirrorModel.LAYER_LOCATION,
+                com.sekwah.narutomod.client.model.entity.IceMirrorModel::createBodyLayer);
     }
 
     @SubscribeEvent

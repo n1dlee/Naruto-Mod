@@ -127,6 +127,20 @@ public class NarutoEntities {
                             com.sekwah.narutomod.entity.jutsuprojectile.TailedBeastBombEntity::new, MobCategory.MISC)
                     .sized(2.0F, 2.0F).clientTrackingRange(20).updateInterval(2));
 
+    /** Phase 22: the Chibaku Tensei core. Tracked far out - you are meant to see it rise. */
+    public static final RegistryObject<EntityType<com.sekwah.narutomod.entity.jutsuprojectile.ChibakuTenseiEntity>>
+            CHIBAKU_TENSEI = register("chibaku_tensei",
+            EntityType.Builder.<com.sekwah.narutomod.entity.jutsuprojectile.ChibakuTenseiEntity>of(
+                            com.sekwah.narutomod.entity.jutsuprojectile.ChibakuTenseiEntity::new, MobCategory.MISC)
+                    .sized(2.0F, 2.0F).clientTrackingRange(24).updateInterval(2));
+
+    /** Phase 22: one pane of Haku's mirrors. Attackable, which is the whole counterplay. */
+    public static final RegistryObject<EntityType<com.sekwah.narutomod.entity.jutsuprojectile.IceMirrorEntity>>
+            ICE_MIRROR = register("ice_mirror",
+            EntityType.Builder.<com.sekwah.narutomod.entity.jutsuprojectile.IceMirrorEntity>of(
+                            com.sekwah.narutomod.entity.jutsuprojectile.IceMirrorEntity::new, MobCategory.MISC)
+                    .sized(0.8F, 2.0F).clientTrackingRange(12));
+
     /**
      * Phase 20: Sasori's puppets. MobCategory.MISC - they are put on the field by a puppeteer,
      * never by the world. Registered at Hiruko's size; each variant overrides getDimensions.
