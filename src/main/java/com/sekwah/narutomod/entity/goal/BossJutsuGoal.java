@@ -152,6 +152,16 @@ public class BossJutsuGoal extends Goal {
             case HINATA -> castHinata(target, distance);
             case SHIKAMARU -> castShikamaru(target, distance);
             case GAARA -> castGaara(target, distance);
+            case KANKURO -> castKankuro(target, distance);
+            case TEMARI -> castTemari(target, distance);
+            case KAKUZU -> castKakuzu(target, distance);
+            case HAKU -> castHaku(target, distance);
+            case KUROTSUCHI -> castKurotsuchi(target, distance);
+            case MIGHT_GUY -> castMightGuy(target, distance);
+            case SAKURA -> castSakura(target, distance);
+            case TENTEN -> castTenten(target, distance);
+            case IRUKA -> castIruka(target, distance);
+            case WHITE_ZETSU -> castWhiteZetsu(target, distance);
         };
     }
 
@@ -698,6 +708,204 @@ public class BossJutsuGoal extends Goal {
         return 45;
     }
 
+    /** Kankuro: he does not fight. Karasu does, and he keeps another one in reserve. */
+    private int castKankuro(LivingEntity target, double distance) {
+        int roll = this.boss.getRandom().nextInt(100);
+        // The puppet is the whole character, so it is checked first at every range - a
+        // puppeteer who only deploys from across the field is a puppeteer who never deploys.
+        if (roll < 30 && pay(55f)) {
+            this.boss.summonPuppet(this.boss.getRandom().nextBoolean()
+                    ? com.sekwah.narutomod.entity.PuppetVariant.KARASU
+                    : com.sekwah.narutomod.entity.PuppetVariant.HUNDRED);
+            return 120;
+        }
+        if (distance > CLOSE_RANGE) {
+            pay(30f);
+            castPoisonMist(target);
+            return 55;
+        }
+        pay(35f);
+        castHiddenBlades(target);
+        return 40;
+    }
+
+    /** Temari: wind, and a great deal of it. Nothing she throws is subtle. */
+    private int castTemari(LivingEntity target, double distance) {
+        int roll = this.boss.getRandom().nextInt(100);
+        if (distance > CLOSE_RANGE) {
+            if (roll < 55 && pay(40f)) {
+                castWindScythe(target);
+                return 50;
+            }
+            pay(55f);
+            castCuttingWhirlwind();
+            return 75;
+        }
+        if (roll < 50 && pay(55f)) {
+            castCuttingWhirlwind();
+            return 75;
+        }
+        pay(30f);
+        castVacuumPalm(target);
+        return 35;
+    }
+
+    /** Kakuzu: a different mask for every range, and a body that will not stay broken. */
+    private int castKakuzu(LivingEntity target, double distance) {
+        int roll = this.boss.getRandom().nextInt(100);
+        if (distance > CLOSE_RANGE) {
+            if (roll < 40 && pay(50f)) {
+                castFlamethrower(target);
+                return 65;
+            }
+            if (roll < 75 && pay(45f)) {
+                castLightningMask(target);
+                return 60;
+            }
+            pay(40f);
+            castWindScythe(target);
+            return 50;
+        }
+        if (roll < 45 && pay(45f)) {
+            castEarthSpear();
+            return 90;
+        }
+        pay(40f);
+        castThreadStrike(target);
+        return 40;
+    }
+
+    /** Haku: he is never where you swung, and the needles are already in the air. */
+    private int castHaku(LivingEntity target, double distance) {
+        int roll = this.boss.getRandom().nextInt(100);
+        if (distance > CLOSE_RANGE) {
+            if (roll < 55 && pay(50f)) {
+                castIceMirrors(target);
+                return 70;
+            }
+            pay(35f);
+            castThousandNeedles(target);
+            return 45;
+        }
+        if (roll < 40 && pay(50f)) {
+            castIceMirrors(target);
+            return 70;
+        }
+        pay(35f);
+        castThousandNeedles(target);
+        return 45;
+    }
+
+    /** Kurotsuchi: Lava Release. What lands keeps burning, and what does not blinds you. */
+    private int castKurotsuchi(LivingEntity target, double distance) {
+        int roll = this.boss.getRandom().nextInt(100);
+        if (distance > CLOSE_RANGE) {
+            if (roll < 55 && pay(45f)) {
+                castLavaSpit(target);
+                return 60;
+            }
+            pay(40f);
+            castQuicklime(target);
+            return 65;
+        }
+        if (roll < 50 && pay(40f)) {
+            castQuicklime(target);
+            return 65;
+        }
+        pay(45f);
+        castLavaSpit(target);
+        return 60;
+    }
+
+    /** Might Guy: no ninjutsu at all, and he does not need any. */
+    private int castMightGuy(LivingEntity target, double distance) {
+        int roll = this.boss.getRandom().nextInt(100);
+        if (distance > CLOSE_RANGE) {
+            // Closing the distance IS the technique. He does not stand and trade at range.
+            pay(30f);
+            castBladeRush(target, this.boss.getVariant().attackDamage() * 1.4f);
+            return 35;
+        }
+        if (roll < 45 && pay(60f)) {
+            castEveningElephant(target);
+            return 80;
+        }
+        pay(45f);
+        castMorningPeacock(target);
+        return 55;
+    }
+
+    /** Sakura: one punch, and the ground under it stops existing. */
+    private int castSakura(LivingEntity target, double distance) {
+        int roll = this.boss.getRandom().nextInt(100);
+        if (this.boss.getHealth() < this.boss.getMaxHealth() * 0.35f && pay(70f)) {
+            castCreationRebirth();
+            return 200;
+        }
+        if (distance > CLOSE_RANGE) {
+            pay(50f);
+            castMonstrousStrength();
+            return 70;
+        }
+        if (roll < 55 && pay(45f)) {
+            castChakraPunch(target);
+            return 45;
+        }
+        pay(50f);
+        castMonstrousStrength();
+        return 70;
+    }
+
+    /** Tenten: a scroll for every weapon ever made, and she throws all of them. */
+    private int castTenten(LivingEntity target, double distance) {
+        int roll = this.boss.getRandom().nextInt(100);
+        if (distance > CLOSE_RANGE) {
+            if (roll < 55 && pay(45f)) {
+                castWeaponRain(target);
+                return 65;
+            }
+            pay(30f);
+            castShurikenVolley(target);
+            return 35;
+        }
+        if (roll < 40 && pay(45f)) {
+            castWeaponRain(target);
+            return 65;
+        }
+        pay(30f);
+        castShurikenVolley(target);
+        return 35;
+    }
+
+    /** Iruka: the basics, done properly. He is the gentlest thing in the Bingo Book. */
+    private int castIruka(LivingEntity target, double distance) {
+        if (distance > CLOSE_RANGE) {
+            pay(25f);
+            castShurikenVolley(target);
+            return 40;
+        }
+        pay(25f);
+        castBladeRush(target, this.boss.getVariant().attackDamage());
+        return 35;
+    }
+
+    /** White Zetsu: there is never one of it, and it is never quite where you looked. */
+    private int castWhiteZetsu(LivingEntity target, double distance) {
+        int roll = this.boss.getRandom().nextInt(100);
+        if (roll < 30 && pay(55f)) {
+            castMultipleShadowClones();
+            return 140;
+        }
+        if (distance > CLOSE_RANGE) {
+            pay(40f);
+            castSinkAway();
+            return 90;
+        }
+        pay(30f);
+        castHiddenBlades(target);
+        return 40;
+    }
+
     // ------------------------------------------------------------------ techniques
 
     private static final DustParticleOptions SAND_TAN =
@@ -766,6 +974,359 @@ public class BossJutsuGoal extends Goal {
         }
         this.boss.level().playSound(null, this.boss.blockPosition(),
                 SoundEvents.SAND_BREAK, SoundSource.HOSTILE, 2.0f, 0.4f);
+    }
+
+    // --- Phase 20C: the Sand siblings, the second Akatsuki tier, and the Leaf's own -------
+
+    private static final DustParticleOptions WIND_PALE =
+            new DustParticleOptions(new Vector3f(0.82F, 0.92F, 0.88F), 1.1F);
+    private static final DustParticleOptions LAVA_RED =
+            new DustParticleOptions(new Vector3f(1.0F, 0.30F, 0.05F), 1.4F);
+    private static final DustParticleOptions LIME_WHITE =
+            new DustParticleOptions(new Vector3f(0.95F, 0.95F, 0.88F), 1.3F);
+    private static final DustParticleOptions THREAD_BLACK =
+            new DustParticleOptions(new Vector3f(0.12F, 0.12F, 0.14F), 1.0F);
+
+    /** Everything worth hitting near a point. The boss never catches itself. */
+    private java.util.List<LivingEntity> victimsNear(Vec3 centre, double radius) {
+        return this.boss.level().getEntitiesOfClass(LivingEntity.class,
+                new net.minecraft.world.phys.AABB(centre, centre).inflate(radius),
+                candidate -> candidate != this.boss && candidate.isAlive());
+    }
+
+    /** Kankuro's puppets breathe poison as much as they stab with it. */
+    private void castPoisonMist(LivingEntity target) {
+        Vec3 centre = target.position();
+        for (LivingEntity victim : victimsNear(centre, 4.5)) {
+            victim.hurt(this.boss.damageSources().mobAttack(this.boss), 6f);
+            victim.addEffect(new MobEffectInstance(MobEffects.POISON, 180, 1));
+            victim.addEffect(new MobEffectInstance(MobEffects.CONFUSION, 120, 0));
+        }
+        if (this.boss.level() instanceof ServerLevel serverLevel) {
+            NarutoParticles.spawnBurst(serverLevel, centre.add(0, 1.2, 0), 70, 3.0, POISON_GREEN);
+        }
+        this.boss.level().playSound(null, this.boss.blockPosition(),
+                SoundEvents.BREWING_STAND_BREW, SoundSource.HOSTILE, 1.4f, 0.6f);
+    }
+
+    /** Blades out of a sleeve - a puppet's, or a Zetsu's own arm. */
+    private void castHiddenBlades(LivingEntity target) {
+        if (target.hurt(this.boss.damageSources().mobAttack(this.boss),
+                this.boss.getVariant().attackDamage() * 1.5f)) {
+            target.addEffect(new MobEffectInstance(MobEffects.POISON, 120, 0));
+        }
+        if (this.boss.level() instanceof ServerLevel serverLevel) {
+            NarutoParticles.spawnBurst(serverLevel,
+                    target.position().add(0, target.getBbHeight() * 0.6, 0), 20, 0.9,
+                    NarutoParticles.METAL_GRAY);
+        }
+        this.boss.level().playSound(null, this.boss.blockPosition(),
+                SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.HOSTILE, 1.0f, 1.4f);
+    }
+
+    /** Kamaitachi: a blade of wind down a line, and it cuts through armour. */
+    private void castWindScythe(LivingEntity target) {
+        Vec3 origin = this.boss.position().add(0, this.boss.getBbHeight() * 0.7, 0);
+        Vec3 direction = target.position().add(0, target.getBbHeight() * 0.5, 0)
+                .subtract(origin).normalize();
+        for (double step = 2.0; step <= 20.0; step += 2.0) {
+            Vec3 point = origin.add(direction.scale(step));
+            for (LivingEntity victim : victimsNear(point, 1.8)) {
+                if (victim.hurt(this.boss.damageSources().mobAttack(this.boss), 11f)) {
+                    victim.setDeltaMovement(direction.x * 0.9, 0.3, direction.z * 0.9);
+                    victim.hurtMarked = true;
+                }
+            }
+        }
+        if (this.boss.level() instanceof ServerLevel serverLevel) {
+            NarutoParticles.spawnBolt(serverLevel, origin, origin.add(direction.scale(20.0)),
+                    2, 0.25, WIND_PALE);
+        }
+        this.boss.level().playSound(null, this.boss.blockPosition(),
+                SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.HOSTILE, 1.8f, 0.9f);
+    }
+
+    /** The fan opened all three moons: a whirlwind that lifts everything around her. */
+    private void castCuttingWhirlwind() {
+        Vec3 centre = this.boss.position();
+        for (LivingEntity victim : victimsNear(centre, 8.0)) {
+            if (victim.hurt(this.boss.damageSources().mobAttack(this.boss), 9f)) {
+                Vec3 push = victim.position().subtract(centre).normalize().scale(1.2);
+                victim.setDeltaMovement(push.x, 0.75, push.z);
+                victim.hurtMarked = true;
+            }
+        }
+        if (this.boss.level() instanceof ServerLevel serverLevel) {
+            for (double r = 2.0; r <= 8.0; r += 2.0) {
+                NarutoParticles.spawnRing(serverLevel, centre.add(0, r * 0.2, 0), r, (int) (r * 6), WIND_PALE);
+            }
+        }
+        this.boss.level().playSound(null, this.boss.blockPosition(),
+                SoundEvents.ENDER_DRAGON_FLAP, SoundSource.HOSTILE, 2.2f, 0.8f);
+    }
+
+    /** Kakuzu's lightning mask. One bolt, and it does not care what you are wearing. */
+    private void castLightningMask(LivingEntity target) {
+        Vec3 origin = this.boss.position().add(0, this.boss.getBbHeight() * 0.8, 0);
+        Vec3 impact = target.position().add(0, target.getBbHeight() * 0.5, 0);
+        for (LivingEntity victim : victimsNear(impact, 2.5)) {
+            victim.hurt(this.boss.damageSources().mobAttack(this.boss), 14f);
+            victim.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 60, 1));
+        }
+        if (this.boss.level() instanceof ServerLevel serverLevel) {
+            NarutoParticles.spawnBolt(serverLevel, origin, impact, 4, 0.7,
+                    NarutoParticles.LIGHTNING_GOLD);
+        }
+        this.boss.level().playSound(null, this.boss.blockPosition(),
+                SoundEvents.LIGHTNING_BOLT_THUNDER, SoundSource.HOSTILE, 1.2f, 1.4f);
+    }
+
+    /** Earth Spear: he hardens, and for a while nothing gets through. */
+    private void castEarthSpear() {
+        this.boss.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 160, 2, false, false));
+        this.boss.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 160, 0, false, false));
+        if (this.boss.level() instanceof ServerLevel serverLevel) {
+            NarutoParticles.spawnRing(serverLevel, this.boss.position().add(0, 1.0, 0), 1.5, 22, IRON_SAND);
+        }
+        this.boss.level().playSound(null, this.boss.blockPosition(),
+                SoundEvents.STONE_PLACE, SoundSource.HOSTILE, 1.4f, 0.5f);
+    }
+
+    /** The threads. His arm comes off and reaches across the room. */
+    private void castThreadStrike(LivingEntity target) {
+        Vec3 origin = this.boss.position().add(0, this.boss.getBbHeight() * 0.6, 0);
+        Vec3 impact = target.position().add(0, target.getBbHeight() * 0.5, 0);
+        if (target.hurt(this.boss.damageSources().mobAttack(this.boss),
+                this.boss.getVariant().attackDamage() * 1.6f)) {
+            // Dragged in: the threads pull you back to him.
+            Vec3 pull = origin.subtract(impact).normalize().scale(0.9);
+            target.setDeltaMovement(pull.x, 0.25, pull.z);
+            target.hurtMarked = true;
+        }
+        if (this.boss.level() instanceof ServerLevel serverLevel) {
+            NarutoParticles.spawnBolt(serverLevel, origin, impact, 3, 0.3, THREAD_BLACK);
+        }
+        this.boss.level().playSound(null, this.boss.blockPosition(),
+                SoundEvents.LEASH_KNOT_PLACE, SoundSource.HOSTILE, 1.4f, 0.6f);
+    }
+
+    /**
+     * Demonic Mirroring Ice Crystals: he steps out of one mirror and into another, and the
+     * needles arrive from wherever he is not.
+     */
+    private void castIceMirrors(LivingEntity target) {
+        if (!(this.boss.level() instanceof ServerLevel serverLevel)) {
+            return;
+        }
+        Vec3 centre = target.position();
+        // Three appearances, each cutting once, ending behind the target.
+        for (int i = 0; i < 3; i++) {
+            double angle = (Math.PI * 2 * i) / 3.0 + this.boss.getRandom().nextDouble();
+            Vec3 spot = centre.add(Math.cos(angle) * 3.0, 0, Math.sin(angle) * 3.0);
+            NarutoParticles.spawnRing(serverLevel, spot.add(0, 1.0, 0), 1.0, 14, NarutoParticles.ICE_PALE);
+            target.invulnerableTime = 0;
+            target.hurt(this.boss.damageSources().mobAttack(this.boss), 7f);
+        }
+        double landingAngle = this.boss.getRandom().nextDouble() * Math.PI * 2;
+        // randomTeleport, not teleportTo: it refuses positions inside blocks, so he cannot
+        // step out of a mirror into a wall and suffocate there.
+        this.boss.randomTeleport(centre.x + Math.cos(landingAngle) * 2.5, centre.y,
+                centre.z + Math.sin(landingAngle) * 2.5, false);
+        this.boss.getLookControl().setLookAt(target, 30f, 30f);
+        target.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 80, 1));
+        this.boss.level().playSound(null, this.boss.blockPosition(),
+                SoundEvents.GLASS_BREAK, SoundSource.HOSTILE, 1.6f, 1.2f);
+    }
+
+    /** A Thousand Flying Water Needles, frozen. A cone of them, and they all land. */
+    private void castThousandNeedles(LivingEntity target) {
+        Vec3 origin = this.boss.position().add(0, this.boss.getBbHeight() * 0.7, 0);
+        Vec3 direction = target.position().add(0, target.getBbHeight() * 0.5, 0)
+                .subtract(origin).normalize();
+        for (double step = 1.5; step <= 14.0; step += 1.5) {
+            Vec3 point = origin.add(direction.scale(step));
+            for (LivingEntity victim : victimsNear(point, 2.2)) {
+                victim.hurt(this.boss.damageSources().mobAttack(this.boss), 6f);
+                victim.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 100, 1));
+            }
+            if (this.boss.level() instanceof ServerLevel serverLevel) {
+                NarutoParticles.spawnBurst(serverLevel, point, 12, 1.0, NarutoParticles.ICE_PALE);
+            }
+        }
+        this.boss.level().playSound(null, this.boss.blockPosition(),
+                SoundEvents.ARROW_SHOOT, SoundSource.HOSTILE, 1.4f, 1.6f);
+    }
+
+    /** Lava Release: it lands, and then it keeps burning. */
+    private void castLavaSpit(LivingEntity target) {
+        Vec3 impact = target.position();
+        for (LivingEntity victim : victimsNear(impact, 3.5)) {
+            victim.hurt(this.boss.damageSources().mobAttack(this.boss), 10f);
+            victim.setSecondsOnFire(7);
+        }
+        if (this.boss.level() instanceof ServerLevel serverLevel) {
+            NarutoParticles.spawnBolt(serverLevel,
+                    this.boss.position().add(0, this.boss.getBbHeight() * 0.8, 0),
+                    impact.add(0, 1.0, 0), 3, 0.5, LAVA_RED);
+            NarutoParticles.spawnRing(serverLevel, impact.add(0, 0.2, 0), 3.0, 26, LAVA_RED);
+        }
+        this.boss.level().playSound(null, this.boss.blockPosition(),
+                SoundEvents.LAVA_POP, SoundSource.HOSTILE, 2.0f, 0.6f);
+    }
+
+    /** Quicklime Congealing: it goes in your eyes first and sets afterwards. */
+    private void castQuicklime(LivingEntity target) {
+        Vec3 impact = target.position();
+        for (LivingEntity victim : victimsNear(impact, 4.0)) {
+            victim.hurt(this.boss.damageSources().mobAttack(this.boss), 5f);
+            victim.addEffect(new MobEffectInstance(MobEffects.BLINDNESS, 120, 0));
+            victim.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 140, 2));
+        }
+        if (this.boss.level() instanceof ServerLevel serverLevel) {
+            NarutoParticles.spawnBurst(serverLevel, impact.add(0, 1.2, 0), 70, 3.2, LIME_WHITE);
+        }
+        this.boss.level().playSound(null, this.boss.blockPosition(),
+                SoundEvents.LAVA_EXTINGUISH, SoundSource.HOSTILE, 1.6f, 0.9f);
+    }
+
+    /** Morning Peacock: so many punches the air catches fire. */
+    private void castMorningPeacock(LivingEntity target) {
+        for (int i = 0; i < 6; i++) {
+            target.invulnerableTime = 0;
+            target.hurt(this.boss.damageSources().mobAttack(this.boss),
+                    this.boss.getVariant().attackDamage() * 0.55f);
+        }
+        target.setSecondsOnFire(4);
+        if (this.boss.level() instanceof ServerLevel serverLevel) {
+            NarutoParticles.spawnBurst(serverLevel,
+                    target.position().add(0, target.getBbHeight() * 0.6, 0), 60, 1.6, LAVA_RED);
+        }
+        this.boss.level().playSound(null, this.boss.blockPosition(),
+                SoundEvents.PLAYER_ATTACK_STRONG, SoundSource.HOSTILE, 2.0f, 1.3f);
+    }
+
+    /** Evening Elephant: one hit, and everything behind it goes too. */
+    private void castEveningElephant(LivingEntity target) {
+        Vec3 direction = target.position().subtract(this.boss.position()).normalize();
+        Vec3 centre = this.boss.position().add(direction.scale(3.0));
+        for (LivingEntity victim : victimsNear(centre, 5.0)) {
+            if (victim.hurt(this.boss.damageSources().mobAttack(this.boss),
+                    this.boss.getVariant().attackDamage() * 2.2f)) {
+                victim.setDeltaMovement(direction.x * 1.8, 0.6, direction.z * 1.8);
+                victim.hurtMarked = true;
+            }
+        }
+        if (this.boss.level() instanceof ServerLevel serverLevel) {
+            NarutoParticles.spawnRing(serverLevel, centre, 4.5, 30, WIND_PALE);
+            serverLevel.sendParticles(ParticleTypes.EXPLOSION, centre.x, centre.y + 1.0, centre.z,
+                    4, 1.2, 0.6, 1.2, 0.0);
+        }
+        this.boss.level().playSound(null, this.boss.blockPosition(),
+                SoundEvents.GENERIC_EXPLODE, SoundSource.HOSTILE, 2.0f, 0.7f);
+    }
+
+    /** Creation Rebirth: the stored chakra goes back in, and the wounds close. */
+    private void castCreationRebirth() {
+        this.boss.heal(this.boss.getMaxHealth() * 0.30f);
+        this.boss.addEffect(new MobEffectInstance(MobEffects.REGENERATION, 200, 1, false, false));
+        if (this.boss.level() instanceof ServerLevel serverLevel) {
+            NarutoParticles.spawnRing(serverLevel, this.boss.position().add(0, 1.0, 0), 1.8, 26,
+                    new DustParticleOptions(new Vector3f(0.4F, 1.0F, 0.6F), 1.2F));
+            serverLevel.sendParticles(ParticleTypes.HEART,
+                    this.boss.getX(), this.boss.getY() + 2.0, this.boss.getZ(), 12, 0.6, 0.5, 0.6, 0.0);
+        }
+        this.boss.level().playSound(null, this.boss.blockPosition(),
+                SoundEvents.BEACON_ACTIVATE, SoundSource.HOSTILE, 1.4f, 1.2f);
+    }
+
+    /** Shannaro: the fist goes into the ground and the ground stops being flat. */
+    private void castMonstrousStrength() {
+        Vec3 centre = this.boss.position();
+        for (LivingEntity victim : victimsNear(centre, 7.0)) {
+            if (victim.hurt(this.boss.damageSources().mobAttack(this.boss),
+                    this.boss.getVariant().attackDamage() * 1.3f)) {
+                Vec3 push = victim.position().subtract(centre).normalize().scale(0.9);
+                victim.setDeltaMovement(push.x, 0.8, push.z);
+                victim.hurtMarked = true;
+            }
+        }
+        if (this.boss.level() instanceof ServerLevel serverLevel) {
+            NarutoParticles.spawnRing(serverLevel, centre, 6.5, 40, NarutoParticles.LOG_BROWN);
+            serverLevel.sendParticles(ParticleTypes.EXPLOSION, centre.x, centre.y, centre.z,
+                    5, 2.0, 0.2, 2.0, 0.0);
+        }
+        this.boss.level().playSound(null, this.boss.blockPosition(),
+                SoundEvents.GENERIC_EXPLODE, SoundSource.HOSTILE, 2.2f, 0.5f);
+    }
+
+    /** Chakra Enhanced Strength, on one target. It is not subtle and it does not need to be. */
+    private void castChakraPunch(LivingEntity target) {
+        if (target.hurt(this.boss.damageSources().mobAttack(this.boss),
+                this.boss.getVariant().attackDamage() * 2.4f)) {
+            Vec3 direction = target.position().subtract(this.boss.position()).normalize();
+            target.setDeltaMovement(direction.x * 1.6, 0.7, direction.z * 1.6);
+            target.hurtMarked = true;
+        }
+        if (this.boss.level() instanceof ServerLevel serverLevel) {
+            NarutoParticles.spawnBurst(serverLevel,
+                    target.position().add(0, target.getBbHeight() * 0.5, 0), 40, 1.2,
+                    NarutoParticles.ROTATION_WHITE);
+        }
+        this.boss.level().playSound(null, this.boss.blockPosition(),
+                SoundEvents.PLAYER_ATTACK_CRIT, SoundSource.HOSTILE, 2.0f, 0.8f);
+    }
+
+    /** Rising Twin Dragons: the scrolls open and everything in them comes down at once. */
+    private void castWeaponRain(LivingEntity target) {
+        Vec3 centre = target.position();
+        for (LivingEntity victim : victimsNear(centre, 5.0)) {
+            for (int i = 0; i < 3; i++) {
+                victim.invulnerableTime = 0;
+                victim.hurt(this.boss.damageSources().mobAttack(this.boss), 5f);
+            }
+        }
+        if (this.boss.level() instanceof ServerLevel serverLevel) {
+            for (int i = 0; i < 18; i++) {
+                double angle = this.boss.getRandom().nextDouble() * Math.PI * 2;
+                double radius = this.boss.getRandom().nextDouble() * 4.5;
+                Vec3 from = centre.add(Math.cos(angle) * radius, 8.0, Math.sin(angle) * radius);
+                NarutoParticles.spawnBolt(serverLevel, from,
+                        from.subtract(0, 8.0, 0), 1, 0.1, NarutoParticles.METAL_GRAY);
+            }
+        }
+        this.boss.level().playSound(null, this.boss.blockPosition(),
+                SoundEvents.ANVIL_LAND, SoundSource.HOSTILE, 1.6f, 1.3f);
+    }
+
+    /** A plain volley of shuriken. Every ninja in the world can do this one. */
+    private void castShurikenVolley(LivingEntity target) {
+        Vec3 origin = this.boss.position().add(0, this.boss.getBbHeight() * 0.7, 0);
+        Vec3 impact = target.position().add(0, target.getBbHeight() * 0.5, 0);
+        for (LivingEntity victim : victimsNear(impact, 2.0)) {
+            for (int i = 0; i < 2; i++) {
+                victim.invulnerableTime = 0;
+                victim.hurt(this.boss.damageSources().mobAttack(this.boss), 4.5f);
+            }
+        }
+        if (this.boss.level() instanceof ServerLevel serverLevel) {
+            NarutoParticles.spawnBolt(serverLevel, origin, impact, 1, 0.2, NarutoParticles.METAL_GRAY);
+        }
+        this.boss.level().playSound(null, this.boss.blockPosition(),
+                SoundEvents.ARROW_SHOOT, SoundSource.HOSTILE, 1.0f, 1.2f);
+    }
+
+    /** Zetsu goes into the ground and comes up somewhere you were not watching. */
+    private void castSinkAway() {
+        this.boss.addEffect(new MobEffectInstance(MobEffects.INVISIBILITY, 120, 0, false, false));
+        this.boss.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SPEED, 120, 1, false, false));
+        if (this.boss.level() instanceof ServerLevel serverLevel) {
+            NarutoParticles.spawnRing(serverLevel, this.boss.position(), 1.2, 18,
+                    new DustParticleOptions(new Vector3f(0.85F, 0.90F, 0.85F), 1.2F));
+            serverLevel.sendParticles(ParticleTypes.CLOUD,
+                    this.boss.getX(), this.boss.getY() + 0.2, this.boss.getZ(), 25, 0.5, 0.2, 0.5, 0.01);
+        }
+        this.boss.level().playSound(null, this.boss.blockPosition(),
+                SoundEvents.SLIME_SQUISH, SoundSource.HOSTILE, 1.2f, 0.7f);
     }
 
     /** Itachi: Amaterasu — the flame entity spreads on its own from where it lands. */

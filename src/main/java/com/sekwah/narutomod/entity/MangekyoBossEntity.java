@@ -565,6 +565,49 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
             // the fight at all. Without this he was a man throwing senbon, which is the one
             // thing the character is not.
             case SASORI -> this.summonPuppet(PuppetVariant.forSasoriStage(stage));
+            // Kankuro fights the same way his teacher does, with a smaller collection.
+            case KANKURO -> this.summonPuppet(stage >= 3
+                    ? PuppetVariant.HUNDRED : PuppetVariant.KARASU);
+            /*
+             * Might Guy opens a gate each time he is pushed, and the last one is the one that
+             * kills him. Speed and damage climb far past anything else on the roster, and the
+             * wither is the cost - a Guy left alone long enough at stage 4 burns himself out,
+             * which is exactly how the technique is supposed to end.
+             */
+            case MIGHT_GUY -> {
+                this.addEffect(new net.minecraft.world.effect.MobEffectInstance(
+                        net.minecraft.world.effect.MobEffects.DAMAGE_BOOST, 99999, stage, false, false));
+                this.addEffect(new net.minecraft.world.effect.MobEffectInstance(
+                        net.minecraft.world.effect.MobEffects.MOVEMENT_SPEED, 99999, stage, false, false));
+                if (stage >= 4) {
+                    this.addEffect(new net.minecraft.world.effect.MobEffectInstance(
+                            net.minecraft.world.effect.MobEffects.WITHER, 99999, 0, false, false));
+                }
+            }
+            /*
+             * Kakuzu has five hearts, so he does not stay dead the way other people do: every
+             * step down the ladder puts one back. It is not regeneration - it is a lump of
+             * health returning at the moment you thought you had him.
+             */
+            case KAKUZU -> {
+                this.heal(this.getMaxHealth() * 0.18f);
+                this.addEffect(new net.minecraft.world.effect.MobEffectInstance(
+                        net.minecraft.world.effect.MobEffects.DAMAGE_BOOST, 99999, amplifier, false, false));
+            }
+            // A medic's stored chakra: she comes back from further down than she should.
+            case SAKURA -> {
+                this.addEffect(new net.minecraft.world.effect.MobEffectInstance(
+                        net.minecraft.world.effect.MobEffects.DAMAGE_BOOST, 99999, amplifier, false, false));
+                if (stage >= 3) {
+                    this.addEffect(new net.minecraft.world.effect.MobEffectInstance(
+                            net.minecraft.world.effect.MobEffects.REGENERATION, 99999, 0, false, false));
+                }
+            }
+            // Haku does not get stronger, he gets harder to touch.
+            case HAKU -> this.addEffect(new net.minecraft.world.effect.MobEffectInstance(
+                    net.minecraft.world.effect.MobEffects.MOVEMENT_SPEED, 99999, stage, false, false));
+            // There is always another Zetsu. Being hurt is how they multiply.
+            case WHITE_ZETSU -> this.summonShadowClones(stage);
             // More sand leaves the gourd every time he is pushed, so the shield thickens
             // (see blockedBySand) and the sand starts carrying him instead of the ground.
             case GAARA -> {

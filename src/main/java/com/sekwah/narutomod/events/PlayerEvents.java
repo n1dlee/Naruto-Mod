@@ -1148,6 +1148,8 @@ public class PlayerEvents {
                     case ZABUZA -> com.sekwah.narutomod.item.NarutoItems.KUBIKIRIBOCHO.get();
                     case HIDAN -> com.sekwah.narutomod.item.NarutoItems.KABUTOWARI.get();
                     case DEIDARA -> com.sekwah.narutomod.item.NarutoItems.SHIBUKI.get();
+                    case TEMARI -> com.sekwah.narutomod.item.NarutoItems.FOLDING_FAN.get();
+                    case TENTEN -> com.sekwah.narutomod.item.NarutoItems.FUMA_SHURIKEN.get();
                     default -> com.sekwah.narutomod.item.NarutoItems.NUIBARI.get();
                 };
                 boss.spawnAtLocation(new net.minecraft.world.item.ItemStack(trophy));
@@ -1170,6 +1172,16 @@ public class PlayerEvents {
                     case NARUTO -> com.sekwah.narutomod.item.NarutoItems.SCROLL_RASENSHURIKEN.get();
                     // The sand technique closest to what this mod already has him doing.
                     case GAARA -> com.sekwah.narutomod.item.NarutoItems.SCROLL_EARTH_SPIKES.get();
+                    // Each of these is the technique that wielder is actually known for,
+                    // mapped onto the closest thing this mod already teaches.
+                    case KANKURO -> com.sekwah.narutomod.item.NarutoItems.SCROLL_KUCHIYOSE.get();
+                    case KAKUZU -> com.sekwah.narutomod.item.NarutoItems.SCROLL_FALSE_DARKNESS.get();
+                    case HAKU -> com.sekwah.narutomod.item.NarutoItems.SCROLL_WATER_DRAGON.get();
+                    case KUROTSUCHI -> com.sekwah.narutomod.item.NarutoItems.SCROLL_FIREBALL.get();
+                    case MIGHT_GUY -> com.sekwah.narutomod.item.NarutoItems.SCROLL_EIGHT_GATES.get();
+                    case SAKURA -> com.sekwah.narutomod.item.NarutoItems.SCROLL_EARTH_WALL.get();
+                    case IRUKA -> com.sekwah.narutomod.item.NarutoItems.SCROLL_SHADOW_CLONE.get();
+                    case WHITE_ZETSU -> com.sekwah.narutomod.item.NarutoItems.SCROLL_MULTIPLE_SHADOW_CLONE.get();
                     default -> com.sekwah.narutomod.item.NarutoItems.SCROLL_SHADOW_CLONE.get();
                 };
                 boss.spawnAtLocation(new net.minecraft.world.item.ItemStack(scroll));

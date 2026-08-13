@@ -55,7 +55,30 @@ public enum MangekyoBossVariant {
      * Shukaku's jinchuriki. The sand answers before he does - it blocks what he never saw
      * coming - and when the fight turns, the One Tail comes out through it.
      */
-    GAARA("gaara", 300f, 10f, 0.29f, 0.85f, 0.72f, 0.38f, 4);
+    GAARA("gaara", 300f, 10f, 0.29f, 0.85f, 0.72f, 0.38f, 4),
+
+    // --- The Sand siblings, the second Akatsuki tier, and the Leaf's own. Appended, as
+    // always: the variant is an ordinal in NBT.
+    /** Gaara's brother. He does not fight either - his puppets do. */
+    KANKURO("kankuro", 230f, 9f, 0.31f, 0.55f, 0.35f, 0.15f, 4),
+    /** Wind Release and a fan the size of a door. Nothing she throws is subtle. */
+    TEMARI("temari", 240f, 10f, 0.33f, 0.30f, 0.55f, 0.75f, 4),
+    /** Five hearts, four masks, and a body stitched back together after every one of them. */
+    KAKUZU("kakuzu", 340f, 12f, 0.29f, 0.20f, 0.45f, 0.30f, 3),
+    /** Ice Release. Fast, fragile, and he does not miss. */
+    HAKU("haku", 200f, 9f, 0.40f, 0.70f, 0.90f, 1.00f, 5),
+    /** Lava Release out of Iwa. What she spits keeps burning after it lands. */
+    KUROTSUCHI("kurotsuchi", 250f, 10f, 0.32f, 0.90f, 0.40f, 0.10f, 4),
+    /** No ninjutsu at all. Eight Gates, and the hardest fists in the world. */
+    MIGHT_GUY("might_guy", 320f, 15f, 0.38f, 0.20f, 0.85f, 0.25f, 3),
+    /** Monstrous strength and a medic's chakra. She breaks the ground you stand on. */
+    SAKURA("sakura", 270f, 13f, 0.32f, 1.00f, 0.55f, 0.70f, 4),
+    /** A scroll for every weapon ever made, and she throws all of them. */
+    TENTEN("tenten", 190f, 8f, 0.34f, 0.60f, 0.30f, 0.20f, 5),
+    /** A chunin instructor. The weakest thing on this list, and he knows the basics cold. */
+    IRUKA("iruka", 150f, 7f, 0.32f, 0.45f, 0.35f, 0.25f, 6),
+    /** White Zetsu. Copies itself, sinks into the ground, and wears other people's faces. */
+    WHITE_ZETSU("white_zetsu", 180f, 8f, 0.30f, 0.85f, 0.90f, 0.85f, 6);
 
     /** What killing this wielder leaves behind. */
     public enum BossDrop {
@@ -81,11 +104,12 @@ public enum MangekyoBossVariant {
     public BossDrop dropKind() {
         return switch (this) {
             case ITACHI, SASUKE, MADARA, SHISUI, OBITO -> BossDrop.MANGEKYO;
-            case KISAME, ZABUZA, HIDAN, DEIDARA, SASORI -> BossDrop.BLADE;
+            case KISAME, ZABUZA, HIDAN, DEIDARA, SASORI, TEMARI, TENTEN -> BossDrop.BLADE;
             case NAGATO -> BossDrop.RINNEGAN;
             case HINATA -> BossDrop.BYAKUGAN;
             case KAKASHI -> BossDrop.SHARINGAN;
-            case HASHIRAMA, NARUTO, SHIKAMARU, GAARA -> BossDrop.SCROLL;
+            case HASHIRAMA, NARUTO, SHIKAMARU, GAARA, KANKURO, KAKUZU, HAKU, KUROTSUCHI,
+                    MIGHT_GUY, SAKURA, IRUKA, WHITE_ZETSU -> BossDrop.SCROLL;
         };
     }
 
@@ -276,8 +300,16 @@ public enum MangekyoBossVariant {
             // Hashirama, Nagato and Hinata all fought empty-handed - the wood, the gravity
             // and the Gentle Fist are the weapon. Giving them a knife would be wrong twice
             // over: wrong for the character, and it would quietly add its damage on top.
-            // The gourd is the weapon, and it is never in his hands.
-            case HASHIRAMA, NAGATO, HINATA, GAARA -> null;
+            case TEMARI -> com.sekwah.narutomod.item.NarutoItems.FOLDING_FAN;
+            case TENTEN -> com.sekwah.narutomod.item.NarutoItems.FUMA_SHURIKEN;
+            case HAKU -> com.sekwah.narutomod.item.NarutoItems.SENBON;
+            case IRUKA -> com.sekwah.narutomod.item.NarutoItems.KUNAI;
+            // The gourd is the weapon and it is never in his hands; Kankuro fights through
+            // puppets; Kakuzu's threads are his own body; and giving Guy or Sakura a knife
+            // would be wrong twice over - wrong for the character, and it would quietly add
+            // its damage on top of fists that are already the whole point of them.
+            case HASHIRAMA, NAGATO, HINATA, GAARA, KANKURO, KAKUZU, KUROTSUCHI,
+                    MIGHT_GUY, SAKURA, WHITE_ZETSU -> null;
         };
     }
 

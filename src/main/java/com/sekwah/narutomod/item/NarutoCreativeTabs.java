@@ -41,6 +41,7 @@ public class NarutoCreativeTabs {
                 output.accept(NarutoItems.HIRAMEKAREI.get());
                 output.accept(NarutoItems.KIBA_BLADES.get());
                 output.accept(NarutoItems.GUNBAI.get());
+                output.accept(NarutoItems.FOLDING_FAN.get());
                 output.accept(NarutoItems.HIRAISHIN_KUNAI.get());
                 output.accept(NarutoItems.BINGO_BOOK.get());
                 output.accept(NarutoItems.CHAKRA_PAPER.get());

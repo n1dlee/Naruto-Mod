@@ -138,6 +138,13 @@ public class NarutoItems {
     public static final RegistryObject<Item> GUNBAI = ITEMS.register("gunbai", ()
             -> new GunbaiItem(new Item.Properties().stacksTo(1)));
 
+    /**
+     * Temari's folding fan. Swung two-handed, so it is slow and it hits like a slab of iron -
+     * the reach is the point, not the speed.
+     */
+    public static final RegistryObject<Item> FOLDING_FAN = ITEMS.register("folding_fan", ()
+            -> new SwordItem(NinjaTier.KATANA, 5, -2.6F, new Item.Properties().stacksTo(1)));
+
     /** Phase 20: the marked kunai Minato threw ahead of himself. */
     public static final RegistryObject<Item> HIRAISHIN_KUNAI = ITEMS.register("hiraishin_kunai", ()
             -> new HiraishinKunaiItem(new Item.Properties()));
