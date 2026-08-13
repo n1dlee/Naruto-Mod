@@ -51,7 +51,8 @@ public class BossKuramaLayer extends RenderLayer<MangekyoBossEntity, HumanoidMod
     private static final int[] SHROUD_TAILS = {0, 3, 6, 9};
 
     private static final float SHROUD_ALPHA = 0.9f;
-    private static final float AVATAR_ALPHA = 0.45f;
+    /** Matches the player's fox: solid enough to read as a body rather than orange haze. */
+    private static final float AVATAR_ALPHA = 0.8f;
 
     public BossKuramaLayer(RenderLayerParent<MangekyoBossEntity, HumanoidModel<MangekyoBossEntity>> parent) {
         super(parent);

@@ -2663,19 +2663,22 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
      */
     @Override
     public float getGiantEyeHeight() {
-        if (this.susanooActive && this.susanooStage >= 4) {
-            // Phase 18: Complete Body now renders the ported SusanooWingedModel, sized to
-            // ~13 blocks tall (SusanooRenderer.STAGE_TARGET_HEIGHT[4]) instead of the old
-            // ~45-block blocky fallback. This must track that height or the camera ends up
-            // floating far above the (now much smaller) avatar — the exact "stuck high in
-            // the sky, can't see Susanoo" bug reported after that model swap. ~0.85 of the
-            // model's height puts the camera near its head, same ratio the old value used.
-            return 11.0f;
-        }
-        if (this.kuramaCloakActive && this.kuramaTailCount >= 9) {
-            return 42.0f;
-        }
-        return -1f;
+        /*
+         * Both giant forms stand at the one shared height now, so the camera is derived from
+         * that height instead of being written down twice.
+         *
+         * The Kurama figure was 42, tuned back when the fox was drawn at sixty-three blocks.
+         * Unifying the final forms brought it down to eighteen and left the camera where it
+         * was - so a player in the nine-tail avatar was parked two dozen blocks above their
+         * own head, looking at empty sky with the procedural tails streaming past. Exactly
+         * the failure the Susanoo note above describes, repeated because the number lived in
+         * two places instead of one.
+         */
+        boolean giant = (this.susanooActive && this.susanooStage >= 4)
+                || (this.kuramaCloakActive && this.kuramaTailCount >= 9);
+        // ~0.85 of the form's height puts the camera near its head, the ratio the original
+        // Susanoo value used.
+        return giant ? com.sekwah.narutomod.util.GiantForm.HEIGHT_BLOCKS * 0.85f : -1f;
     }
 
     private boolean wasGiantFormActiveClient = false;

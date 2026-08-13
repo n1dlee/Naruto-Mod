@@ -118,26 +118,38 @@ public class KuramaTailRenderer {
         poseStack.translate(0.0, 0.9, 0.15);
         poseStack.mulPose(Axis.YP.rotationDegrees(180.0F - bodyYaw));
 
-        // Tails render in their own scaled sub-scope so tailScale doesn't leak into (and
-        // compound with) the exoskeleton/avatar block below.
-        poseStack.pushPose();
-        poseStack.scale(tailScale, tailScale, tailScale);
-        float arcSpread = tailCount == 1 ? 0f : 140f / (tailCount - 1);
-        float startAngle = tailCount == 1 ? 0f : -70f;
-
-        for (int i = 0; i < tailCount; i++) {
-            float angle = startAngle + i * arcSpread;
-            float wavePhase = (ageInTicks + i * 6) * 0.15f;
-            float wave = (float) Math.sin(wavePhase) * 0.12f;
-
+        /*
+         * The procedural tails stop at eight.
+         *
+         * At nine the Full Avatar below IS the fox, tails and all, and drawing these on top
+         * of it put nine orange spokes through the model at a completely different scale.
+         * With the camera also sitting too high to see the avatar, all that was left on
+         * screen was the spokes - the "orange sticks and no Kurama at all" report. The class
+         * comment above has claimed these were gone since the shroud was imported; this is
+         * the loop that kept drawing them anyway.
+         */
+        if (tailCount < 9) {
+            // Tails render in their own scaled sub-scope so tailScale doesn't leak into (and
+            // compound with) the exoskeleton/avatar block below.
             poseStack.pushPose();
-            poseStack.mulPose(Axis.YP.rotationDegrees(angle));
-            model.animate(wave);
-            model.renderToBuffer(poseStack, consumer, packedLight, OverlayTexture.NO_OVERLAY,
-                    1.0f, 0.5f, 0.1f, 0.9f);
+            poseStack.scale(tailScale, tailScale, tailScale);
+            float arcSpread = tailCount == 1 ? 0f : 140f / (tailCount - 1);
+            float startAngle = tailCount == 1 ? 0f : -70f;
+
+            for (int i = 0; i < tailCount; i++) {
+                float angle = startAngle + i * arcSpread;
+                float wavePhase = (ageInTicks + i * 6) * 0.15f;
+                float wave = (float) Math.sin(wavePhase) * 0.12f;
+
+                poseStack.pushPose();
+                poseStack.mulPose(Axis.YP.rotationDegrees(angle));
+                model.animate(wave);
+                model.renderToBuffer(poseStack, consumer, packedLight, OverlayTexture.NO_OVERLAY,
+                        1.0f, 0.5f, 0.1f, 0.9f);
+                poseStack.popPose();
+            }
             poseStack.popPose();
         }
-        poseStack.popPose();
 
         // Tails 4+: growing fox exoskeleton (worn claws -> full looming avatar at tail 9),
         // rendered in its own independent scope so its translate/scale amounts are plain
@@ -173,8 +185,11 @@ public class KuramaTailRenderer {
                 // number. The surge still drives damage and duration.
                 poseStack.scale(-FULL_AVATAR_SCALE, -FULL_AVATAR_SCALE, FULL_AVATAR_SCALE);
             }
+            // Solid enough to read as a body. At 0.35 an eighteen-block fox was a suggestion
+            // of orange haze against the sky, which is not what standing inside Kurama should
+            // look like.
             avatarModel.renderToBuffer(poseStack, avatarConsumer, packedLight, OverlayTexture.NO_OVERLAY,
-                    1.0f, 0.45f, 0.1f, 0.35f);
+                    1.0f, 0.45f, 0.1f, 0.8f);
             poseStack.popPose();
         }
 
