@@ -1186,6 +1186,57 @@ public class PlayerEvents {
      * gains that wielder's signature technique. Beating several stacks their techniques,
      * so hunting all five is a real progression path rather than a one-off swap.
      */
+    /** Felling a tailed beast is the largest single thing a ninja can do in this world. */
+    private static final float TAILED_BEAST_KILL_XP = 14000f;
+
+    /**
+     * Bringing down a tailed beast.
+     *
+     * The reward is deliberately not an eye or a bloodline: nothing about killing Gyuki makes
+     * a ninja an Uchiha. It is chakra - a great deal of it, scaled by how many tails the thing
+     * had - plus its technique scroll, which is the part worth carrying home.
+     */
+    @SubscribeEvent
+    public static void onTailedBeastKill(net.minecraftforge.event.entity.living.LivingDeathEvent event) {
+        if (!(event.getEntity() instanceof com.sekwah.narutomod.entity.TailedBeastEntity beast)
+                || beast.level().isClientSide) {
+            return;
+        }
+        Player killer = creditedPlayer(event.getSource(), beast.level());
+        if (killer == null) {
+            return;
+        }
+        com.sekwah.narutomod.entity.TailedBeastVariant variant = beast.getVariant();
+        killer.getCapability(NinjaCapabilityHandler.NINJA_DATA).ifPresent(data ->
+                data.addChakraXp(TAILED_BEAST_KILL_XP * (0.6f + 0.05f * variant.getTails())));
+
+        killer.displayClientMessage(Component.literal(variant.getDisplayName() + " has been felled")
+                .withStyle(ChatFormatting.GOLD), false);
+        killer.level().playSound(null, killer.blockPosition(),
+                net.minecraft.sounds.SoundEvents.UI_TOAST_CHALLENGE_COMPLETE,
+                net.minecraft.sounds.SoundSource.PLAYERS, 1.0f, 0.9f);
+
+        // Chakra torn loose from a beast this size is worth something to a medic or a sealer.
+        beast.spawnAtLocation(new net.minecraft.world.item.ItemStack(
+                com.sekwah.narutomod.item.NarutoItems.SOLDIER_PILL.get(), 4 + variant.getTails()));
+        beast.spawnAtLocation(new net.minecraft.world.item.ItemStack(tailedBeastScroll(variant)));
+    }
+
+    /** One scroll per beast, picked to fit what that beast actually does. */
+    private static net.minecraft.world.item.Item tailedBeastScroll(
+            com.sekwah.narutomod.entity.TailedBeastVariant variant) {
+        return switch (variant) {
+            case SHUKAKU -> com.sekwah.narutomod.item.NarutoItems.SCROLL_GREAT_BREAKTHROUGH.get();
+            case MATATABI -> com.sekwah.narutomod.item.NarutoItems.SCROLL_FIREBALL.get();
+            case ISOBU -> com.sekwah.narutomod.item.NarutoItems.SCROLL_WATER_DRAGON.get();
+            case SON_GOKU -> com.sekwah.narutomod.item.NarutoItems.SCROLL_EARTH_SPIKES.get();
+            case KOKUO -> com.sekwah.narutomod.item.NarutoItems.SCROLL_WATER_BULLET.get();
+            case SAIKEN -> com.sekwah.narutomod.item.NarutoItems.SCROLL_EARTH_WALL.get();
+            case CHOMEI -> com.sekwah.narutomod.item.NarutoItems.SCROLL_RASENSHURIKEN.get();
+            case GYUKI -> com.sekwah.narutomod.item.NarutoItems.SCROLL_RASENGAN.get();
+        };
+    }
+
     @SubscribeEvent
     public static void onMangekyoBossKill(net.minecraftforge.event.entity.living.LivingDeathEvent event) {
         if (!(event.getEntity() instanceof MangekyoBossEntity boss) || boss.level().isClientSide) {

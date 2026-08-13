@@ -1,4 +1,80 @@
 {
+  "biju.shukaku": {
+    "category": "hostile",
+    "sounds": [
+      "narutomod:biju/1tails_roar"
+    ],
+    "subtitle": "narutomod.subtitle.biju_roar"
+  },
+  "biju.matatabi": {
+    "category": "hostile",
+    "sounds": [
+      "narutomod:biju/matatabi_roar1",
+      "narutomod:biju/matatabi_roar2"
+    ],
+    "subtitle": "narutomod.subtitle.biju_roar"
+  },
+  "biju.isobu": {
+    "category": "hostile",
+    "sounds": [
+      "narutomod:biju/isobu_roar"
+    ],
+    "subtitle": "narutomod.subtitle.biju_roar"
+  },
+  "biju.son_goku": {
+    "category": "hostile",
+    "sounds": [
+      "narutomod:biju/4tails_idle1",
+      "narutomod:biju/4tails_idle2"
+    ],
+    "subtitle": "narutomod.subtitle.biju_roar"
+  },
+  "biju.chomei": {
+    "category": "hostile",
+    "sounds": [
+      "narutomod:biju/chomei_flying"
+    ],
+    "subtitle": "narutomod.subtitle.biju_roar"
+  },
+  "biju.gyuki": {
+    "category": "hostile",
+    "sounds": [
+      "narutomod:biju/gyuki_roar",
+      "narutomod:biju/gyuki_snort"
+    ],
+    "subtitle": "narutomod.subtitle.biju_roar"
+  },
+  "biju.roar": {
+    "category": "hostile",
+    "sounds": [
+      "narutomod:biju/1tails_roar",
+      "narutomod:biju/isobu_roar",
+      "narutomod:biju/gyuki_roar"
+    ],
+    "subtitle": "narutomod.subtitle.biju_roar"
+  },
+  "biju.hurt": {
+    "category": "hostile",
+    "sounds": [
+      "narutomod:biju/4tails_hurt",
+      "narutomod:biju/isobu_hurt"
+    ],
+    "subtitle": "narutomod.subtitle.biju_hurt"
+  },
+  "biju.death": {
+    "category": "hostile",
+    "sounds": [
+      "narutomod:biju/4tails_defeat"
+    ],
+    "subtitle": "narutomod.subtitle.biju_death"
+  },
+  "biju.bijudama": {
+    "category": "hostile",
+    "sounds": [
+      "narutomod:biju/bijudama"
+    ],
+    "subtitle": "narutomod.subtitle.bijudama"
+  },
   "kunai_thud": {
     "category": "neutral",
     "sounds": [

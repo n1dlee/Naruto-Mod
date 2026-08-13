@@ -112,6 +112,22 @@ public class NarutoEntities {
                     .sized(0.6F, 1.95F).clientTrackingRange(8));
 
     /**
+     * Phase 19: the eight tailed beasts. Registered at Shukaku's size (variant 0); every
+     * species overrides getDimensions from its synced variant, so this is only the default
+     * before one is chosen.
+     */
+    public static final RegistryObject<EntityType<TailedBeastEntity>> TAILED_BEAST = register("tailed_beast",
+            EntityType.Builder.<TailedBeastEntity>of(TailedBeastEntity::new, MobCategory.MONSTER)
+                    .sized(2.4F, 6.6F).clientTrackingRange(24).fireImmune());
+
+    /** Bijudama. Tracked far out: you are supposed to see one coming. */
+    public static final RegistryObject<EntityType<com.sekwah.narutomod.entity.jutsuprojectile.TailedBeastBombEntity>>
+            TAILED_BEAST_BOMB = register("tailed_beast_bomb",
+            EntityType.Builder.<com.sekwah.narutomod.entity.jutsuprojectile.TailedBeastBombEntity>of(
+                            com.sekwah.narutomod.entity.jutsuprojectile.TailedBeastBombEntity::new, MobCategory.MISC)
+                    .sized(2.0F, 2.0F).clientTrackingRange(20).updateInterval(2));
+
+    /**
      * Hashirama's wood golem. MobCategory.MISC because it is conjured by a technique and
      * must never turn up through natural spawning, same as every other summon here.
      */
@@ -166,6 +182,78 @@ public class NarutoEntities {
                                 && net.minecraft.world.entity.Mob.checkMobSpawnRules(
                                         type, level, spawnType, pos, random),
                 net.minecraftforge.event.entity.SpawnPlacementRegisterEvent.Operation.REPLACE);
+
+        // Tailed beasts. The same pipeline again, held behind a much higher rank gate and a
+        // much wider separation: one of these is a siege, and two in the same valley is not a
+        // harder siege, it is just the end of the save.
+        event.register(TAILED_BEAST.get(),
+                net.minecraft.world.entity.SpawnPlacements.Type.ON_GROUND,
+                net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
+                (type, level, spawnType, pos, random) ->
+                        level.getDifficulty() != net.minecraft.world.Difficulty.PEACEFUL
+                                && isNearPlayerElevation(level, pos)
+                                && isPlayerReadyForTailedBeast(level, pos)
+                                && noTailedBeastNearby(level, pos)
+                                && hasRoomForTailedBeast(level, pos)
+                                && net.minecraft.world.entity.Mob.checkMobSpawnRules(
+                                        type, level, spawnType, pos, random),
+                net.minecraftforge.event.entity.SpawnPlacementRegisterEvent.Operation.REPLACE);
+    }
+
+    /** Ladder step before the world starts putting tailed beasts in front of a player. */
+    private static final int BIJU_MIN_RANK_INDEX = 10; // Low Kage
+
+    /**
+     * Tailed beasts are the last content in the mod, so they wait for the last rank band.
+     *
+     * The Mangekyo bosses open at Mid Chunin because they are a duel a trained genin can lose
+     * and learn from. A tailed beast has four to eight hundred health, cannot be knocked back
+     * and throws a technique that does not care about cover; there is no version of that fight
+     * a Chunin learns anything from.
+     */
+    private static boolean isPlayerReadyForTailedBeast(net.minecraft.world.level.ServerLevelAccessor level,
+                                                       net.minecraft.core.BlockPos pos) {
+        net.minecraft.world.entity.player.Player nearest = nearestPlayer(level, pos);
+        if (nearest == null) {
+            return false;
+        }
+        return nearest.getCapability(
+                        com.sekwah.narutomod.capabilities.NinjaCapabilityHandler.NINJA_DATA)
+                .map(data -> data.isNinjaModeEnabled() && data.getRankIndex() >= BIJU_MIN_RANK_INDEX)
+                .orElse(false);
+    }
+
+    /** No second tailed beast within this many blocks. Wider than the boss rule on purpose. */
+    private static final double BIJU_MIN_SEPARATION = 2000.0;
+
+    private static boolean noTailedBeastNearby(net.minecraft.world.level.ServerLevelAccessor level,
+                                               net.minecraft.core.BlockPos pos) {
+        net.minecraft.server.level.ServerLevel serverLevel = level.getLevel();
+        double limitSqr = BIJU_MIN_SEPARATION * BIJU_MIN_SEPARATION;
+        for (TailedBeastEntity existing : serverLevel.getEntities(TAILED_BEAST.get(), beast -> true)) {
+            if (existing.blockPosition().distSqr(pos) < limitSqr) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** Headroom the largest beast needs; anything shorter and it spawns inside the ceiling. */
+    private static final int BIJU_HEADROOM = 12;
+
+    /**
+     * Vanilla's spawn check only clears the registered hitbox, which here is Shukaku's - the
+     * smallest of the eight. Without this, a Gyuki rolled at that spot would appear with four
+     * blocks of itself inside a cave roof and immediately suffocate or be shoved out.
+     */
+    private static boolean hasRoomForTailedBeast(net.minecraft.world.level.ServerLevelAccessor level,
+                                                 net.minecraft.core.BlockPos pos) {
+        for (int y = 1; y <= BIJU_HEADROOM; y++) {
+            if (!level.getBlockState(pos.above(y)).isAir()) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** How far above or below the player a boss may appear. */
@@ -255,6 +343,7 @@ public class NarutoEntities {
         event.put(ROGUE_NINJA.get(), RogueNinjaEntity.createAttributes().build());
         event.put(UCHIHA_ROGUE.get(), RogueNinjaEntity.createAttributes().build());
         event.put(WOOD_GOLEM.get(), WoodGolemEntity.createAttributes().build());
+        event.put(TAILED_BEAST.get(), TailedBeastEntity.createAttributes().build());
     }
 
 }

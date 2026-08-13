@@ -66,6 +66,10 @@ public class NarutoRenderEvents {
                 com.sekwah.narutomod.client.renderer.entity.MangekyoBossRenderer::new);
         event.registerEntityRenderer(NarutoEntities.WOOD_GOLEM.get(),
                 com.sekwah.narutomod.client.renderer.entity.WoodGolemRenderer::new);
+        event.registerEntityRenderer(NarutoEntities.TAILED_BEAST.get(),
+                com.sekwah.narutomod.client.renderer.entity.TailedBeastRenderer::new);
+        event.registerEntityRenderer(NarutoEntities.TAILED_BEAST_BOMB.get(),
+                com.sekwah.narutomod.client.renderer.entity.TailedBeastBombRenderer::new);
 
     }
 
@@ -115,6 +119,26 @@ public class NarutoRenderEvents {
                 com.sekwah.narutomod.client.model.entity.GiantSlugModel::createBodyLayer);
         event.registerLayerDefinition(com.sekwah.narutomod.client.model.entity.EnmaModel.LAYER_LOCATION,
                 com.sekwah.narutomod.client.model.entity.EnmaModel::createBodyLayer);
+
+        // Phase 19: the eight tailed beasts and the Bijudama, geometry imported from 1.12.2
+        event.registerLayerDefinition(com.sekwah.narutomod.client.model.entity.OneTailModel.LAYER_LOCATION,
+                com.sekwah.narutomod.client.model.entity.OneTailModel::createBodyLayer);
+        event.registerLayerDefinition(com.sekwah.narutomod.client.model.entity.TwoTailsModel.LAYER_LOCATION,
+                com.sekwah.narutomod.client.model.entity.TwoTailsModel::createBodyLayer);
+        event.registerLayerDefinition(com.sekwah.narutomod.client.model.entity.ThreeTailsModel.LAYER_LOCATION,
+                com.sekwah.narutomod.client.model.entity.ThreeTailsModel::createBodyLayer);
+        event.registerLayerDefinition(com.sekwah.narutomod.client.model.entity.FourTailsModel.LAYER_LOCATION,
+                com.sekwah.narutomod.client.model.entity.FourTailsModel::createBodyLayer);
+        event.registerLayerDefinition(com.sekwah.narutomod.client.model.entity.FiveTailsModel.LAYER_LOCATION,
+                com.sekwah.narutomod.client.model.entity.FiveTailsModel::createBodyLayer);
+        event.registerLayerDefinition(com.sekwah.narutomod.client.model.entity.SixTailsModel.LAYER_LOCATION,
+                com.sekwah.narutomod.client.model.entity.SixTailsModel::createBodyLayer);
+        event.registerLayerDefinition(com.sekwah.narutomod.client.model.entity.SevenTailsModel.LAYER_LOCATION,
+                com.sekwah.narutomod.client.model.entity.SevenTailsModel::createBodyLayer);
+        event.registerLayerDefinition(com.sekwah.narutomod.client.model.entity.EightTailsModel.LAYER_LOCATION,
+                com.sekwah.narutomod.client.model.entity.EightTailsModel::createBodyLayer);
+        event.registerLayerDefinition(com.sekwah.narutomod.client.model.entity.BijudamaModel.LAYER_LOCATION,
+                com.sekwah.narutomod.client.model.entity.BijudamaModel::createBodyLayer);
     }
 
     @SubscribeEvent

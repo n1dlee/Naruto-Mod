@@ -28,6 +28,11 @@ class Field:
         return "Field(%s)" % self.name
 
 
+class Data:
+    """A primitive array. Several of these models carry rotation lookup tables next to the
+    geometry; they have to be walked past without being mistaken for a list of parts."""
+
+
 class Arr:
     """A ModelRenderer[] field: elements get synthetic names like "tail0", "tail1"."""
 
@@ -44,6 +49,29 @@ class Part:
         self.boxes = []          # (u, v, x, y, z, w, h, d, delta, mirror)
         self.parent = None
         self.children = []
+
+
+def descriptor_arg_count(signature):
+    """Number of operand-stack values a call's arguments occupy.
+
+    Reads the real JVM descriptor out of the javap comment. Long and double genuinely take
+    two slots, but this walker pushes one value per constant, so they count as one here.
+    """
+    if "(" not in signature or ")" not in signature:
+        return 0
+    args = signature[signature.index("(") + 1:signature.index(")")]
+    count, i = 0, 0
+    while i < len(args):
+        while i < len(args) and args[i] == "[":
+            i += 1
+        if i >= len(args):
+            break
+        if args[i] == "L":
+            i = args.index(";", i) + 1
+        else:
+            i += 1
+        count += 1
+    return count
 
 
 def parse(path):
@@ -102,6 +130,16 @@ def parse(path):
                 raise SystemExit("expected a part ref, got %r\nlast instructions:\n  %s\nstack: %r"
                                  % (x, "\n  ".join(trace), stack))
             return x.name
+
+        def ar(x):
+            """The ModelRenderer[] an array instruction is addressing."""
+            if isinstance(x, Arr):
+                return x
+            if isinstance(x, Field):
+                # An array field read before it was ever stored, or held in a local.
+                return arrays.setdefault(x.name, Arr(x.name))
+            raise SystemExit("expected an array ref, got %r\nlast instructions:\n  %s\nstack: %r"
+                             % (x, "\n  ".join(trace), stack))
         op, rest = m.group(1), m.group(2)
         comment = rest.split("//", 1)[1].strip() if "//" in rest else ""
 
@@ -146,22 +184,39 @@ def parse(path):
                 stack.append(float(val[7:]))
             else:
                 stack.append(val)
+        elif op in ("newarray", "multianewarray"):
+            # A primitive array: an animation lookup table, never geometry.
+            stack.pop()
+            stack.append(Data())
         elif op == "anewarray":
             stack.pop()
-            stack.append(Arr(None))
+            stack.append(Arr(None) if "ModelRenderer" in comment else Data())
+        elif op == "arraylength":
+            stack.pop()
+            stack.append(0)
+        elif op in ("fastore", "iastore", "dastore", "lastore",
+                    "bastore", "sastore", "castore"):
+            stack.pop(); stack.pop(); stack.pop()
+        elif op in ("faload", "iaload", "daload", "laload", "baload", "saload", "caload"):
+            stack.pop(); stack.pop()
+            stack.append(0.0)
         elif op == "aaload":
             idx = stack.pop()
-            arr = stack.pop()
+            owner = stack.pop()
+            if isinstance(owner, Data):
+                stack.append(Data())
+                continue
+            arr = ar(owner)
             name = "%s%d" % (arr.name, idx)
             part(name)
             stack.append(Field(name))
         elif op == "aastore":
             value = stack.pop()
             idx = stack.pop()
-            arr = stack.pop()
-            name = "%s%d" % (arr.name, idx)
-            part(name)
-            arr.elements[idx] = name
+            owner = stack.pop()
+            if isinstance(owner, Data) or isinstance(value, Data):
+                continue
+            part("%s%d" % (ar(owner).name, idx))
         elif op == "getfield":
             fname = comment.split("Field ", 1)[1].split(":")[0].split(".")[-1]
             owner = stack.pop()
@@ -236,10 +291,17 @@ def parse(path):
                 stack.pop(); stack.pop()
                 stack.append(1)
             else:
-                # Unknown call: drop what looks like its arguments conservatively.
-                nargs = sig.count(";") + sig.count("F") + sig.count("I")
+                # Any other call: balance the stack from its real descriptor. Counting
+                # letters in the signature text instead was what silently desynced the
+                # models that call a superclass constructor, and a desynced stack turns
+                # into nonsense geometry several hundred instructions later.
+                nargs = descriptor_arg_count(sig)
+                if op != "invokestatic":
+                    nargs += 1  # the receiver
                 for _ in range(min(nargs, len(stack))):
                     stack.pop()
+                if not sig.rstrip().endswith(")V") and ")" in sig:
+                    stack.append(0)  # a non-void return leaves something behind
         elif op in ("return", "nop"):
             pass
         elif op.startswith("if") or op in ("goto", "iinc", "istore_1", "istore"):

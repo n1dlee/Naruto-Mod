@@ -1,4 +1,10 @@
 {
+  "entity.narutomod.tailed_beast": "Tailed Beast",
+  "entity.narutomod.tailed_beast_bomb": "Tailed Beast Bomb",
+  "narutomod.subtitle.biju_roar": "A tailed beast roars",
+  "narutomod.subtitle.biju_hurt": "A tailed beast bellows",
+  "narutomod.subtitle.biju_death": "A tailed beast falls",
+  "narutomod.subtitle.bijudama": "Tailed Beast Bomb detonates",
   "item.narutomod.kunai": "Kunai",
   "entity.narutomod.kunai": "Kunai",
   "item.narutomod.shuriken": "Shuriken",

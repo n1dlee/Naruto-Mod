@@ -41,6 +41,19 @@ public class NarutoSounds {
 
     public static final RegistryObject<SoundEvent> CHIDORI = register("chidori");
 
+    // Tailed beasts. Six of the eight had a voice recorded for them in the 1.12.2 mod;
+    // Kokuo and Saiken did not, and use the pooled roar rather than someone else's.
+    public static final RegistryObject<SoundEvent> BIJU_SHUKAKU = register("biju.shukaku");
+    public static final RegistryObject<SoundEvent> BIJU_MATATABI = register("biju.matatabi");
+    public static final RegistryObject<SoundEvent> BIJU_ISOBU = register("biju.isobu");
+    public static final RegistryObject<SoundEvent> BIJU_SON_GOKU = register("biju.son_goku");
+    public static final RegistryObject<SoundEvent> BIJU_CHOMEI = register("biju.chomei");
+    public static final RegistryObject<SoundEvent> BIJU_GYUKI = register("biju.gyuki");
+    public static final RegistryObject<SoundEvent> BIJU_ROAR = register("biju.roar");
+    public static final RegistryObject<SoundEvent> BIJU_HURT = register("biju.hurt");
+    public static final RegistryObject<SoundEvent> BIJU_DEATH = register("biju.death");
+    public static final RegistryObject<SoundEvent> BIJUDAMA = register("biju.bijudama");
+
     private static RegistryObject<SoundEvent> register(String key) {
         return SOUNDS.register(key, () -> SoundEvent.createVariableRangeEvent(new ResourceLocation(MOD_ID, key)));
     }
