@@ -116,6 +116,7 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
     public MangekyoBossEntity(EntityType<MangekyoBossEntity> entityType, Level level) {
         super(entityType, level);
         this.xpReward = 120;
+        NinjaMobMovement.enableWaterWalking(this);
     }
 
     /**
@@ -265,6 +266,9 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
         // Above the melee chase and holding the same MOVE flag, so it can genuinely pull the
         // boss back out to throwing distance instead of being overruled by it every tick.
         this.goalSelector.addGoal(2, new com.sekwah.narutomod.entity.goal.BossRepositionGoal(this));
+        // Between the stand-off and the chase: closing a gap is a bound, not a jog.
+        this.goalSelector.addGoal(2,
+                new com.sekwah.narutomod.entity.goal.NinjaLeapGoal(this, 1.25D, 0.6D));
         this.goalSelector.addGoal(3, new MeleeAttackGoal(this, 1.15D, true));
         this.goalSelector.addGoal(6, new WaterAvoidingRandomStrollGoal(this, 0.7D));
         this.goalSelector.addGoal(7, new LookAtPlayerGoal(this, Player.class, 16.0F));
@@ -288,6 +292,7 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
         if (this.level().isClientSide) {
             return;
         }
+        NinjaMobMovement.tickWaterWalk(this);
         if (this.chakra < MAX_CHAKRA) {
             this.chakra = Math.min(MAX_CHAKRA, this.chakra + CHAKRA_REGEN);
         }

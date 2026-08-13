@@ -95,6 +95,7 @@ public class RogueNinjaEntity extends Monster {
     public RogueNinjaEntity(EntityType<? extends RogueNinjaEntity> type, Level level) {
         super(type, level);
         this.xpReward = 8;
+        NinjaMobMovement.enableWaterWalking(this);
     }
 
     @Override
@@ -187,8 +188,11 @@ public class RogueNinjaEntity extends Monster {
     @Override
     public void tick() {
         super.tick();
-        if (!this.level().isClientSide && this.spikeClearTimer > 0 && --this.spikeClearTimer <= 0) {
-            this.clearRaisedSpikes();
+        if (!this.level().isClientSide) {
+            NinjaMobMovement.tickWaterWalk(this);
+            if (this.spikeClearTimer > 0 && --this.spikeClearTimer <= 0) {
+                this.clearRaisedSpikes();
+            }
         }
     }
 
@@ -210,7 +214,9 @@ public class RogueNinjaEntity extends Monster {
         // Above the elemental jutsu: a bloodline technique is what that clan reaches for
         // first. Self-disables for clanless rogues, so it costs them nothing.
         this.goalSelector.addGoal(1, new com.sekwah.narutomod.entity.goal.RogueNinjaClanGoal(this));
-        this.goalSelector.addGoal(2, new MeleeAttackGoal(this, 1.15D, false));
+        // Above melee so closing the gap is a bound rather than a jog.
+        this.goalSelector.addGoal(2, new com.sekwah.narutomod.entity.goal.NinjaLeapGoal(this, 1.05D, 0.55D));
+        this.goalSelector.addGoal(3, new MeleeAttackGoal(this, 1.15D, false));
         this.goalSelector.addGoal(6, new WaterAvoidingRandomStrollGoal(this, 0.8D));
         this.goalSelector.addGoal(7, new LookAtPlayerGoal(this, Player.class, 10.0F));
         this.goalSelector.addGoal(8, new RandomLookAroundGoal(this));

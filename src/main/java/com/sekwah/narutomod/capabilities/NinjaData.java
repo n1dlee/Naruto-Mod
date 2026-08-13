@@ -955,8 +955,17 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
         return result;
     }
 
-    /** Ceiling for a Sharingan bearer - Kakashi's five natures, minus one for balance. */
+    /** Ceiling for an ordinary Sharingan bearer. */
     public static final int SHARINGAN_MAX_ELEMENT_SLOTS = 4;
+    /**
+     * All five natures, and the only way to reach them.
+     *
+     * Four used to be a hard stop for everyone, which meant the fifth nature simply did not
+     * exist in the game. It exists now, but it is not a number that ticks up with rank: it
+     * takes a Kage who has also taken a Mangekyo off one of the roaming Uchiha, so the last
+     * slot is something you went and did rather than something you waited for.
+     */
+    public static final int ETERNAL_MAX_ELEMENT_SLOTS = 5;
 
     /**
      * Total element slots this ninja can have open: 1 base, 2 from Jonin, 3 from Kage.
@@ -973,7 +982,8 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
         int slots = this.ninjaRank >= 4 ? 3 : (this.ninjaRank >= 3 ? 2 : 1);
         if (this.hasSharinganEye()) {
             slots += this.getSharinganElementSlotBonus();
-            slots = Math.min(slots, SHARINGAN_MAX_ELEMENT_SLOTS);
+            slots = Math.min(slots, this.isEternalMangekyoAwakened()
+                    ? ETERNAL_MAX_ELEMENT_SLOTS : SHARINGAN_MAX_ELEMENT_SLOTS);
         }
         return slots;
     }

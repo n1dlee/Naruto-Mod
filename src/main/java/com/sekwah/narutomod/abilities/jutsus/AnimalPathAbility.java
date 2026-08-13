@@ -4,6 +4,7 @@ import com.sekwah.narutomod.abilities.Ability;
 import com.sekwah.narutomod.capabilities.INinjaData;
 import com.sekwah.narutomod.entity.NarutoEntities;
 import com.sekwah.narutomod.entity.SummonBeastEntity;
+import com.sekwah.narutomod.entity.SummonBeastVariant;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.chat.Component;
@@ -78,10 +79,14 @@ public class AnimalPathAbility extends Ability implements Ability.Cooldown {
             Vec3 offset = forward.yRot((float) angle).scale(3.5);
             Vec3 spawnPos = player.position().add(offset);
 
+            // One of each contract, in enum order — the Animal Path's whole point is that it
+            // is not bound to a single one.
+            SummonBeastVariant variant = SummonBeastVariant.byId(i % SummonBeastVariant.values().length);
             beast.setPos(spawnPos.x, player.getY(), spawnPos.z);
             beast.setOwner(player);
-            beast.setVariant((byte) (i % 3));
-            beast.setCustomName(Component.translatable("jutsu.animal_path.beast"));
+            beast.setVariant(variant);
+            beast.setHealth(beast.getMaxHealth());
+            beast.setCustomName(Component.literal(variant.getDisplayName()));
             serverLevel.addFreshEntity(beast);
 
             serverLevel.sendParticles(ParticleTypes.LARGE_SMOKE,

@@ -1,5 +1,8 @@
 package com.sekwah.narutomod.entity;
 
+import com.sekwah.narutomod.entity.goal.NinjaLeapGoal;
+import com.sekwah.narutomod.entity.goal.SummonBeastJutsuGoal;
+import com.sekwah.narutomod.entity.goal.SummonFollowOwnerGoal;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.protocol.Packet;
@@ -8,13 +11,14 @@ import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.PathfinderMob;
+import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.entity.*;
 import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.goal.*;
+import net.minecraft.world.entity.ai.goal.target.HurtByTargetGoal;
 import net.minecraft.world.entity.ai.goal.target.NearestAttackableTargetGoal;
+import net.minecraft.world.entity.monster.Enemy;
 import net.minecraft.world.entity.monster.Monster;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
@@ -24,11 +28,18 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * Kuchiyose no Jutsu summon — a battle beast bound to its summoner by contract.
- * One entity, three clan contracts told apart by variant tint + name (see
- * SummonBeastRenderer): 0 = Giant Toad (Uzumaki, green), 1 = Giant Serpent
- * (Uchiha, purple), 2 = Giant Slug (Senju, pale). Fights monsters near its
- * summoner and returns to its own realm (despawns) after 90 seconds.
+ * Kuchiyose no Jutsu summon - one of the four named contract beasts (see
+ * {@link SummonBeastVariant}), called for ninety seconds and then returned to its own realm.
+ *
+ * The variant drives everything: attributes, hitbox, model, texture and which signature
+ * technique the beast brings. Two things about that are easy to get wrong and both were:
+ *
+ *  - the hitbox is computed per side and is NOT synced, so the client only learns the new
+ *    size by recomputing it from the variant itself. That is why getDimensions() reads the
+ *    synced variant rather than a field, and why onSyncedDataUpdated refreshes.
+ *  - attributes are registered once for the EntityType, so per-variant values have to be
+ *    written onto the instance. They are re-applied on load as well as on spawn, but health
+ *    is only topped up on spawn - doing it on load would heal every summon on every reload.
  */
 public class SummonBeastEntity extends PathfinderMob {
 
@@ -43,6 +54,7 @@ public class SummonBeastEntity extends PathfinderMob {
 
     public SummonBeastEntity(EntityType<SummonBeastEntity> entityType, Level level) {
         super(entityType, level);
+        NinjaMobMovement.enableWaterWalking(this);
     }
 
     @Override
@@ -60,57 +72,137 @@ public class SummonBeastEntity extends PathfinderMob {
         this.entityData.set(OWNER_UUID, Optional.of(owner.getUUID()));
     }
 
-    public byte getVariant() {
-        return this.entityData.get(VARIANT);
+    /** The summoner, if they are still loaded in this level. */
+    public Player getOwner() {
+        return this.getOwnerUUID().map(uuid -> this.level().getPlayerByUUID(uuid)).orElse(null);
     }
 
-    public void setVariant(byte variant) {
-        this.entityData.set(VARIANT, variant);
+    public SummonBeastVariant getVariant() {
+        return SummonBeastVariant.byId(this.entityData.get(VARIANT));
+    }
+
+    public void setVariant(SummonBeastVariant variant) {
+        this.entityData.set(VARIANT, (byte) variant.ordinal());
+        this.applyVariantAttributes(variant);
+        this.refreshDimensions();
+    }
+
+    private void applyVariantAttributes(SummonBeastVariant variant) {
+        this.setAttribute(Attributes.MAX_HEALTH, variant.getHealth());
+        this.setAttribute(Attributes.ATTACK_DAMAGE, variant.getDamage());
+        this.setAttribute(Attributes.MOVEMENT_SPEED, variant.getSpeed());
+        this.setAttribute(Attributes.KNOCKBACK_RESISTANCE, variant.getKnockbackResistance());
+    }
+
+    private void setAttribute(net.minecraft.world.entity.ai.attributes.Attribute attribute, double value) {
+        net.minecraft.world.entity.ai.attributes.AttributeInstance instance = this.getAttribute(attribute);
+        if (instance != null) {
+            instance.setBaseValue(value);
+        }
+    }
+
+    @Override
+    public void onSyncedDataUpdated(EntityDataAccessor<?> key) {
+        // The client never runs setVariant, so this is the only place it hears that the
+        // hitbox changed. Without it every contract would keep the registered default size.
+        if (VARIANT.equals(key)) {
+            this.refreshDimensions();
+        }
+        super.onSyncedDataUpdated(key);
+    }
+
+    @Override
+    public EntityDimensions getDimensions(Pose pose) {
+        SummonBeastVariant variant = this.getVariant();
+        return EntityDimensions.scalable(variant.getWidth(), variant.getHeight());
     }
 
     @Override
     protected void registerGoals() {
         this.goalSelector.addGoal(0, new FloatGoal(this));
-        this.goalSelector.addGoal(2, new MeleeAttackGoal(this, 1.1D, true));
+        this.goalSelector.addGoal(1, new SummonBeastJutsuGoal(this));
+        this.goalSelector.addGoal(2, new NinjaLeapGoal(this, 1.0D, 0.5D));
+        this.goalSelector.addGoal(3, new MeleeAttackGoal(this, 1.1D, true));
+        this.goalSelector.addGoal(4, new SummonFollowOwnerGoal(this));
         this.goalSelector.addGoal(5, new WaterAvoidingRandomStrollGoal(this, 0.7D));
         this.goalSelector.addGoal(6, new LookAtPlayerGoal(this, Player.class, 10.0F));
-        this.targetSelector.addGoal(1, new NearestAttackableTargetGoal<>(this, Monster.class, true));
+
+        this.targetSelector.addGoal(1, new HurtByTargetGoal(this));
+        // Enemy rather than Monster: the Mangekyo bosses are PathfinderMobs that implement
+        // Enemy, so a Monster-only filter would have summons stand and watch a boss fight.
+        this.targetSelector.addGoal(2, new NearestAttackableTargetGoal<>(this, LivingEntity.class,
+                10, true, false, target -> target instanceof Enemy && !this.isSummonerOwned(target)));
+        this.targetSelector.addGoal(3, new NearestAttackableTargetGoal<>(this, Monster.class, true));
+    }
+
+    /** True for the summoner and for anything else the summoner called out. */
+    private boolean isSummonerOwned(LivingEntity candidate) {
+        UUID owner = this.getOwnerUUID().orElse(null);
+        if (owner == null) {
+            return false;
+        }
+        if (owner.equals(candidate.getUUID())) {
+            return true;
+        }
+        return candidate instanceof SummonBeastEntity other
+                && owner.equals(other.getOwnerUUID().orElse(null));
     }
 
     public static AttributeSupplier.Builder createAttributes() {
         return Monster.createMonsterAttributes()
-                .add(Attributes.MAX_HEALTH, 60.0D)
-                .add(Attributes.MOVEMENT_SPEED, 0.32D)
-                .add(Attributes.ATTACK_DAMAGE, 12.0D)
-                .add(Attributes.KNOCKBACK_RESISTANCE, 0.6D)
-                .add(Attributes.FOLLOW_RANGE, 24.0D);
+                .add(Attributes.MAX_HEALTH, 220.0D)
+                .add(Attributes.MOVEMENT_SPEED, 0.30D)
+                .add(Attributes.ATTACK_DAMAGE, 22.0D)
+                .add(Attributes.KNOCKBACK_RESISTANCE, 0.85D)
+                .add(Attributes.FOLLOW_RANGE, 32.0D);
     }
 
     @Override
     public void tick() {
         super.tick();
-        if (!level().isClientSide && ++aliveTicks >= LIFESPAN) {
-            if (level() instanceof ServerLevel serverLevel) {
-                serverLevel.sendParticles(ParticleTypes.LARGE_SMOKE,
-                        getX(), getY() + getBbHeight() / 2, getZ(), 40, 0.8, 0.8, 0.8, 0.05);
-            }
-            discard();
+        if (this.level().isClientSide) {
+            return;
         }
+        NinjaMobMovement.tickWaterWalk(this);
+        if (++this.aliveTicks >= LIFESPAN) {
+            this.dispel();
+        }
+    }
+
+    /** Back to Myoboku, Ryuchi Cave, Shikkotsu Forest or the Monkey King's mountain. */
+    public void dispel() {
+        if (this.level() instanceof ServerLevel serverLevel) {
+            serverLevel.sendParticles(ParticleTypes.LARGE_SMOKE,
+                    this.getX(), this.getY() + this.getBbHeight() / 2, this.getZ(),
+                    60, 1.2, 1.2, 1.2, 0.05);
+        }
+        this.discard();
+    }
+
+    /** A contract beast never turns on the ninja who called it. */
+    @Override
+    public boolean hurt(DamageSource source, float amount) {
+        if (source.getEntity() instanceof LivingEntity attacker && this.isSummonerOwned(attacker)) {
+            return false;
+        }
+        return super.hurt(source, amount);
     }
 
     @Override
     public void addAdditionalSaveData(CompoundTag tag) {
         super.addAdditionalSaveData(tag);
-        tag.putInt("AliveTicks", aliveTicks);
-        tag.putByte("Variant", getVariant());
+        tag.putInt("AliveTicks", this.aliveTicks);
+        tag.putByte("Variant", this.entityData.get(VARIANT));
         this.getOwnerUUID().ifPresent(uuid -> tag.putUUID("OwnerUUID", uuid));
     }
 
     @Override
     public void readAdditionalSaveData(CompoundTag tag) {
         super.readAdditionalSaveData(tag);
-        aliveTicks = tag.getInt("AliveTicks");
-        setVariant(tag.getByte("Variant"));
+        this.aliveTicks = tag.getInt("AliveTicks");
+        // Attributes and hitbox come back with the variant; health does not, so the saved
+        // Health super already read stays exactly as it was.
+        this.setVariant(SummonBeastVariant.byId(tag.getByte("Variant")));
         if (tag.hasUUID("OwnerUUID")) {
             this.entityData.set(OWNER_UUID, Optional.of(tag.getUUID("OwnerUUID")));
         }

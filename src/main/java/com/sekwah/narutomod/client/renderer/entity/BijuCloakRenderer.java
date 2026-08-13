@@ -51,6 +51,24 @@ public class BijuCloakRenderer {
         model = bakedModel;
     }
 
+    // Exposed for BossKuramaLayer: the Naruto boss wears the same imported 1.12.2 shroud the
+    // player does, rather than a scaled-down copy of the Full Avatar standing in for it.
+
+    static BijuCloakModel cloakModel() {
+        return model;
+    }
+
+    /** Shroud texture for a tail count, matching the player's own tier thresholds. */
+    static ResourceLocation cloakTextureForTails(int tails, boolean kcm) {
+        if (kcm) {
+            return CLOAK_KCM;
+        }
+        if (tails >= 8) {
+            return CLOAK_KURAMA;
+        }
+        return tails >= 4 ? CLOAK_L2 : CLOAK_L1;
+    }
+
     @SubscribeEvent
     public static void onRenderPlayer(RenderPlayerEvent.Post event) {
         if (model == null) {

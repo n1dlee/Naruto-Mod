@@ -5,7 +5,6 @@ import com.sekwah.narutomod.block.NarutoBlocks;
 import com.sekwah.narutomod.client.model.entity.KuramaAvatarModel;
 import com.sekwah.narutomod.client.model.entity.KuramaTailModel;
 import com.sekwah.narutomod.client.model.entity.SubstitutionLogModel;
-import com.sekwah.narutomod.client.model.entity.SummonBeastModel;
 import com.sekwah.narutomod.client.model.entity.SusanooModel;
 import com.sekwah.narutomod.client.model.item.model.*;
 import com.sekwah.narutomod.client.model.jutsu.FireballJutsuModel;
@@ -107,7 +106,15 @@ public class NarutoRenderEvents {
                 com.sekwah.narutomod.client.model.entity.SusanooClothedModel::createBodyLayer);
         event.registerLayerDefinition(com.sekwah.narutomod.client.model.entity.SusanooWingedModel.LAYER_LOCATION,
                 com.sekwah.narutomod.client.model.entity.SusanooWingedModel::createBodyLayer);
-        event.registerLayerDefinition(SummonBeastModel.LAYER_LOCATION, SummonBeastModel::createLayer);
+        // Phase 18: the four named Kuchiyose contracts, geometry imported from 1.12.2
+        event.registerLayerDefinition(com.sekwah.narutomod.client.model.entity.GiantToadModel.LAYER_LOCATION,
+                com.sekwah.narutomod.client.model.entity.GiantToadModel::createBodyLayer);
+        event.registerLayerDefinition(com.sekwah.narutomod.client.model.entity.GiantSnakeModel.LAYER_LOCATION,
+                com.sekwah.narutomod.client.model.entity.GiantSnakeModel::createBodyLayer);
+        event.registerLayerDefinition(com.sekwah.narutomod.client.model.entity.GiantSlugModel.LAYER_LOCATION,
+                com.sekwah.narutomod.client.model.entity.GiantSlugModel::createBodyLayer);
+        event.registerLayerDefinition(com.sekwah.narutomod.client.model.entity.EnmaModel.LAYER_LOCATION,
+                com.sekwah.narutomod.client.model.entity.EnmaModel::createBodyLayer);
     }
 
     @SubscribeEvent

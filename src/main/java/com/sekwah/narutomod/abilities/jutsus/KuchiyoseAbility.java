@@ -4,6 +4,7 @@ import com.sekwah.narutomod.abilities.Ability;
 import com.sekwah.narutomod.capabilities.INinjaData;
 import com.sekwah.narutomod.entity.NarutoEntities;
 import com.sekwah.narutomod.entity.SummonBeastEntity;
+import com.sekwah.narutomod.entity.SummonBeastVariant;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.chat.Component;
@@ -17,9 +18,10 @@ import net.minecraft.world.phys.Vec3;
 /**
  * Kuchiyose no Jutsu — Summoning Technique (combo 312, INSTANT).
  * The classic blood-contract summon: slam a palm down and call a battle beast from its
- * own realm. The contract follows the clan — Uzumaki call the toads of Mount Myoboku,
- * Uchiha the serpents of Ryuchi Cave, Senju the slugs of Shikkotsu Forest; everyone
- * else gets a basic toad contract. Jonin+ (a summon this size takes serious chakra).
+ * own realm. The contract follows the clan — Uzumaki call Gamabunta of Mount Myoboku,
+ * Uchiha call Manda of Ryuchi Cave, Senju and Haruno call Katsuyu of Shikkotsu Forest,
+ * and everyone else calls Enma, the Monkey King. Jonin+ (a summon this size takes
+ * serious chakra).
  */
 public class KuchiyoseAbility extends Ability implements Ability.Cooldown {
 
@@ -77,20 +79,19 @@ public class KuchiyoseAbility extends Ability implements Ability.Cooldown {
             return;
         }
 
-        byte variant;
-        String contractName;
-        switch (ninjaData.getClanId()) {
-            case "uchiha" -> { variant = 1; contractName = "Giant Serpent"; }
-            case "senju" -> { variant = 2; contractName = "Giant Slug"; }
-            default -> { variant = 0; contractName = "Giant Toad"; }
-        }
+        SummonBeastVariant variant = SummonBeastVariant.forClan(ninjaData.getClanId());
 
         Vec3 look = player.getLookAngle();
-        Vec3 spawnPos = player.position().add(new Vec3(look.x, 0, look.z).normalize().scale(3.0));
+        // Far enough out that Gamabunta does not land on top of the ninja who called him.
+        double clearance = 2.0 + variant.getWidth();
+        Vec3 spawnPos = player.position().add(new Vec3(look.x, 0, look.z).normalize().scale(clearance));
         beast.setPos(spawnPos.x, player.getY(), spawnPos.z);
         beast.setOwner(player);
+        // Order matters: setVariant rewrites max health, so the top-up has to come after it.
         beast.setVariant(variant);
-        beast.setCustomName(Component.literal(contractName));
+        beast.setHealth(beast.getMaxHealth());
+        beast.setCustomName(Component.literal(variant.getDisplayName()));
+        beast.setCustomNameVisible(true);
         serverLevel.addFreshEntity(beast);
 
         // Summoning smoke burst — the classic kuchiyose cloud

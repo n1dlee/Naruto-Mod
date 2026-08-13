@@ -72,7 +72,9 @@ public class NarutoEntities {
             EntityType.Builder.<ShadowCloneEntity>of(ShadowCloneEntity::new, MobCategory.MISC).sized(0.6F, 1.8F).clientTrackingRange(8));
 
     public static final RegistryObject<EntityType<SummonBeastEntity>> SUMMON_BEAST = register("summon_beast",
-            EntityType.Builder.<SummonBeastEntity>of(SummonBeastEntity::new, MobCategory.MISC).sized(2.4F, 2.2F).clientTrackingRange(10));
+            // Registered at Gamabunta's size (contract 0). Every contract overrides
+            // getDimensions from its synced variant, so this is only the pre-variant default.
+            EntityType.Builder.<SummonBeastEntity>of(SummonBeastEntity::new, MobCategory.MISC).sized(4.4F, 5.0F).clientTrackingRange(16));
 
     public static final RegistryObject<EntityType<RasenganEntity>> RASENGAN = register("rasengan",
             EntityType.Builder.<RasenganEntity>of(RasenganEntity::new, MobCategory.MISC).sized(0.4F, 0.4F).clientTrackingRange(4).updateInterval(10));
