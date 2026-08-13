@@ -4,6 +4,13 @@ import com.sekwah.narutomod.NarutoMod;
 import net.minecraft.resources.ResourceLocation;
 
 /**
+ * Note on attackDamage: this is the wielder's BARE-HANDED figure. Whatever {@link #weapon()}
+ * hands them adds its own attack-damage modifier on top, so the number a player actually
+ * feels is base + weapon. The four heaviest weapons (gunbai, Kubikiribocho, Samehada,
+ * Kabutowari) are worth 7.5-8.5 on their own, which is why their carriers read low here —
+ * left at their pre-weapon values they landed 21-22 per swing against a rank-0 player with
+ * 20 health, i.e. a guaranteed one-shot with no window to react to.
+ *
  * The five Mangekyo wielders that roam the world as bosses. One entity type tells them
  * apart by a variant byte (same trick SummonBeastEntity uses for its three contracts);
  * everything that differs between them — health, reach, Susanoo colour, which signature
@@ -15,36 +22,66 @@ import net.minecraft.resources.ResourceLocation;
 public enum MangekyoBossVariant {
 
     // --- Uchiha: defeating one upgrades a Mangekyo to Eternal ---
-    ITACHI("itachi", 260f, 11f, 0.30f, 0.85f, 0.35f, 0.05f, BossKit.CROWS_AND_FLAME),
-    SASUKE("sasuke", 240f, 12f, 0.33f, 0.55f, 0.30f, 0.85f, BossKit.LIGHTNING),
-    MADARA("madara", 320f, 15f, 0.31f, 0.15f, 0.35f, 0.95f, BossKit.GUNBAI),
-    SHISUI("shisui", 210f, 10f, 0.38f, 0.25f, 0.80f, 0.35f, BossKit.ILLUSION),
-    OBITO("obito", 250f, 12f, 0.32f, 0.45f, 0.20f, 0.75f, BossKit.PHASE),
+    ITACHI("itachi", 260f, 11f, 0.30f, 0.85f, 0.35f, 0.05f, 10),
+    SASUKE("sasuke", 240f, 12f, 0.33f, 0.55f, 0.30f, 0.85f, 10),
+    MADARA("madara", 320f, 11f, 0.31f, 0.15f, 0.35f, 0.95f, 10),
+    SHISUI("shisui", 210f, 10f, 0.38f, 0.25f, 0.80f, 0.35f, 10),
+    OBITO("obito", 250f, 12f, 0.32f, 0.45f, 0.20f, 0.75f, 10),
 
     // --- Missing-nin: no Sharingan, so no Eternal Mangekyo. They drop their own blade
     // instead, which is what actually made them famous.
-    KISAME("kisame", 290f, 14f, 0.31f, 0f, 0f, 0f, BossKit.SWORDSMAN),
-    ZABUZA("zabuza", 240f, 13f, 0.32f, 0f, 0f, 0f, BossKit.SWORDSMAN),
-    HIDAN("hidan", 270f, 12f, 0.33f, 0f, 0f, 0f, BossKit.SWORDSMAN),
-    DEIDARA("deidara", 220f, 10f, 0.34f, 0f, 0f, 0f, BossKit.EXPLOSIVE),
-    SASORI("sasori", 235f, 11f, 0.30f, 0f, 0f, 0f, BossKit.EXPLOSIVE);
+    KISAME("kisame", 290f, 10f, 0.31f, 0f, 0f, 0f, 6),
+    ZABUZA("zabuza", 240f, 9f, 0.32f, 0f, 0f, 0f, 6),
+    HIDAN("hidan", 270f, 8f, 0.33f, 0f, 0f, 0f, 6),
+    DEIDARA("deidara", 220f, 10f, 0.34f, 0f, 0f, 0f, 6),
+    SASORI("sasori", 235f, 11f, 0.30f, 0f, 0f, 0f, 6),
 
-    /** What flavour of ranged attack this wielder leans on. */
-    public enum BossKit {
-        /** Itachi: black flame at range, crows that blind up close. */
-        CROWS_AND_FLAME,
-        /** Sasuke: lightning strikes. */
-        LIGHTNING,
-        /** Madara: cone shockwaves that fling opponents away. */
-        GUNBAI,
-        /** Shisui: genjutsu that disables rather than damages. */
-        ILLUSION,
-        /** Obito: phases out of danger and re-emerges behind you. */
-        PHASE,
-        /** Swordsmen: close the distance and hit brutally hard with the blade. */
-        SWORDSMAN,
-        /** Deidara/Sasori: ranged detonations and poisoned volleys. */
-        EXPLOSIVE
+    // --- Legends of the other great bloodlines. Appended, never inserted: the variant is
+    // stored in NBT as an ordinal, so reordering this enum would turn every saved boss in
+    // every existing world into somebody else.
+    /** First Hokage. The strongest shinobi who ever lived, and the wood proves it. */
+    HASHIRAMA("hashirama", 420f, 13f, 0.29f, 0.25f, 0.75f, 0.35f, 2),
+    /** Pain, in Yahiko's body. Rinnegan, and gravity does what he says. */
+    NAGATO("nagato", 340f, 12f, 0.28f, 0.55f, 0.40f, 0.75f, 3),
+    /** Copy Ninja. A transplanted Sharingan, a Kamui, and a thousand stolen techniques. */
+    KAKASHI("kakashi", 280f, 10f, 0.34f, 0.50f, 0.55f, 0.85f, 4),
+    /** Kurama's jinchuriki. Clones, spiralling spheres, and a fox behind all of it. */
+    NARUTO("naruto", 360f, 12f, 0.35f, 0.95f, 0.55f, 0.10f, 3),
+    /** Byakugan and the Gentle Fist. She does not break your armour, she goes through it. */
+    HINATA("hinata", 240f, 9f, 0.33f, 0.80f, 0.85f, 0.95f, 4),
+    /** Nara tactician. He will not out-hit you; he will make sure you cannot move. */
+    SHIKAMARU("shikamaru", 230f, 9f, 0.32f, 0.10f, 0.05f, 0.20f, 4);
+
+    /** What killing this wielder leaves behind. */
+    public enum BossDrop {
+        /** Uchiha: their Mangekyo, upgrading the killer's to Eternal. */
+        MANGEKYO,
+        /** Missing-nin: the blade that made their name. */
+        BLADE,
+        /** Nagato: the Rinnegan, the rarest prize in the mod. */
+        RINNEGAN,
+        /** Hinata: a Byakugan, the only route to one for a non-Hyuga. */
+        BYAKUGAN,
+        /** Kakashi: his transplanted Sharingan - exactly how he got it himself. */
+        SHARINGAN,
+        /** Hashirama, Naruto, Shikamaru: no eye to take, so a scroll of their art. */
+        SCROLL
+    }
+
+    /**
+     * Kept separate from {@link #isUchiha()} because the roster outgrew that question. The
+     * original split was binary - Uchiha hand over a Mangekyo, everyone else drops a sword -
+     * and it has no answer at all for a Rinnegan, a Byakugan, or a Senju with neither.
+     */
+    public BossDrop dropKind() {
+        return switch (this) {
+            case ITACHI, SASUKE, MADARA, SHISUI, OBITO -> BossDrop.MANGEKYO;
+            case KISAME, ZABUZA, HIDAN, DEIDARA, SASORI -> BossDrop.BLADE;
+            case NAGATO -> BossDrop.RINNEGAN;
+            case HINATA -> BossDrop.BYAKUGAN;
+            case KAKASHI -> BossDrop.SHARINGAN;
+            case HASHIRAMA, NARUTO, SHIKAMARU -> BossDrop.SCROLL;
+        };
     }
 
     private final String formId;
@@ -54,10 +91,10 @@ public enum MangekyoBossVariant {
     private final float susanooRed;
     private final float susanooGreen;
     private final float susanooBlue;
-    private final BossKit kit;
+    private final int spawnWeight;
 
     MangekyoBossVariant(String formId, float maxHealth, float attackDamage, float movementSpeed,
-                        float susanooRed, float susanooGreen, float susanooBlue, BossKit kit) {
+                        float susanooRed, float susanooGreen, float susanooBlue, int spawnWeight) {
         this.formId = formId;
         this.maxHealth = maxHealth;
         this.attackDamage = attackDamage;
@@ -65,7 +102,7 @@ public enum MangekyoBossVariant {
         this.susanooRed = susanooRed;
         this.susanooGreen = susanooGreen;
         this.susanooBlue = susanooBlue;
-        this.kit = kit;
+        this.spawnWeight = spawnWeight;
     }
 
     public static MangekyoBossVariant byId(byte id) {
@@ -103,6 +140,34 @@ public enum MangekyoBossVariant {
         return this.isUchiha();
     }
 
+    /** Naruto's escalation is the fox, not a shell, but it rides the same stage ladder. */
+    public boolean hasKuramaCloak() {
+        return this == NARUTO;
+    }
+
+    /**
+     * Every wielder escalates now. A boss that fights identically at full health and at five
+     * percent has no second act, and the whole appeal of these fights is watching someone
+     * reach for the next thing when the first one stops working.
+     *
+     * What escalating MEANS is per character - see MangekyoBossEntity#onStageEntered.
+     */
+    public boolean transforms() {
+        return true;
+    }
+
+    /**
+     * Whether stage 4 turns this wielder into an actual giant with a thirteen-block hitbox.
+     *
+     * Only the two who canonically have one. It has to stay separate from {@link #transforms()}
+     * because the hitbox growth, the headroom requirement and the crush aura all hang off it -
+     * letting Shikamaru reach stage 4 should sharpen his shadows, not inflate him into a
+     * building.
+     */
+    public boolean hasGiantForm() {
+        return this.hasSusanoo() || this.hasKuramaCloak();
+    }
+
     public float maxHealth() {
         return this.maxHealth;
     }
@@ -115,8 +180,38 @@ public enum MangekyoBossVariant {
         return this.movementSpeed;
     }
 
-    public BossKit kit() {
-        return this.kit;
+    /**
+     * Relative likelihood of this wielder being the one that spawns.
+     *
+     * Picking uniformly stopped working when the roster grew from ten to sixteen: the five
+     * Uchiha went from half of all boss spawns to under a third, which quietly stretched the
+     * road to an Eternal Mangekyo by about sixty percent without anyone touching that system.
+     * Weighting holds the Uchiha share at fifty percent and lets the legends stay rare -
+     * Hashirama rarest of all, which is the point of him.
+     */
+    public int spawnWeight() {
+        return this.spawnWeight;
+    }
+
+    /** Total of every weight, for the weighted roll in MangekyoBossEntity#finalizeSpawn. */
+    public static int totalSpawnWeight() {
+        int total = 0;
+        for (MangekyoBossVariant variant : values()) {
+            total += variant.spawnWeight;
+        }
+        return total;
+    }
+
+    /** Picks a wielder in proportion to {@link #spawnWeight()}. */
+    public static MangekyoBossVariant weightedRandom(net.minecraft.util.RandomSource random) {
+        int roll = random.nextInt(totalSpawnWeight());
+        for (MangekyoBossVariant variant : values()) {
+            roll -= variant.spawnWeight;
+            if (roll < 0) {
+                return variant;
+            }
+        }
+        return ITACHI;
     }
 
     public float susanooRed() {
@@ -153,6 +248,13 @@ public enum MangekyoBossVariant {
             case HIDAN -> com.sekwah.narutomod.item.NarutoItems.KABUTOWARI;
             case DEIDARA -> com.sekwah.narutomod.item.NarutoItems.EXPLOSIVE_KUNAI;
             case SASORI -> com.sekwah.narutomod.item.NarutoItems.SENBON;
+            // Kakashi's White Light Chakra Sabre; the chakra blade is its closest match here.
+            case KAKASHI -> com.sekwah.narutomod.item.NarutoItems.CHAKRA_BLADE;
+            case NARUTO, SHIKAMARU -> com.sekwah.narutomod.item.NarutoItems.KUNAI;
+            // Hashirama, Nagato and Hinata all fought empty-handed - the wood, the gravity
+            // and the Gentle Fist are the weapon. Giving them a knife would be wrong twice
+            // over: wrong for the character, and it would quietly add its damage on top.
+            case HASHIRAMA, NAGATO, HINATA -> null;
         };
     }
 

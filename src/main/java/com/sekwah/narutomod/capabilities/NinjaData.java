@@ -149,6 +149,21 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
     @Sync
     private int ninjaRank = 0; // 0=Academy, 1=Genin, 2=Chunin, 3=Jonin, 4=Kage
 
+    /**
+     * Low/Mid/High within the current base rank, 0-2. Always 0 at Academy.
+     * syncGlobally so other players' nameplates and the rank HUD read the right grade.
+     */
+    @Sync(syncGlobally = true)
+    private int rankTier = 0;
+
+    /** The step past Kage. Earned by deeds, not by an XP total - see recordMangekyoBossKill. */
+    @Sync(syncGlobally = true)
+    private boolean sixPathsUnlocked = false;
+
+    /** Progress toward the Six Paths step. */
+    @Sync
+    private int mangekyoBossKills = 0;
+
     @Sync
     private String clanId = ""; // empty = not chosen yet
 
@@ -198,9 +213,25 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
     @Sync(syncGlobally = true)
     private String mangekyoForm = "";
 
+    /**
+     * Chosen Susanoo tint as a packed 0xRRGGBB, or -1 to keep the wielder's canon colour.
+     * syncGlobally because it is read by a renderer that draws for every nearby player.
+     */
+    @Sync(syncGlobally = true)
+    private int susanooColor = -1;
+
     /** Drives escalating blindness on non-EMS Mangekyo casts. */
     @Sync
     private int msUseCounter = 0;
+
+    /**
+     * Movement keys held at the moment of the last cast, -1/0/1 on each axis. Transient and
+     * deliberately unsynced: it is a one-shot input snapshot the activation packet fills in
+     * just before performServer runs, so directional techniques can read WASD. A ServerPlayer
+     * never updates its own xxa/zza, so there is nothing on the server side to read otherwise.
+     */
+    private float moveStrafe = 0f;
+    private float moveForward = 0f;
 
     @Sync(minTicks = 20)
     private int msBlindnessDecayTicks = 0;
@@ -291,10 +322,91 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
     private int bountyRemaining = 0;
     private float bountyRewardXp = 0f;
 
-    // Rank thresholds and bonuses
-    private static final float[] RANK_XP_THRESHOLDS = {0, 1000, 5000, 15000, 50000};
-    private static final float[] RANK_CHAKRA_BONUS = {0, 400, 2400, 4900, 14900};
-    private static final float[] RANK_STAMINA_BONUS = new float[] {0, 50, 200, 500, 900};
+    // --- Rank ladder ---
+    //
+    // The five ranks each split into Low/Mid/High (Academy excepted - a student has no
+    // grades), plus a final Six Paths step that XP cannot buy. Everything below is indexed
+    // by that 0-13 ladder rather than by the 0-4 base rank.
+    //
+    // The base rank is deliberately still stored and still 0-4: forty-odd places read it to
+    // gate element slots, dojutsu awakening, Susanoo stages and tail count, and those must
+    // keep advancing in whole ranks. A tier buys statistics, never permissions.
+    //
+    // Index: 0 Academy | 1-3 Genin | 4-6 Chunin | 7-9 Jonin | 10-12 Kage | 13 Six Paths.
+
+    /** Ladder steps. Base-rank entries keep their historical values so saves don't shift. */
+    private static final float[] RANK_XP_THRESHOLDS = {
+            0,
+            1000, 2000, 3400,
+            5000, 8000, 11000,
+            15000, 24000, 35000,
+            50000, 80000, 120000,
+            Float.MAX_VALUE // Six Paths is an achievement, never an XP total
+    };
+
+    /** Absolute chakra pool per ladder step, before the clan multiplier. */
+    private static final float[] RANK_CHAKRA_POOL = {
+            100,
+            500, 750, 1100,
+            2000, 3000, 4200,
+            6000, 8500, 12000,
+            18000, 26000, 36000,
+            50000
+    };
+
+    /** Absolute stamina pool per ladder step. */
+    private static final float[] RANK_STAMINA_POOL = {
+            100,
+            150, 190, 240,
+            300, 380, 480,
+            600, 750, 950,
+            1200, 1500, 1900,
+            2400
+    };
+
+    /**
+     * Seconds to refill an empty chakra pool at each step.
+     *
+     * Regeneration used to be the flat NarutoConfig.chakraRegen of 0.05 per tick - one point
+     * a second - at every rank. The pool grew a hundred and fifty times from Academy to Kage
+     * and the regeneration grew not at all, so a Kage refilling from empty needed over four
+     * hours of standing around. Deriving the rate from the pool instead of hardcoding it is
+     * the fix; the numbers here just decide how much heavier the top end feels.
+     */
+    private static final float[] RANK_REFILL_SECONDS = {
+            100,
+            104, 109, 113,
+            118, 122, 127,
+            131, 136, 140,
+            145, 149, 154,
+            160
+    };
+
+    /** Seconds of Chakra Charge channelling to fill the pool. Higher rank channels faster. */
+    private static final float[] RANK_CHARGE_SECONDS = {
+            15.0f,
+            14.5f, 14.0f, 13.5f,
+            13.0f, 12.5f, 12.0f,
+            11.5f, 11.0f, 10.5f,
+            10.0f, 9.0f, 8.5f,
+            8.0f
+    };
+
+    /** Outgoing jutsu and melee scaling per ladder step. */
+    private static final float[] RANK_DAMAGE_MULTIPLIER = {
+            0.5f,
+            0.8f, 0.87f, 0.94f,
+            1.0f, 1.15f, 1.3f,
+            1.5f, 1.8f, 2.1f,
+            2.5f, 2.9f, 3.4f,
+            4.2f
+    };
+
+    /** The Academy regen rate the config value is calibrated against. */
+    private static final float BASE_REGEN_REFERENCE = 0.05f;
+
+    /** Mangekyo bosses that have to fall before the Six Paths step opens. */
+    private static final int SIX_PATHS_BOSS_KILLS = 10;
     private static final ResourceLocation SHARINGAN_ABILITY = new ResourceLocation("narutomod", "sharingan");
     private static final ResourceLocation BYAKUGAN_ABILITY = new ResourceLocation("narutomod", "byakugan");
     private static final ResourceLocation CHAKRA_DASH_ABILITY = new ResourceLocation("narutomod", "chakra_dash");
@@ -313,7 +425,8 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
     private static final float CHIDORI_TICK_COST = 0.75F;
     private static final DustParticleOptions CHIDORI_PARTICLE = new DustParticleOptions(new Vector3f(0.45F, 0.85F, 1.0F), 1.0F);
 
-    @Sync(minTicks = 1)
+    /** syncGlobally: drives the Chidori thrust stance, which onlookers need to see. */
+    @Sync(minTicks = 1, syncGlobally = true)
     private int chidoriTicks = 0;
 
     @Sync(minTicks = 1)
@@ -322,7 +435,8 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
     @Sync(minTicks = 1)
     private int wallWalkTicks = 0;
 
-    @Sync(minTicks = 1)
+    /** syncGlobally: drives the wall-climb stance, which onlookers need to see. */
+    @Sync(minTicks = 1, syncGlobally = true)
     private boolean wallWalkAttached = false;
 
     @Sync(minTicks = 1)
@@ -477,7 +591,11 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
      * jutsu successfully fires (see ServerAbilityActivatePacket). Purely cosmetic — gives
      * every jutsu a brief visible cast animation instead of firing with no tell at all.
      */
-    @Sync(minTicks = 1)
+    // syncGlobally: a pose is something OTHER people look at. Without it these three reach
+    // only the casting player, so in multiplayer everyone else saw jutsu fire out of a
+    // completely idle body - the same class of bug that once made Susanoo invisible to
+    // everyone but its owner.
+    @Sync(minTicks = 1, syncGlobally = true)
     private int castPoseTicks = 0;
 
     /**
@@ -485,7 +603,7 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
      * instead of the default tiger seal. Reset to false before every INSTANT cast so it
      * never bleeds into an unrelated jutsu's flash (see ServerAbilityActivatePacket).
      */
-    @Sync(minTicks = 1)
+    @Sync(minTicks = 1, syncGlobally = true)
     private boolean crossSealPose = false;
 
     /**
@@ -493,7 +611,7 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
      * bespoke pose for specific INSTANT jutsu instead of always falling back to the generic
      * hand-seal flash (see ServerAbilityActivatePacket).
      */
-    @Sync(minTicks = 1)
+    @Sync(minTicks = 1, syncGlobally = true)
     private ResourceLocation lastCastAbilityId;
 
     @Override
@@ -566,16 +684,104 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
     @Override
     public void addChakraXp(float amount) {
         this.chakraXp += amount;
-        // Check rank advancement
-        for (int i = RANK_XP_THRESHOLDS.length - 1; i >= 0; i--) {
-            if (this.chakraXp >= RANK_XP_THRESHOLDS[i]) {
-                if (this.ninjaRank < i) {
-                    this.ninjaRank = i;
+        this.advanceLadder();
+        this.checkRankElementPerks();
+    }
+
+    /**
+     * Walks the 0-13 ladder up to wherever the current XP total reaches, then writes the
+     * base rank and tier back out. Never demotes - losing a rank to a stat edit or a
+     * threshold retune would be far worse than the alternative.
+     */
+    private void advanceLadder() {
+        for (int index = RANK_XP_THRESHOLDS.length - 1; index >= 0; index--) {
+            if (this.chakraXp >= RANK_XP_THRESHOLDS[index]) {
+                if (index > this.getRankIndex()) {
+                    this.applyRankIndex(index);
+                    this.getConfigData();
                 }
-                break;
+                this.checkSixPaths();
+                return;
             }
         }
-        this.checkRankElementPerks();
+    }
+
+    /** Splits a ladder index back into the base rank and its tier. */
+    private void applyRankIndex(int index) {
+        int clamped = Math.min(Math.max(index, 0), RANK_XP_THRESHOLDS.length - 1);
+        if (clamped >= 13) {
+            this.ninjaRank = 4;
+            this.rankTier = 2;
+            return;
+        }
+        if (clamped == 0) {
+            this.ninjaRank = 0;
+            this.rankTier = 0;
+            return;
+        }
+        this.ninjaRank = 1 + (clamped - 1) / 3;
+        this.rankTier = (clamped - 1) % 3;
+    }
+
+    /**
+     * Position on the full ladder: 0 Academy, 1-3 Genin Low/Mid/High, 4-6 Chunin, 7-9 Jonin,
+     * 10-12 Kage, 13 Six Paths. Every stat table in this class is indexed by this.
+     */
+    @Override
+    public int getRankIndex() {
+        if (this.sixPathsUnlocked) {
+            return 13;
+        }
+        if (this.ninjaRank <= 0) {
+            return 0;
+        }
+        return 1 + (this.ninjaRank - 1) * 3 + Math.min(Math.max(this.rankTier, 0), 2);
+    }
+
+    @Override
+    public int getRankTier() {
+        return this.ninjaRank <= 0 ? 0 : Math.min(Math.max(this.rankTier, 0), 2);
+    }
+
+    @Override
+    public boolean isSixPaths() {
+        return this.sixPathsUnlocked;
+    }
+
+    @Override
+    public int getMangekyoBossKills() {
+        return this.mangekyoBossKills;
+    }
+
+    /**
+     * Records a felled Mangekyo boss and opens the Six Paths step once a High Kage has put
+     * down enough of them. Deliberately not an XP threshold: the last step of the ladder
+     * should be something you did, not something you accumulated.
+     *
+     * @return true if this kill was the one that opened Six Paths
+     */
+    @Override
+    public boolean recordMangekyoBossKill() {
+        this.mangekyoBossKills++;
+        return this.checkSixPaths();
+    }
+
+    /**
+     * Opens the Six Paths step once both halves of the requirement are met.
+     *
+     * Called from the kill counter and from rank advancement, because the two can be
+     * satisfied in either order: a player may well have felled ten wielders on the long climb
+     * to High Kage, and checking only on kill would leave them waiting for an eleventh.
+     */
+    private boolean checkSixPaths() {
+        if (this.sixPathsUnlocked
+                || this.mangekyoBossKills < SIX_PATHS_BOSS_KILLS
+                || this.getRankIndex() < 12) {
+            return false;
+        }
+        this.sixPathsUnlocked = true;
+        this.getConfigData();
+        return true;
     }
 
     @Override
@@ -586,10 +792,23 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
     @Override
     public void setNinjaRank(int rank) {
         this.ninjaRank = Math.min(Math.max(rank, 0), 4);
-        if (this.chakraXp < RANK_XP_THRESHOLDS[this.ninjaRank]) {
-            this.chakraXp = RANK_XP_THRESHOLDS[this.ninjaRank];
+        this.rankTier = 0;
+        float floor = RANK_XP_THRESHOLDS[this.getRankIndex()];
+        if (this.chakraXp < floor) {
+            this.chakraXp = floor;
         }
         this.checkRankElementPerks();
+        this.getConfigData();
+    }
+
+    /** Command-side tier set, for /ninja. Tiers above Academy only. */
+    @Override
+    public void setRankTier(int tier) {
+        this.rankTier = Math.min(Math.max(tier, 0), 2);
+        float floor = RANK_XP_THRESHOLDS[this.getRankIndex()];
+        if (this.chakraXp < floor) {
+            this.chakraXp = floor;
+        }
         this.getConfigData();
     }
 
@@ -638,6 +857,7 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
             }
             default -> { }
         }
+        this.grantNatureStarterJutsu();
     }
 
     /**
@@ -649,7 +869,38 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
         if (this.ninjaRank >= 3 && "uchiha".equals(this.clanId) && !this.isElementUnlocked("lightning")) {
             this.forceUnlockElement("lightning");
         }
+        this.grantNatureStarterJutsu();
         this.checkDojutsuPerks();
+    }
+
+    /** The entry technique of each nature, which awakening that nature teaches you outright. */
+    private static final java.util.Map<String, String> NATURE_STARTER_JUTSU = java.util.Map.of(
+            "fire", "fireball",
+            "water", "water_bullet",
+            "earth", "earth_wall",
+            "wind", "great_breakthrough",
+            "lightning", "false_darkness");
+
+    /**
+     * Awakening a nature teaches its most basic technique for free - an Uchiha does not need
+     * to find a scroll to learn how to breathe fire, and a wind-natured Uzumaki does not need
+     * one for Great Breakthrough. Only the entry jutsu of each element is covered; everything
+     * deeper still costs a scroll, and the mastery-level gate still applies on top, so a
+     * freshly awakened nature cannot skip straight to its advanced techniques.
+     *
+     * Runs on every XP gain rather than only at clan selection so that saves created before
+     * this existed pick their starters up too - learnJutsu already ignores duplicates.
+     */
+    private void grantNatureStarterJutsu() {
+        if (this.unlockedElements.isEmpty()) {
+            return;
+        }
+        for (String element : this.unlockedElements.split(",")) {
+            String starter = NATURE_STARTER_JUTSU.get(element);
+            if (starter != null) {
+                this.learnJutsu(starter);
+            }
+        }
     }
 
     /**
@@ -781,11 +1032,18 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
         };
     }
 
+    /**
+     * Global training-speed multiplier for chakra natures. The mastery curve is quadratic
+     * (level = sqrt(xp/25)), so the upper levels were a long grind at the raw award rates.
+     */
+    private static final float ELEMENT_XP_RATE = 1.45f;
+
     @Override
     public void addElementXp(String element, float amount) {
         if (!this.isElementUnlocked(element) || amount <= 0) {
             return;
         }
+        amount *= ELEMENT_XP_RATE;
         switch (element) {
             case "fire" -> this.elementXpFire += amount;
             case "water" -> this.elementXpWater += amount;
@@ -845,6 +1103,23 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
                     : this.unlockedElements.split(",")[0];
         }
         return true;
+    }
+
+    /**
+     * True for the mod's own chakra techniques, which the Susanoo shell must NOT swat away.
+     *
+     * The shell reverses the velocity of anything incoming, which is right for an arrow and
+     * completely wrong for a fireball: a jutsu projectile got bounced back and forth at the
+     * edge of the shell every tick, so it never reached anything, never ran its impact code
+     * and never despawned. Fire thrown at a Susanoo visibly piled up in mid-air instead of
+     * bursting against it.
+     *
+     * Techniques are allowed through to strike the shell properly. They still barely scratch
+     * it - the damage sponge takes up to 90% at Complete Body - but they detonate where they
+     * land, which is both what it should look like and what stops them accumulating.
+     */
+    private static boolean isJutsuProjectile(net.minecraft.world.entity.projectile.Projectile projectile) {
+        return projectile instanceof net.minecraft.world.entity.projectile.AbstractHurtingProjectile;
     }
 
     /** Bypasses the unlocked check in setElementLevel, for wiping a removed nature. */
@@ -1149,14 +1424,7 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
 
     @Override
     public float getRankDamageMultiplier() {
-        float mult = switch (this.ninjaRank) {
-            case 0 -> 0.5f;
-            case 1 -> 0.8f;
-            case 2 -> 1.0f;
-            case 3 -> 1.5f;
-            case 4 -> 2.5f;
-            default -> 1.0f;
-        };
+        float mult = RANK_DAMAGE_MULTIPLIER[this.getRankIndex()];
         if (this.sageModeActive) {
             mult *= 1.4f;
         }
@@ -1177,6 +1445,9 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
     public void resetProgression() {
         this.chakraXp = 0;
         this.ninjaRank = 0;
+        this.rankTier = 0;
+        this.sixPathsUnlocked = false;
+        this.mangekyoBossKills = 0;
         this.clanId = "";
         this.natureAffinity = "";
         this.unlockedElements = "";
@@ -1378,7 +1649,7 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
             this.stamina += 0.5f + this.ninjaRank * 0.3f;
         }
         if (this.chakraRegenInfo.canRegen()) {
-            this.chakra += NarutoConfig.chakraRegen * getClanChakraRegenMultiplier();
+            this.chakra += this.getChakraRegenPerTick() * getClanChakraRegenMultiplier();
         }
         this.substitutions += NarutoConfig.substitutionRegenRate;
         this.substitutions = Math.min(Math.max(this.substitutions, 0), this.maxSubstitutions);
@@ -1502,6 +1773,13 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
         }
         if (this.kcmActive) {
             speedBonus += 2.5D; // "Flash-level" speed — KCM's whole point is raw speed, no shell
+        }
+        // Shisui no Shunshin - "Shisui of the Body Flicker". The boss moves fast enough that
+        // you can barely track him, but inheriting his eyes handed over Kotoamatsukami and
+        // nothing else, so the one thing he was actually famous for did not carry across.
+        // It is a passive of the form now, active whenever his Mangekyo is the one you wear.
+        if (this.mangekyoAwakened && "shisui".equals(this.mangekyoForm)) {
+            speedBonus += 0.85D;
         }
         // Raiton no Yoroi: the Raikage's armour is deliberately the fastest thing in the
         // mod, so it out-runs even KCM and a fully opened Eight Gates.
@@ -1708,7 +1986,8 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
     }
 
     // --- Eight Gates ---
-    @Sync(minTicks = 1)
+    /** syncGlobally: drives the Eight Gates tremor, which onlookers need to see. */
+    @Sync(minTicks = 1, syncGlobally = true)
     private int gatesOpen = 0;
     private int gatesTicks = 0; // ticks remaining before gates auto-close
 
@@ -2052,6 +2331,32 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
     }
 
     @Override
+    public int getSusanooColor() {
+        return this.susanooColor;
+    }
+
+    @Override
+    public void setSusanooColor(int packedRgb) {
+        this.susanooColor = packedRgb;
+    }
+
+    @Override
+    public void setMoveInput(float strafe, float forward) {
+        this.moveStrafe = strafe;
+        this.moveForward = forward;
+    }
+
+    @Override
+    public float getMoveStrafe() {
+        return this.moveStrafe;
+    }
+
+    @Override
+    public float getMoveForward() {
+        return this.moveForward;
+    }
+
+    @Override
     public void setMangekyoForm(String form) {
         this.mangekyoForm = form != null ? form : "";
     }
@@ -2379,7 +2684,8 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
         double shellRadius = 2.0 + this.susanooStage * 0.5;
         for (net.minecraft.world.entity.projectile.Projectile projectile
                 : player.level().getEntitiesOfClass(net.minecraft.world.entity.projectile.Projectile.class,
-                        player.getBoundingBox().inflate(shellRadius), p -> p.getOwner() != player)) {
+                        player.getBoundingBox().inflate(shellRadius),
+                        p -> p.getOwner() != player && !isJutsuProjectile(p))) {
             Vec3 toPlayer = player.position().add(0, player.getBbHeight() * 0.5, 0).subtract(projectile.position());
             Vec3 velocity = projectile.getDeltaMovement();
             if (velocity.dot(toPlayer) <= 0) {
@@ -2395,13 +2701,18 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
             }
         }
 
-        // Complete Body crush aura: at stage 4 the camera rides ~40 blocks up, so normal
-        // melee raycasts can't reach ground targets — instead the giant itself is the weapon:
+        // Complete Body crush aura: at stage 4 the camera rides high above the ground, so
+        // normal melee raycasts can't reach targets — instead the giant itself is the weapon:
         // anything standing inside its footprint is periodically crushed and thrown aside.
         // Magic damage source on purpose: a player-attack source here would re-enter the
         // melee-hit AoE handlers (arm swipe) every pulse.
-        if (this.susanooStage >= 4 && player.tickCount % 15 == 0) {
-            crushAura(player, 6.0, 6.0f * this.getRankDamageMultiplier());
+        //
+        // Deliberately far heavier than stage 3's shell. Complete Body used to cost the most
+        // to reach and then play almost identically to the ribcage, which is why nobody had
+        // any reason to grow it - it is now a genuinely different thing: it stamps a wide
+        // area flat, it cannot be staggered, and it flies.
+        if (this.susanooStage >= 4 && player.tickCount % 10 == 0) {
+            crushAura(player, 8.0, 14.0f * this.getRankDamageMultiplier());
         }
 
         // Purple/blue skeletal aura particles
@@ -2538,10 +2849,40 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
     }
 
     private void getConfigData() {
-        float baseChakra = NarutoConfig.maxChakra + RANK_CHAKRA_BONUS[Math.min(this.ninjaRank, 4)];
-        this.maxChakra = baseChakra * getClanChakraMultiplier();
-        this.maxStamina = NarutoConfig.maxStamina + RANK_STAMINA_BONUS[Math.min(this.ninjaRank, 4)];
+        int index = this.getRankIndex();
+        // The config's maxChakra is still honoured, but as a scale on the Academy step rather
+        // than as a flat base every rank is added to - otherwise the ladder's own curve would
+        // be flattened by whatever the config happened to say.
+        float configScale = NarutoConfig.maxChakra / 100f;
+        this.maxChakra = RANK_CHAKRA_POOL[index] * configScale * getClanChakraMultiplier();
+        this.maxStamina = RANK_STAMINA_POOL[index] * (NarutoConfig.maxStamina / 100f);
         this.maxSubstitutions = NarutoConfig.maxSubstitutions;
+    }
+
+    /**
+     * Passive chakra regeneration, per tick, derived from the pool rather than fixed.
+     *
+     * A pool that grows five hundredfold across the ladder needs a rate that grows with it,
+     * or the top of the ladder is unplayable - see RANK_REFILL_SECONDS. The config value is
+     * kept as a global speed knob by expressing it relative to the Academy rate it was
+     * originally calibrated for.
+     */
+    private float getChakraRegenPerTick() {
+        int index = this.getRankIndex();
+        float configScale = NarutoConfig.chakraRegen / BASE_REGEN_REFERENCE;
+        return this.maxChakra / (20f * RANK_REFILL_SECONDS[index]) * configScale;
+    }
+
+    /**
+     * How much a tick of Chakra Charge channelling restores. Scales with the pool for the
+     * same reason regeneration does, and the fill time additionally shortens with rank, so
+     * a Kage genuinely channels faster and not merely bigger.
+     */
+    @Override
+    public float getChakraChargePerTick(boolean moving) {
+        int index = this.getRankIndex();
+        float perTick = this.maxChakra / (20f * RANK_CHARGE_SECONDS[index]);
+        return moving ? perTick * 0.2f : perTick;
     }
 
     @Override
@@ -2582,6 +2923,10 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
         nbt.putFloat(SUBSTITUTION_TAG, this.substitutions);
         nbt.putFloat("chakraXp", this.chakraXp);
         nbt.putInt("ninjaRank", this.ninjaRank);
+        nbt.putInt("rankTier", this.rankTier);
+        nbt.putInt("susanooColor", this.susanooColor);
+        nbt.putBoolean("sixPathsUnlocked", this.sixPathsUnlocked);
+        nbt.putInt("mangekyoBossKills", this.mangekyoBossKills);
         nbt.putString("clanId", this.clanId);
         nbt.putString("natureAffinity", this.natureAffinity);
         nbt.putString("unlockedElements", this.unlockedElements);
@@ -2640,6 +2985,14 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
             this.substitutions = compoundTag.getFloat(SUBSTITUTION_TAG);
             this.chakraXp = compoundTag.getFloat("chakraXp");
             this.ninjaRank = compoundTag.getInt("ninjaRank");
+            // Absent on saves written before the ladder existed; those players simply start
+            // their current rank at Low, which is exactly where the old thresholds put them.
+            this.rankTier = compoundTag.getInt("rankTier");
+            // Absent means "never picked one", which is the canon colour, not black.
+            this.susanooColor = compoundTag.contains("susanooColor")
+                    ? compoundTag.getInt("susanooColor") : -1;
+            this.sixPathsUnlocked = compoundTag.getBoolean("sixPathsUnlocked");
+            this.mangekyoBossKills = compoundTag.getInt("mangekyoBossKills");
             this.clanId = compoundTag.getString("clanId");
             this.natureAffinity = compoundTag.getString("natureAffinity");
             this.unlockedElements = compoundTag.getString("unlockedElements");

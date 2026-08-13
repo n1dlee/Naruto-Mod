@@ -156,7 +156,7 @@ public class SusanooRenderer {
 
             render(event.getPoseStack(), event.getMultiBufferSource(), event.getPackedLight(),
                     player, event.getPartialTick(), stage, ninjaData.getTransformPower(),
-                    ninjaData.getMangekyoForm());
+                    ninjaData.getMangekyoForm(), ninjaData.getSusanooColor());
         });
     }
 
@@ -170,13 +170,39 @@ public class SusanooRenderer {
         }
         render(event.getPoseStack(), event.getMultiBufferSource(), event.getPackedLight(),
                 event.getEntity(), event.getPartialTick(), ninjaData.getSusanooStage(),
-                ninjaData.getTransformPower(), ninjaData.getMangekyoForm());
+                ninjaData.getTransformPower(), ninjaData.getMangekyoForm(),
+                ninjaData.getSusanooColor());
+    }
+
+    /**
+     * Which colour the shell is drawn in.
+     *
+     * A wielder's Mangekyo form sets a canon default - Itachi red-orange, Madara blue - but a
+     * chosen colour overrides it. Uchiha inherit an eye, not a palette, and picking the shade
+     * of your own Susanoo is the one piece of self-expression the form system never offered.
+     *
+     * @param customColor packed 0xRRGGBB, or negative for "use the form's own colour"
+     * @param fallback    used when there is neither a form nor a choice
+     */
+    private static float[] resolveTint(MangekyoBossVariant form, int customColor, float[] fallback) {
+        if (customColor >= 0) {
+            return new float[]{
+                    ((customColor >> 16) & 0xFF) / 255f,
+                    ((customColor >> 8) & 0xFF) / 255f,
+                    (customColor & 0xFF) / 255f};
+        }
+        if (form == null) {
+            return fallback;
+        }
+        return new float[]{form.susanooRed(), form.susanooGreen(), form.susanooBlue()};
     }
 
     private static void render(PoseStack poseStack, MultiBufferSource bufferSource, int packedLight,
-                                Player player, float partialTick, int stage, float power, String mangekyoForm) {
+                                Player player, float partialTick, int stage, float power,
+                                String mangekyoForm, int customColor) {
         if (detailedReady()) {
-            renderDetailed(poseStack, bufferSource, packedLight, player, partialTick, stage, power, mangekyoForm);
+            renderDetailed(poseStack, bufferSource, packedLight, player, partialTick, stage, power,
+                    mangekyoForm, customColor);
             return;
         }
         VertexConsumer consumer = bufferSource.getBuffer(RENDER_TYPE);
@@ -199,9 +225,11 @@ public class SusanooRenderer {
         // Phase 16: the shell takes the colour of whichever Mangekyo the wielder carries —
         // Itachi's red-orange, Madara's blue, and so on. Plain Mangekyo keeps the violet.
         MangekyoBossVariant form = MangekyoBossVariant.byFormId(mangekyoForm);
-        float red = form == null ? DEFAULT_RED : form.susanooRed();
-        float green = form == null ? DEFAULT_GREEN : form.susanooGreen();
-        float blue = form == null ? DEFAULT_BLUE : form.susanooBlue();
+        float[] tint = resolveTint(form, customColor,
+                new float[]{DEFAULT_RED, DEFAULT_GREEN, DEFAULT_BLUE});
+        float red = tint[0];
+        float green = tint[1];
+        float blue = tint[2];
         model.renderToBuffer(poseStack, consumer, packedLight, OverlayTexture.NO_OVERLAY,
                 red, green, blue, ALPHA);
 
@@ -215,7 +243,7 @@ public class SusanooRenderer {
      */
     private static void renderDetailed(PoseStack poseStack, MultiBufferSource bufferSource, int packedLight,
                                        Player player, float partialTick, int stage, float power,
-                                       String mangekyoForm) {
+                                       String mangekyoForm, int customColor) {
         int clamped = Mth.clamp(stage, 1, 4);
         Model body;
         ResourceLocation texture;
@@ -241,9 +269,11 @@ public class SusanooRenderer {
 
         MangekyoBossVariant form = MangekyoBossVariant.byFormId(mangekyoForm);
         // Blend the form colour only part-way toward white so the painted detail survives
-        float red = form == null ? 1.0f : 0.5f + form.susanooRed() * 0.5f;
-        float green = form == null ? 1.0f : 0.5f + form.susanooGreen() * 0.5f;
-        float blue = form == null ? 1.0f : 0.5f + form.susanooBlue() * 0.5f;
+        float[] base = resolveTint(form, customColor, new float[]{1.0f, 1.0f, 1.0f});
+        boolean tinted = form != null || customColor >= 0;
+        float red = tinted ? 0.5f + base[0] * 0.5f : 1.0f;
+        float green = tinted ? 0.5f + base[1] * 0.5f : 1.0f;
+        float blue = tinted ? 0.5f + base[2] * 0.5f : 1.0f;
 
         // Derive the scale from the height this stage should stand, so each body lands at
         // the right size regardless of how it happened to be authored.

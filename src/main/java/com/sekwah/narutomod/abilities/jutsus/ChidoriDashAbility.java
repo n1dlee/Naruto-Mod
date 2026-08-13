@@ -34,6 +34,12 @@ public class ChidoriDashAbility extends Ability implements Ability.Cooldown {
         return ActivationType.INSTANT;
     }
 
+    /** The dash carries the read; the arm has no time to pose. */
+    @Override
+    public int castPoseTicks() {
+        return 4;
+    }
+
     @Override
     public long defaultCombo() {
         return 2121;

@@ -153,6 +153,10 @@ public class NarutoItems {
             -> new RinneganEyeItem(new Item.Properties().stacksTo(1).rarity(net.minecraft.world.item.Rarity.EPIC)));
 
     /** Phase 23: cut from a fallen Uchiha — lets a non-Uchiha transplant a Sharingan. */
+    /** The only route to a Byakugan for anyone not born Hyuga; dropped by Hinata. */
+    public static final RegistryObject<Item> BYAKUGAN_EYE = ITEMS.register("byakugan_eye", ()
+            -> new ByakuganEyeItem(new Item.Properties().stacksTo(1).rarity(net.minecraft.world.item.Rarity.EPIC)));
+
     public static final RegistryObject<Item> SHARINGAN_EYE = ITEMS.register("sharingan_eye", ()
             -> new SharinganEyeItem(new Item.Properties().stacksTo(1).rarity(net.minecraft.world.item.Rarity.RARE)));
 

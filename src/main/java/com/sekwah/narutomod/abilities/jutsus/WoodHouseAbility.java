@@ -42,6 +42,12 @@ public class WoodHouseAbility extends Ability implements Ability.Cooldown {
         return ActivationType.INSTANT;
     }
 
+    /** Raising a building out of the ground is the slowest thing a Senju does. */
+    @Override
+    public int castPoseTicks() {
+        return 26;
+    }
+
     @Override
     public long defaultCombo() {
         return 3221;

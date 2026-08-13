@@ -56,7 +56,8 @@ public class NarutoRenderEvents {
         event.registerEntityRenderer(NarutoEntities.SHADOW_CLONE.get(), ShadowCloneRenderer::new);
         event.registerEntityRenderer(NarutoEntities.RASENGAN.get(), RasenganRenderer::new);
         event.registerEntityRenderer(NarutoEntities.AMATERASU_FIRE.get(), NoopRenderer::new);
-        event.registerEntityRenderer(NarutoEntities.RASENSHURIKEN.get(), NoopRenderer::new);
+        event.registerEntityRenderer(NarutoEntities.RASENSHURIKEN.get(),
+                com.sekwah.narutomod.client.renderer.entity.RasenshurikenRenderer::new);
         event.registerEntityRenderer(NarutoEntities.SUMMON_BEAST.get(), SummonBeastRenderer::new);
         event.registerEntityRenderer(NarutoEntities.ROGUE_NINJA.get(),
                 com.sekwah.narutomod.client.renderer.entity.RogueNinjaRenderer::new);

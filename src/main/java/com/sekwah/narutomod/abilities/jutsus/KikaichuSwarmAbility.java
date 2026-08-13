@@ -35,6 +35,12 @@ public class KikaichuSwarmAbility extends Ability implements Ability.Toggled, Ab
         return ActivationType.TOGGLE;
     }
 
+    /** The swarm leaves the sleeves over several beats. */
+    @Override
+    public int castPoseTicks() {
+        return 14;
+    }
+
     @Override
     public long defaultCombo() {
         return 321;

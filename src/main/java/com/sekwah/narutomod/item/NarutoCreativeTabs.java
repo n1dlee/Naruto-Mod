@@ -46,6 +46,7 @@ public class NarutoCreativeTabs {
                 output.accept(NarutoItems.CHAKRA_PAPER.get());
                 output.accept(NarutoItems.RINNEGAN_EYE.get());
                 output.accept(NarutoItems.SHARINGAN_EYE.get());
+                output.accept(NarutoItems.BYAKUGAN_EYE.get());
                 output.accept(NarutoItems.SCROLL_FIREBALL.get());
                 output.accept(NarutoItems.SCROLL_WATER_BULLET.get());
                 output.accept(NarutoItems.SCROLL_WATER_DRAGON.get());

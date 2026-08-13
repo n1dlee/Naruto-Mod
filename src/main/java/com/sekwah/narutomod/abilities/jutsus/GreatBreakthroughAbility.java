@@ -37,6 +37,12 @@ public class GreatBreakthroughAbility extends Ability implements Ability.Cooldow
         return ActivationType.INSTANT;
     }
 
+    /** Air is gathered before it is released. */
+    @Override
+    public int castPoseTicks() {
+        return 12;
+    }
+
     @Override
     public long defaultCombo() {
         return 231;

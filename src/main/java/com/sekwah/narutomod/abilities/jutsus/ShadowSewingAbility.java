@@ -39,6 +39,12 @@ public class ShadowSewingAbility extends Ability implements Ability.Cooldown {
         return ActivationType.INSTANT;
     }
 
+    /** Shorter than possession; the shadows strike rather than hold. */
+    @Override
+    public int castPoseTicks() {
+        return 12;
+    }
+
     @Override
     public long defaultCombo() {
         return 332;

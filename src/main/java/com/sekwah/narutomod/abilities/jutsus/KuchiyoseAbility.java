@@ -30,6 +30,12 @@ public class KuchiyoseAbility extends Ability implements Ability.Cooldown {
         return ActivationType.INSTANT;
     }
 
+    /** Bite the thumb, run the seals, slam the palm down. It should cost time. */
+    @Override
+    public int castPoseTicks() {
+        return 26;
+    }
+
     @Override
     public long defaultCombo() {
         return 312;

@@ -159,6 +159,8 @@ public class NarutoEntities {
                         com.sekwah.narutomod.config.NarutoConfig.mangekyoBossSpawnEnabled
                                 && level.getDifficulty() != net.minecraft.world.Difficulty.PEACEFUL
                                 && isNearPlayerElevation(level, pos)
+                                && isPlayerReadyForBoss(level, pos)
+                                && noRivalBossNearby(level, pos)
                                 && net.minecraft.world.entity.Mob.checkMobSpawnRules(
                                         type, level, spawnType, pos, random),
                 net.minecraftforge.event.entity.SpawnPlacementRegisterEvent.Operation.REPLACE);
@@ -180,9 +182,66 @@ public class NarutoEntities {
      */
     private static boolean isNearPlayerElevation(net.minecraft.world.level.ServerLevelAccessor level,
                                                  net.minecraft.core.BlockPos pos) {
-        net.minecraft.world.entity.player.Player nearest = level.getNearestPlayer(
-                pos.getX() + 0.5D, pos.getY() + 0.5D, pos.getZ() + 0.5D, -1.0D, false);
+        net.minecraft.world.entity.player.Player nearest = nearestPlayer(level, pos);
         return nearest != null && Math.abs(nearest.getY() - pos.getY()) <= BOSS_MAX_Y_OFFSET;
+    }
+
+    /** Ladder step a player must reach before the world starts sending S-ranks at them. */
+    private static final int BOSS_MIN_RANK_INDEX = 5; // Mid Chunin
+
+    /**
+     * Holds the bosses back until the nearest player can plausibly fight one.
+     *
+     * They were gated on distance and elevation but not on the player, so a brand new
+     * Academy student with no natures and twenty health could have Sasuke and Deidara walk
+     * out of the treeline in their first few minutes. That is not difficulty, it is a wall:
+     * nothing at that stage can hurt a 240-health wielder, and the boss simply farms them.
+     *
+     * Mid Chunin is where the kit starts to exist - two nature slots, real health, a damage
+     * multiplier above 1. Before that the rogue ninja are the content.
+     */
+    private static boolean isPlayerReadyForBoss(net.minecraft.world.level.ServerLevelAccessor level,
+                                                net.minecraft.core.BlockPos pos) {
+        net.minecraft.world.entity.player.Player nearest = nearestPlayer(level, pos);
+        if (nearest == null) {
+            return false;
+        }
+        return nearest.getCapability(
+                        com.sekwah.narutomod.capabilities.NinjaCapabilityHandler.NINJA_DATA)
+                .map(data -> data.isNinjaModeEnabled() && data.getRankIndex() >= BOSS_MIN_RANK_INDEX)
+                .orElse(false);
+    }
+
+    /** No second S-rank may exist within this many blocks of a new one. */
+    private static final double BOSS_MIN_SEPARATION = 850.0;
+
+    /**
+     * One boss at a time, per region.
+     *
+     * Nothing stopped two, three or four of them accumulating in the same stretch of world -
+     * and a fight against Madara is a fight, while a fight against Madara and Hashirama and
+     * Sasuke at once is just a death. Each of these is designed as a duel, so the world only
+     * ever offers one at a time within a day's walk.
+     *
+     * The scan is by entity type rather than by area: there are only ever a handful of bosses
+     * loaded, so walking that list is far cheaper than an 850-block bounding box would be.
+     */
+    private static boolean noRivalBossNearby(net.minecraft.world.level.ServerLevelAccessor level,
+                                             net.minecraft.core.BlockPos pos) {
+        net.minecraft.server.level.ServerLevel serverLevel = level.getLevel();
+        double limitSqr = BOSS_MIN_SEPARATION * BOSS_MIN_SEPARATION;
+        for (MangekyoBossEntity existing : serverLevel.getEntities(MANGEKYO_BOSS.get(), boss -> true)) {
+            if (existing.blockPosition().distSqr(pos) < limitSqr) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static net.minecraft.world.entity.player.Player nearestPlayer(
+            net.minecraft.world.level.ServerLevelAccessor level, net.minecraft.core.BlockPos pos) {
+        return level.getNearestPlayer(
+                pos.getX() + 0.5D, pos.getY() + 0.5D, pos.getZ() + 0.5D, -1.0D, false);
     }
 
     @SubscribeEvent

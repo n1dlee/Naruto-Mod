@@ -33,6 +33,12 @@ public class AmaterasuAbility extends Ability implements Ability.Cooldown {
         return ActivationType.INSTANT;
     }
 
+    /** A held stare - the flame follows the eye, so the eye has to linger. */
+    @Override
+    public int castPoseTicks() {
+        return 20;
+    }
+
     @Override
     public long defaultCombo() {
         return 113;

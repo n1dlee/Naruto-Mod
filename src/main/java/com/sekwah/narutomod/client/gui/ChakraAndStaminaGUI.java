@@ -31,6 +31,8 @@ public class ChakraAndStaminaGUI implements PlayerGUI {
     private float maxStamina;
     private float chakraXp;
     private int ninjaRank;
+    /** Position on the full Low/Mid/High ladder — what the card actually prints. */
+    private int rankIndex;
     private String clanId = "";
     private float kuramaBond;
     private float maxKuramaBond;
@@ -71,6 +73,13 @@ public class ChakraAndStaminaGUI implements PlayerGUI {
     }
 
     public void render(GuiGraphics guiGraphics, Matrix4f worldMatrix, Vec3 cameraPos) {
+        // The HUD keeps drawing underneath open screens, and the progression screen puts its
+        // own rank card in the same top-left corner - so the two "Academy" labels landed on
+        // top of each other. The screen already shows everything this card does, in more
+        // detail, so the card stands down while it is open.
+        if (this.minecraft.screen instanceof JutsuScreen) {
+            return;
+        }
         this.screenWidth = this.minecraft.getWindow().getGuiScaledWidth();
         this.screenHeight = this.minecraft.getWindow().getGuiScaledHeight();
         int barDesign = NarutoConfig.chakraBarDesign;
@@ -160,8 +169,8 @@ public class ChakraAndStaminaGUI implements PlayerGUI {
         // --- Rank + Clan display: top-left corner "ninja card" (kept out of the
         // vanilla XP-bar/health/hunger band which sits centered above the hotbar) ---
         int rankIdx = Math.min(ninjaRank, 4);
-        String rankName = RANK_NAMES[rankIdx];
-        int rankColor = RANK_COLORS[rankIdx];
+        String rankName = com.sekwah.narutomod.capabilities.RankLadder.name(this.rankIndex);
+        int rankColor = com.sekwah.narutomod.capabilities.RankLadder.color(this.rankIndex);
         int cardX = 6;
         int cardY = 6;
 
@@ -314,6 +323,7 @@ public class ChakraAndStaminaGUI implements PlayerGUI {
             this.maxStamina = ninjaData.getMaxStamina();
             this.chakraXp = ninjaData.getChakraXp();
             this.ninjaRank = ninjaData.getNinjaRank();
+            this.rankIndex = ninjaData.getRankIndex();
             this.clanId = ninjaData.getClanId();
             this.isChanneling = ninjaData.getCurrentlyChanneledAbility() != null;
             this.channelingTicks = ninjaData.getCurrentlyChanneledTicks();

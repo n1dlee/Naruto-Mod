@@ -45,6 +45,12 @@ public class FalseDarknessAbility extends Ability implements Ability.Cooldown {
         return ActivationType.INSTANT;
     }
 
+    /** A sustained exhale, not a flick. */
+    @Override
+    public int castPoseTicks() {
+        return 12;
+    }
+
     @Override
     public long defaultCombo() {
         return 232;

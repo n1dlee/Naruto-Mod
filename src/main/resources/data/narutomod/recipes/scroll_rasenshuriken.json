@@ -1,1 +1,12 @@
-{ "type": "minecraft:crafting_shapeless", "category": "misc", "ingredients": [ { "item": "narutomod:scroll_rasengan" }, { "item": "minecraft:ghast_tear" }, { "item": "minecraft:diamond" } ], "result": { "item": "narutomod:scroll_rasenshuriken", "count": 1 } }
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "misc",
+  "ingredients": [
+    { "item": "narutomod:scroll_rasengan" },
+    { "item": "narutomod:chakra_paper" },
+    { "item": "minecraft:ghast_tear" },
+    { "item": "minecraft:ghast_tear" },
+    { "item": "minecraft:diamond_block" }
+  ],
+  "result": { "item": "narutomod:scroll_rasenshuriken", "count": 1 }
+}

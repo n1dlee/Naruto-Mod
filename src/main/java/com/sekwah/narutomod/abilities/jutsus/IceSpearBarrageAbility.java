@@ -33,6 +33,12 @@ public class IceSpearBarrageAbility extends Ability implements Ability.Cooldown 
         return ActivationType.INSTANT;
     }
 
+    /** A volley, so the stance covers the whole volley. */
+    @Override
+    public int castPoseTicks() {
+        return 14;
+    }
+
     @Override
     public long defaultCombo() {
         return 2312;

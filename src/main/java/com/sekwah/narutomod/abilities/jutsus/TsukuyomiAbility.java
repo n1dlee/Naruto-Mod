@@ -33,6 +33,12 @@ public class TsukuyomiAbility extends Ability implements Ability.Cooldown {
         return ActivationType.INSTANT;
     }
 
+    /** Eye contact held long enough to be unmistakable. */
+    @Override
+    public int castPoseTicks() {
+        return 24;
+    }
+
     @Override
     public long defaultCombo() {
         return 1131;

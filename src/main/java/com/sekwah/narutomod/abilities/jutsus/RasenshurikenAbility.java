@@ -26,6 +26,12 @@ public class RasenshurikenAbility extends Ability implements Ability.Cooldown {
         return ActivationType.INSTANT;
     }
 
+    /** Shaping it takes visibly longer than an ordinary Rasengan. */
+    @Override
+    public int castPoseTicks() {
+        return 18;
+    }
+
     @Override
     public long defaultCombo() {
         return 2122;

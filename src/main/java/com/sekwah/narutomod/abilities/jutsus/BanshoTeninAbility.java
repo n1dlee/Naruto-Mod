@@ -32,6 +32,12 @@ public class BanshoTeninAbility extends Ability implements Ability.Cooldown {
         return ActivationType.INSTANT;
     }
 
+    /** The pull lasts as long as the outstretched hand does. */
+    @Override
+    public int castPoseTicks() {
+        return 12;
+    }
+
     @Override
     public long defaultCombo() {
         return 1223;

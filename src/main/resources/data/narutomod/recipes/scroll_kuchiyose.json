@@ -1,1 +1,12 @@
-{ "type": "minecraft:crafting_shapeless", "category": "misc", "ingredients": [ { "item": "minecraft:paper" }, { "item": "minecraft:ink_sac" }, { "item": "minecraft:bone" }, { "item": "minecraft:slime_ball" } ], "result": { "item": "narutomod:scroll_kuchiyose", "count": 1 } }
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "misc",
+  "ingredients": [
+    { "item": "narutomod:chakra_paper" },
+    { "item": "minecraft:ink_sac" },
+    { "item": "minecraft:bone_block" },
+    { "item": "minecraft:slime_block" },
+    { "item": "minecraft:ghast_tear" }
+  ],
+  "result": { "item": "narutomod:scroll_kuchiyose", "count": 1 }
+}

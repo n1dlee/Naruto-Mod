@@ -17,6 +17,12 @@ public class MultipleShadowCloneJutsuAbility extends Ability implements Ability.
         return ActivationType.INSTANT;
     }
 
+    /** More clones, longer seal - it is the mass-production version. */
+    @Override
+    public int castPoseTicks() {
+        return 14;
+    }
+
     @Override
     public long defaultCombo() {
         return 1222;

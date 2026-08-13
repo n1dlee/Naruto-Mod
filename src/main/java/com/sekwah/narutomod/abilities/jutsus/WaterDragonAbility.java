@@ -46,6 +46,12 @@ public class WaterDragonAbility extends Ability implements Ability.Cooldown {
         return ActivationType.INSTANT;
     }
 
+    /** A long seal chain in canon - the longest of the water techniques here. */
+    @Override
+    public int castPoseTicks() {
+        return 14;
+    }
+
     @Override
     public long defaultCombo() {
         return 1312;

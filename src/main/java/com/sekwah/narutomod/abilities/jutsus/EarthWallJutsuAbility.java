@@ -31,6 +31,12 @@ public class EarthWallJutsuAbility extends Ability implements Ability.Cooldown {
         return ActivationType.INSTANT;
     }
 
+    /** Palms stay down while the wall comes up. */
+    @Override
+    public int castPoseTicks() {
+        return 14;
+    }
+
     @Override
     public long defaultCombo() {
         return 311;

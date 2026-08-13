@@ -121,6 +121,14 @@ public class NarutoAbilities {
     public static final RegistryObject<RasenganJutsuAbility> RASENGAN = ABILITY.register("rasengan", RasenganJutsuAbility::new);
     public static final RegistryObject<RasenshurikenAbility> RASENSHURIKEN = ABILITY.register("rasenshuriken", RasenshurikenAbility::new);
 
+    // Fire had exactly one technique for the whole game; these fill the mid and top of it.
+    public static final RegistryObject<com.sekwah.narutomod.abilities.jutsus.PhoenixFlowerAbility> PHOENIX_FLOWER =
+            ABILITY.register("phoenix_flower",
+                    com.sekwah.narutomod.abilities.jutsus.PhoenixFlowerAbility::new);
+    public static final RegistryObject<com.sekwah.narutomod.abilities.jutsus.GreatFireAnnihilationAbility> GREAT_FIRE_ANNIHILATION =
+            ABILITY.register("great_fire_annihilation",
+                    com.sekwah.narutomod.abilities.jutsus.GreatFireAnnihilationAbility::new);
+
     public static final RegistryObject<DojutsuAbility> DOJUTSU = ABILITY.register("dojutsu", DojutsuAbility::new);
 
     public static final RegistryObject<SharinganAbility> SHARINGAN = ABILITY.register("sharingan", SharinganAbility::new);
@@ -254,7 +262,17 @@ public class NarutoAbilities {
      * Send to the server that the player wants to use a specific ability
      */
     public static void triggerAbility(ResourceLocation ability) {
-        PacketHandler.sendToServer(new ServerAbilityActivatePacket(ability));
+        // Only ever called from the client's combo handler, so the local player's live WASD
+        // state is readable here and nowhere on the server - it rides along with the cast so
+        // directional techniques can use it. See the packet's own note.
+        float[] input = net.minecraftforge.fml.DistExecutor.unsafeCallWhenOn(
+                net.minecraftforge.api.distmarker.Dist.CLIENT,
+                () -> com.sekwah.narutomod.client.ClientInputAccess::currentMoveInput);
+        if (input == null) {
+            input = new float[]{0f, 0f};
+        }
+        PacketHandler.sendToServer(ServerAbilityActivatePacket.withInput(
+                NarutoRegistries.ABILITIES.getID(ability), input[0], input[1]));
     }
 
     public static Ability getAbilityFromCombo(long combo) {

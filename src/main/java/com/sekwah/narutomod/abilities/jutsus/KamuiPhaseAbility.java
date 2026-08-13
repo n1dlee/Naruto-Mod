@@ -101,13 +101,42 @@ public class KamuiPhaseAbility extends Ability
      */
     public static void applyPhasing(Player player) {
         player.noPhysics = true;
-        if (!player.getAbilities().mayfly) {
-            player.getAbilities().mayfly = true;
-            player.getAbilities().flying = true;
+
+        // Creative flight, not hand-rolled anti-gravity.
+        //
+        // This used to be noGravity(true) plus a one-off flight grant, and it produced both
+        // of the bugs players hit. Flight was only granted when mayfly was previously false,
+        // so anyone who already had it - notably on the way back out of the Kamui dimension -
+        // never got the flying flag set at all. And LocalPlayer.aiStep clears flying the
+        // instant it thinks you are standing on something, which happens on the very tick the
+        // toggle goes up. Either way you ended up phased, not flying, and with gravity that
+        // the mod had switched off in name only: the moment anything cleared noGravity you
+        // free-fell through the floor, through bedrock, and out of the world. Slowness made
+        // it look instant because it strips the horizontal drift that used to hide it.
+        //
+        // Vanilla creative flight already means exactly what this technique wants: no falling,
+        // space to rise, shift to sink, normal steering. Letting it own the vertical axis and
+        // leaving gravity alone removes the whole failure mode.
+        var abilities = player.getAbilities();
+        boolean changed = false;
+        if (!abilities.mayfly) {
+            abilities.mayfly = true;
+            changed = true;
+        }
+        if (!abilities.flying) {
+            abilities.flying = true;
+            changed = true;
+        }
+        if (changed) {
             player.onUpdateAbilities();
         }
+        // Nothing is being stood on while phased, and saying so stops vanilla's
+        // landing check from switching the flight back off a tick later.
+        player.setOnGround(false);
+        if (player.isNoGravity()) {
+            player.setNoGravity(false);
+        }
         player.fallDistance = 0f;
-        player.setNoGravity(true);
     }
 
     public static void clearPhasing(Player player) {

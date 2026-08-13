@@ -24,6 +24,12 @@ public class ShadowCloneJutsuAbility extends Ability implements Ability.Cooldown
         return ActivationType.INSTANT;
     }
 
+    /** The cross seal is the single most recognisable pose in the series. */
+    @Override
+    public int castPoseTicks() {
+        return 12;
+    }
+
     @Override
     public long defaultCombo() {
         return 122;

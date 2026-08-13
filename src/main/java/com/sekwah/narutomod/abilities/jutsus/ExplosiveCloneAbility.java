@@ -38,6 +38,12 @@ public class ExplosiveCloneAbility extends Ability implements Ability.Cooldown {
         return ActivationType.INSTANT;
     }
 
+    /** Long enough to sell that the clone was deliberate. */
+    @Override
+    public int castPoseTicks() {
+        return 12;
+    }
+
     @Override
     public long defaultCombo() {
         return 2322;

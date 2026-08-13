@@ -38,6 +38,12 @@ public class AdamantineChainsAbility extends Ability implements Ability.Cooldown
         return ActivationType.INSTANT;
     }
 
+    /** Four chains unfold; the arms stay out while they do. */
+    @Override
+    public int castPoseTicks() {
+        return 16;
+    }
+
     @Override
     public long defaultCombo() {
         return 1311;

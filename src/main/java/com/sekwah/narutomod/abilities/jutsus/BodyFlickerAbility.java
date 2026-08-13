@@ -30,6 +30,12 @@ public class BodyFlickerAbility extends Ability implements Ability.Cooldown {
         return ActivationType.INSTANT;
     }
 
+    /** A body flicker that reads as a pose has already failed to be one. */
+    @Override
+    public int castPoseTicks() {
+        return 3;
+    }
+
     @Override
     public long defaultCombo() {
         return 21;

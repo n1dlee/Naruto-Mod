@@ -24,22 +24,51 @@ import java.util.function.Supplier;
 public class ServerAbilityActivatePacket {
 
     private final int abilityId;
+    /**
+     * The caster's WASD state at the moment they pressed the combo, quantised to -1/0/1.
+     *
+     * It has to travel with the cast: a ServerPlayer's own xxa/zza are only filled in while
+     * riding something, so the server has no other way to know which way the player was
+     * holding. Directional techniques - Leap being the first - read it back off NinjaData.
+     */
+    private final byte strafeInput;
+    private final byte forwardInput;
 
     public ServerAbilityActivatePacket(ResourceLocation ability) {
-        this.abilityId = NarutoRegistries.ABILITIES.getID(ability);
+        this(NarutoRegistries.ABILITIES.getID(ability), (byte) 0, (byte) 0);
     }
 
     public ServerAbilityActivatePacket(int abilityId) {
+        this(abilityId, (byte) 0, (byte) 0);
+    }
+
+    public ServerAbilityActivatePacket(int abilityId, byte strafeInput, byte forwardInput) {
         this.abilityId = abilityId;
+        this.strafeInput = strafeInput;
+        this.forwardInput = forwardInput;
+    }
+
+    /** Reads the local player's movement keys, for the client side of a cast. */
+    public static ServerAbilityActivatePacket withInput(int abilityId, float strafe, float forward) {
+        return new ServerAbilityActivatePacket(abilityId, quantise(strafe), quantise(forward));
+    }
+
+    private static byte quantise(float axis) {
+        if (axis > 0.1f) {
+            return 1;
+        }
+        return axis < -0.1f ? (byte) -1 : (byte) 0;
     }
 
     public static void encode(ServerAbilityActivatePacket msg, FriendlyByteBuf outBuffer) {
         outBuffer.writeInt(msg.abilityId);
+        outBuffer.writeByte(msg.strafeInput);
+        outBuffer.writeByte(msg.forwardInput);
     }
 
     public static ServerAbilityActivatePacket decode(FriendlyByteBuf inBuffer) {
         int abilityId = inBuffer.readInt();
-        return new ServerAbilityActivatePacket(abilityId);
+        return new ServerAbilityActivatePacket(abilityId, inBuffer.readByte(), inBuffer.readByte());
     }
 
     public static class Handler {
@@ -54,6 +83,9 @@ public class ServerAbilityActivatePacket {
                         player.displayClientMessage(Component.translatable("jutsu.not_a_ninja").withStyle(ChatFormatting.RED), true);
                         return;
                     }
+                    // Hand the caster's WASD state over before any ability logic runs, so a
+                    // directional technique can read it inside performServer.
+                    ninjaData.setMoveInput(msg.strafeInput, msg.forwardInput);
                     Ability ability = NarutoRegistries.ABILITIES.getValue(msg.abilityId);
                     // Phase 15: scroll-taught jutsu must be learned; elemental jutsu need their
                     // element unlocked + trained. Phase 16 adds the dojutsu gate.
@@ -89,7 +121,7 @@ public class ServerAbilityActivatePacket {
                             strainMangekyo(player, ninjaData, ability);
                             spendCopiedJutsu(ninjaData, ability);
                             broadcastForSharingan(player, ability);
-                            ninjaData.setCastPoseTicks(8);
+                            ninjaData.setCastPoseTicks(ability.castPoseTicks());
 
                             if (ability  instanceof Ability.Cooldown cooldownAbility) {
                                cooldownAbility.registerCooldown(ninjaData, ability.getTranslationKey(ninjaData));

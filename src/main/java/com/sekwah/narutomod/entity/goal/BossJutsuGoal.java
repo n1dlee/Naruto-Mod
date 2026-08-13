@@ -77,7 +77,13 @@ public class BossJutsuGoal extends Goal {
         /** Kisame: three water sharks fired in sequence. */
         SHARK_VOLLEY,
         /** Sasori: a fan of poisoned senbon. */
-        SENBON_VOLLEY
+        SENBON_VOLLEY,
+        /** Hinata: the Eight Trigrams palm sequence, doubling as it goes. */
+        SIXTY_FOUR_PALMS,
+        /** Naruto: a wave of shadow clones piling in one after another. */
+        CLONE_FLURRY,
+        /** Hashirama: a wooden dragon's head driving forward through the ground. */
+        WOOD_DRAGON
     }
 
     private final MangekyoBossEntity boss;
@@ -139,6 +145,12 @@ public class BossJutsuGoal extends Goal {
             case HIDAN -> castHidan(target, distance);
             case DEIDARA -> castDeidara(target, distance);
             case SASORI -> castSasori(target, distance);
+            case HASHIRAMA -> castHashirama(target, distance);
+            case NAGATO -> castNagato(target, distance);
+            case KAKASHI -> castKakashi(target, distance);
+            case NARUTO -> castNaruto(target, distance);
+            case HINATA -> castHinata(target, distance);
+            case SHIKAMARU -> castShikamaru(target, distance);
         };
     }
 
@@ -160,6 +172,9 @@ public class BossJutsuGoal extends Goal {
             case FIRE_WAVE -> stepFireWave(target);
             case SHARK_VOLLEY -> stepSharkVolley(target);
             case SENBON_VOLLEY -> stepSenbonVolley(target);
+            case SIXTY_FOUR_PALMS -> stepSixtyFourPalms(target);
+            case CLONE_FLURRY -> stepCloneFlurry(target);
+            case WOOD_DRAGON -> stepWoodDragon(target);
         }
     }
 
@@ -170,53 +185,87 @@ public class BossJutsuGoal extends Goal {
 
     // ------------------------------------------------------------------ wielders
 
+    /**
+     * The range at which a wielder switches from its close menu to its ranged one.
+     *
+     * Every rotation below is written as two complete menus rather than as one chain of
+     * "distance >" guards falling through to a default. The chain version is what made
+     * Amaterasu, Kirin, the shark volley and four other techniques unreachable: the bosses
+     * chase into melee and stay there, so every guarded branch was skipped and the fight
+     * collapsed onto whatever sat at the bottom of the list. Two menus cannot collapse -
+     * whichever range the boss is at, it is choosing between real options.
+     */
+    private static final double CLOSE_RANGE = 7.0;
+
     /** Itachi: black flame at range, Tsukuyomi up close, crows and fire to fill the gaps. */
     private int castItachi(LivingEntity target, double distance) {
         int roll = this.boss.getRandom().nextInt(100);
-        if (distance > 7.0 && roll < 40 && pay(45f)) {
-            castBlackFlame(target);
-            offer(NarutoAbilities.AMATERASU);
-            return 40;
+        if (distance > CLOSE_RANGE) {
+            if (roll < 45 && pay(45f)) {
+                castBlackFlame(target);
+                offer(NarutoAbilities.AMATERASU);
+                return 40;
+            }
+            if (roll < 80 && pay(26f)) {
+                castGreatFireball(target, 24);
+                offer(NarutoAbilities.FIREBALL);
+                return 26;
+            }
+            pay(18f);
+            castCrowMurder(target);
+            offer(NarutoAbilities.CROW_GENJUTSU);
+            return 22;
         }
-        if (distance <= 9.0 && roll < 65 && pay(55f)) {
+        if (roll < 40 && pay(55f)) {
             castTsukuyomi(target);
             offer(NarutoAbilities.TSUKUYOMI);
             return 90;
         }
-        if (roll < 85 && pay(26f)) {
-            castGreatFireball(target, 24);
-            offer(NarutoAbilities.FIREBALL);
-            return 26;
+        if (roll < 70 && pay(18f)) {
+            castCrowMurder(target);
+            offer(NarutoAbilities.CROW_GENJUTSU);
+            return 22;
         }
-        pay(18f);
-        castCrowMurder(target);
-        offer(NarutoAbilities.CROW_GENJUTSU);
-        return 22;
+        pay(26f);
+        castGreatFireball(target, 24);
+        offer(NarutoAbilities.FIREBALL);
+        return 26;
     }
 
     /** Sasuke: Kirin from an open sky, otherwise Chidori in one form or another. */
     private int castSasuke(LivingEntity target, double distance) {
         int roll = this.boss.getRandom().nextInt(100);
-        boolean openSky = this.boss.level().canSeeSky(target.blockPosition());
-        if (distance > 8.0 && openSky && roll < 30 && pay(70f)) {
-            castKirin(target);
-            offer(NarutoAbilities.KIRIN);
-            return 110;
+        if (distance > CLOSE_RANGE) {
+            boolean openSky = this.boss.level().canSeeSky(target.blockPosition());
+            if (openSky && roll < 45 && pay(70f)) {
+                castKirin(target);
+                offer(NarutoAbilities.KIRIN);
+                return 110;
+            }
+            if (roll < 80 && pay(26f)) {
+                castGreatFireball(target, 20);
+                offer(NarutoAbilities.FIREBALL);
+                return 24;
+            }
+            pay(35f);
+            castChidoriDash(target);
+            offer(NarutoAbilities.CHIDORI_DASH);
+            return 34;
         }
-        if (distance > 6.0 && roll < 65 && pay(26f)) {
-            castGreatFireball(target, 20);
-            offer(NarutoAbilities.FIREBALL);
-            return 24;
-        }
-        if (distance <= 6.0 && roll < 80 && pay(30f)) {
+        if (roll < 40 && pay(30f)) {
             castNagashi();
             offer(NarutoAbilities.CHIDORI_NAGASHI);
             return 34;
         }
-        pay(35f);
-        castChidoriDash(target);
-        offer(NarutoAbilities.CHIDORI_DASH);
-        return 34;
+        if (roll < 75 && pay(35f)) {
+            castChidoriThrust(target);
+            offer(NarutoAbilities.CHIDORI);
+            return 30;
+        }
+        pay(26f);
+        castGreatFireball(target, 16);
+        offer(NarutoAbilities.FIREBALL);
+        return 26;
     }
 
     /** Madara: the war fan, a wall of fire, and a Susanoo sweep once the shell is up. */
@@ -262,17 +311,28 @@ public class BossJutsuGoal extends Goal {
     /** Obito: never quite where you swung, and pulls you somewhere you did not agree to. */
     private int castObito(LivingEntity target, double distance) {
         int roll = this.boss.getRandom().nextInt(100);
-        if (roll < 22 && pay(45f)) {
+        if (distance > CLOSE_RANGE) {
+            if (roll < 55 && pay(35f)) {
+                castKamuiPull(target);
+                offer(NarutoAbilities.BANSHO_TENIN);
+                return 50;
+            }
+            if (roll < 80 && pay(30f)) {
+                castPhaseStrike(target);
+                offer(NarutoAbilities.KAMUI);
+                return 32;
+            }
+            pay(26f);
+            castGreatFireball(target, 16);
+            offer(NarutoAbilities.FIREBALL);
+            return 26;
+        }
+        if (roll < 28 && pay(45f)) {
             castIntangible();
             offer(NarutoAbilities.KAMUI_PHASE);
-            return 120;
+            return 110;
         }
-        if (distance > 5.0 && roll < 50 && pay(35f)) {
-            castKamuiPull(target);
-            offer(NarutoAbilities.BANSHO_TENIN);
-            return 50;
-        }
-        if (roll < 80 && pay(30f)) {
+        if (roll < 78 && pay(30f)) {
             castPhaseStrike(target);
             offer(NarutoAbilities.KAMUI);
             return 32;
@@ -286,33 +346,50 @@ public class BossJutsuGoal extends Goal {
     /** Kisame: an ocean's worth of chakra and a sword that eats yours. */
     private int castKisame(LivingEntity target, double distance) {
         int roll = this.boss.getRandom().nextInt(100);
-        if (distance > 6.0 && roll < 45 && pay(45f)) {
-            this.sustained = Sustained.SHARK_VOLLEY;
-            playCastSound(SoundEvents.DOLPHIN_ATTACK, 0.7f);
-            offer(NarutoAbilities.WATER_DRAGON);
-            return 55;
-        }
-        if (roll < 70 && pay(35f)) {
+        if (distance > CLOSE_RANGE) {
+            if (roll < 55 && pay(45f)) {
+                this.sustained = Sustained.SHARK_VOLLEY;
+                playCastSound(SoundEvents.DOLPHIN_ATTACK, 0.7f);
+                offer(NarutoAbilities.WATER_DRAGON);
+                return 55;
+            }
+            pay(35f);
             castWaterPrison(target);
             offer(NarutoAbilities.WATER_BULLET);
             return 60;
         }
-        pay(20f);
-        castSamehadaDrain(target);
-        return 26;
+        if (roll < 45 && pay(20f)) {
+            castSamehadaDrain(target);
+            return 26;
+        }
+        if (roll < 80 && pay(35f)) {
+            castWaterPrison(target);
+            offer(NarutoAbilities.WATER_BULLET);
+            return 60;
+        }
+        pay(45f);
+        this.sustained = Sustained.SHARK_VOLLEY;
+        playCastSound(SoundEvents.DOLPHIN_ATTACK, 0.7f);
+        offer(NarutoAbilities.WATER_DRAGON);
+        return 55;
     }
 
     /** Zabuza: mist first, then something comes out of it. */
     private int castZabuza(LivingEntity target, double distance) {
         int roll = this.boss.getRandom().nextInt(100);
-        if (roll < 28 && pay(35f)) {
+        if (distance > CLOSE_RANGE) {
+            if (roll < 60 && pay(30f)) {
+                castWaterDragon(target);
+                offer(NarutoAbilities.WATER_DRAGON);
+                return 34;
+            }
+            pay(35f);
             castHiddenMist();
             return 100;
         }
-        if (distance > 5.0 && roll < 65 && pay(30f)) {
-            castWaterDragon(target);
-            offer(NarutoAbilities.WATER_DRAGON);
-            return 34;
+        if (roll < 30 && pay(35f)) {
+            castHiddenMist();
+            return 100;
         }
         pay(18f);
         castBladeRush(target, 14f);
@@ -322,13 +399,18 @@ public class BossJutsuGoal extends Goal {
     /** Hidan: the ritual hurts you for as long as he can stay standing. */
     private int castHidan(LivingEntity target, double distance) {
         int roll = this.boss.getRandom().nextInt(100);
-        if (roll < 32 && pay(40f)) {
+        if (distance > CLOSE_RANGE) {
+            if (roll < 60 && pay(22f)) {
+                castScytheReach(target);
+                return 28;
+            }
+            pay(40f);
             castCurseRitual(target);
             return 90;
         }
-        if (distance > 4.0 && roll < 70 && pay(22f)) {
-            castScytheReach(target);
-            return 28;
+        if (roll < 35 && pay(40f)) {
+            castCurseRitual(target);
+            return 90;
         }
         pay(18f);
         castBladeRush(target, 13f);
@@ -342,27 +424,249 @@ public class BossJutsuGoal extends Goal {
             castC2Dragon(target);
             return 70;
         }
-        pay(40f);
-        this.sustained = Sustained.CLAY_BARRAGE;
-        playCastSound(SoundEvents.CREEPER_PRIMED, 1.2f);
-        return 40;
+        // The barrage is eight detonations for one payment, so it has to cost like eight.
+        // At its old 40 it was cheaper than the reserve refilled and he simply never stopped.
+        if (pay(55f)) {
+            this.sustained = Sustained.CLAY_BARRAGE;
+            playCastSound(SoundEvents.CREEPER_PRIMED, 1.2f);
+            return 40;
+        }
+        // Can't afford the run — one bomb, so he is never reduced to punching.
+        pay(25f);
+        detonate(target.position().add(0, 0.5, 0), 3.0, 10f, 1.0);
+        playCastSound(SoundEvents.GENERIC_EXPLODE, 1.3f);
+        if (this.boss.level() instanceof ServerLevel serverLevel) {
+            serverLevel.sendParticles(ParticleTypes.EXPLOSION,
+                    target.getX(), target.getY() + 1.0, target.getZ(), 3, 0.5, 0.5, 0.5, 0.0);
+        }
+        return 30;
     }
 
     /** Sasori: poison from a distance, iron sand when you close it. */
     private int castSasori(LivingEntity target, double distance) {
         int roll = this.boss.getRandom().nextInt(100);
-        if (distance > 6.0 && roll < 50 && pay(30f)) {
-            this.sustained = Sustained.SENBON_VOLLEY;
-            playCastSound(SoundEvents.ARROW_SHOOT, 1.5f);
-            return 40;
+        if (distance > CLOSE_RANGE) {
+            if (roll < 55 && pay(30f)) {
+                this.sustained = Sustained.SENBON_VOLLEY;
+                playCastSound(SoundEvents.ARROW_SHOOT, 1.5f);
+                return 40;
+            }
+            pay(35f);
+            castFlamethrower(target);
+            return 50;
         }
-        if (roll < 78 && pay(35f)) {
+        if (roll < 40 && pay(30f)) {
+            castIronSand(target);
+            return 45;
+        }
+        if (roll < 80 && pay(35f)) {
             castFlamethrower(target);
             return 50;
         }
         pay(30f);
-        castIronSand(target);
+        this.sustained = Sustained.SENBON_VOLLEY;
+        playCastSound(SoundEvents.ARROW_SHOOT, 1.5f);
+        return 40;
+    }
+
+    /** Hashirama: the forest answers to him, and he does not stop bleeding out. */
+    private int castHashirama(LivingEntity target, double distance) {
+        // Senju regeneration deliberately lives on the entity, not here: it fires on health
+        // thresholds rather than on a roll the rotation happens to win, which is the whole
+        // reason he was unkillable. See MangekyoBossEntity#tickSenjuRegeneration.
+        int roll = this.boss.getRandom().nextInt(100);
+        if (distance > CLOSE_RANGE) {
+            if (roll < 60 && pay(55f)) {
+                this.sustained = Sustained.WOOD_DRAGON;
+                playCastSound(SoundEvents.WOOD_PLACE, 0.5f);
+                offer(NarutoAbilities.WOOD_RELEASE);
+                return 65;
+            }
+            pay(35f);
+            castWoodSurge(target);
+            offer(NarutoAbilities.WOOD_RELEASE);
+            return 40;
+        }
+        if (roll < 65 && pay(35f)) {
+            castWoodGrasp(target);
+            offer(NarutoAbilities.WOOD_RELEASE);
+            return 45;
+        }
+        pay(30f);
+        castWoodSurge(target);
+        offer(NarutoAbilities.WOOD_RELEASE);
+        return 40;
+    }
+
+    /** Nagato: nothing he does is an attack so much as a change to where things are. */
+    private int castNagato(LivingEntity target, double distance) {
+        int roll = this.boss.getRandom().nextInt(100);
+        if (distance > CLOSE_RANGE) {
+            if (roll < 40 && pay(60f)) {
+                castChibakuTensei(target);
+                offer(NarutoAbilities.BANSHO_TENIN);
+                return 90;
+            }
+            if (roll < 80 && pay(35f)) {
+                castKamuiPull(target); // Bansho Ten'in - the same "come here" vector
+                offer(NarutoAbilities.BANSHO_TENIN);
+                return 45;
+            }
+            pay(30f);
+            castPretaAbsorb();
+            offer(NarutoAbilities.PRETA_PATH);
+            return 80;
+        }
+        if (roll < 55 && pay(55f)) {
+            castShinraTensei();
+            offer(NarutoAbilities.SHINRA_TENSEI);
+            return 70;
+        }
+        if (roll < 80 && pay(30f)) {
+            castPretaAbsorb();
+            offer(NarutoAbilities.PRETA_PATH);
+            return 80;
+        }
+        pay(35f);
+        castKamuiPull(target);
+        offer(NarutoAbilities.BANSHO_TENIN);
         return 45;
+    }
+
+    /** Kakashi: no single nature, which is exactly the point - he has all of them. */
+    private int castKakashi(LivingEntity target, double distance) {
+        int roll = this.boss.getRandom().nextInt(100);
+        if (distance > CLOSE_RANGE) {
+            if (roll < 35 && pay(45f)) {
+                castWaterDragon(target);
+                offer(NarutoAbilities.WATER_DRAGON);
+                return 34;
+            }
+            if (roll < 70 && pay(26f)) {
+                castGreatFireball(target, 20);
+                offer(NarutoAbilities.FIREBALL);
+                return 26;
+            }
+            pay(30f);
+            castPhaseStrike(target); // Kamui, closing the distance through the gap
+            offer(NarutoAbilities.KAMUI);
+            return 34;
+        }
+        if (roll < 50 && pay(40f)) {
+            castChidoriThrust(target); // Raikiri
+            offer(NarutoAbilities.CHIDORI);
+            return 32;
+        }
+        if (roll < 78 && pay(30f)) {
+            castPhaseStrike(target);
+            offer(NarutoAbilities.KAMUI);
+            return 34;
+        }
+        pay(30f);
+        castNagashi();
+        offer(NarutoAbilities.CHIDORI_NAGASHI);
+        return 34;
+    }
+
+    /** Naruto: clones, spheres, and a fox he can lean on when it stops going his way. */
+    private int castNaruto(LivingEntity target, double distance) {
+        int roll = this.boss.getRandom().nextInt(100);
+        if (this.boss.getHealth() < this.boss.getMaxHealth() * 0.45f && roll < 22 && pay(60f)) {
+            castKuramaCloak();
+            offer(NarutoAbilities.KURAMA_CLOAK);
+            return 130;
+        }
+        if (distance > CLOSE_RANGE) {
+            if (roll < 55 && pay(65f)) {
+                castRasenshuriken(target);
+                offer(NarutoAbilities.RASENSHURIKEN);
+                return 80;
+            }
+            pay(45f);
+            castMultipleShadowClones();
+            return 70;
+        }
+        if (roll < 50 && pay(40f)) {
+            castRasenganSlam(target);
+            offer(NarutoAbilities.RASENGAN);
+            return 40;
+        }
+        if (roll < 80 && pay(45f)) {
+            castMultipleShadowClones();
+            return 70;
+        }
+        pay(45f);
+        this.sustained = Sustained.CLONE_FLURRY;
+        playCastSound(SoundEvents.PLAYER_ATTACK_STRONG, 1.2f);
+        offer(NarutoAbilities.MULTIPLE_SHADOW_CLONE);
+        return 55;
+    }
+
+    /** Kage Bunshin, as real entities the player has to actually cut down. */
+    private void castMultipleShadowClones() {
+        this.boss.summonShadowClones(3);
+        offer(NarutoAbilities.MULTIPLE_SHADOW_CLONE);
+    }
+
+    /** Hinata: the Gentle Fist goes past armour because it was never aimed at armour. */
+    private int castHinata(LivingEntity target, double distance) {
+        int roll = this.boss.getRandom().nextInt(100);
+        if (distance > CLOSE_RANGE) {
+            if (roll < 60 && pay(30f)) {
+                castVacuumPalm(target);
+                offer(NarutoAbilities.AIR_PALM);
+                return 34;
+            }
+            pay(35f);
+            castGentleFistDash(target);
+            offer(NarutoAbilities.EIGHT_TRIGRAMS_SIXTY_FOUR_PALMS);
+            return 40;
+        }
+        if (roll < 45 && pay(55f)) {
+            this.sustained = Sustained.SIXTY_FOUR_PALMS;
+            playCastSound(SoundEvents.PLAYER_ATTACK_SWEEP, 1.6f);
+            offer(NarutoAbilities.EIGHT_TRIGRAMS_SIXTY_FOUR_PALMS);
+            return 75;
+        }
+        if (roll < 80 && pay(35f)) {
+            castRotation();
+            offer(NarutoAbilities.EIGHT_TRIGRAMS_ROTATION);
+            return 50;
+        }
+        pay(30f);
+        castVacuumPalm(target);
+        offer(NarutoAbilities.AIR_PALM);
+        return 34;
+    }
+
+    /** Shikamaru: he does not out-hit you, he takes your turn away. */
+    private int castShikamaru(LivingEntity target, double distance) {
+        int roll = this.boss.getRandom().nextInt(100);
+        if (distance > CLOSE_RANGE) {
+            if (roll < 60 && pay(45f)) {
+                castShadowBind(target);
+                offer(NarutoAbilities.SHADOW_POSSESSION);
+                return 70;
+            }
+            pay(35f);
+            castShadowSewing(target);
+            offer(NarutoAbilities.SHADOW_SEWING);
+            return 40;
+        }
+        if (roll < 40 && pay(50f)) {
+            castShadowStrangle(target);
+            offer(NarutoAbilities.SHADOW_STRANGLE);
+            return 80;
+        }
+        if (roll < 75 && pay(35f)) {
+            castShadowSewing(target);
+            offer(NarutoAbilities.SHADOW_SEWING);
+            return 40;
+        }
+        pay(45f);
+        castShadowBind(target);
+        offer(NarutoAbilities.SHADOW_POSSESSION);
+        return 70;
     }
 
     // ------------------------------------------------------------------ techniques
@@ -449,6 +753,24 @@ public class BossJutsuGoal extends Goal {
         if (this.boss.level() instanceof ServerLevel serverLevel) {
             NarutoParticles.spawnBolt(serverLevel, this.boss.getEyePosition(),
                     target.position().add(0, 1.0, 0), 4, 0.8, NarutoParticles.CHIDORI_CYAN);
+        }
+    }
+
+    /**
+     * Sasuke: a standing Chidori through the chest. The dash reads as movement; this is the
+     * technique itself, and it ignores armour the way a fistful of lightning should.
+     */
+    private void castChidoriThrust(LivingEntity target) {
+        target.hurt(this.boss.damageSources().indirectMagic(this.boss, this.boss), 17f);
+        target.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 4 * 20, 2, false, true));
+        playCastSound(SoundEvents.LIGHTNING_BOLT_IMPACT, 1.5f);
+
+        if (this.boss.level() instanceof ServerLevel serverLevel) {
+            NarutoParticles.spawnBolt(serverLevel, this.boss.getEyePosition(),
+                    target.position().add(0, target.getBbHeight() * 0.6, 0), 3, 0.35,
+                    NarutoParticles.CHIDORI_CYAN);
+            NarutoParticles.spawnBurst(serverLevel, target.position().add(0, 1.0, 0), 24, 0.7,
+                    NarutoParticles.CHIDORI_CYAN);
         }
     }
 
@@ -687,6 +1009,223 @@ public class BossJutsuGoal extends Goal {
         }
     }
 
+    // --- Hashirama ---------------------------------------------------------------
+
+    /** Roots tear up under the target, hold them, and keep grinding. */
+    private void castWoodSurge(LivingEntity target) {
+        for (LivingEntity caught : nearby(target.position(), 3.5)) {
+            caught.hurt(this.boss.damageSources().mobAttack(this.boss), 12f);
+            caught.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 5 * 20, 2, false, true));
+        }
+        playCastSound(SoundEvents.WOOD_BREAK, 0.6f);
+        if (this.boss.level() instanceof ServerLevel serverLevel) {
+            NarutoParticles.spawnRing(serverLevel, target.position(), 3.0, 30, NarutoParticles.LOG_BROWN);
+            NarutoParticles.spawnSpiral(serverLevel, target.position(), 1.6, 0.18, 20, NarutoParticles.LOG_BROWN);
+        }
+    }
+
+    /** Wood closes around them: pinned in place, and it does not let go quickly. */
+    private void castWoodGrasp(LivingEntity target) {
+        target.hurt(this.boss.damageSources().mobAttack(this.boss), 10f);
+        target.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 8 * 20, 5, false, true));
+        target.addEffect(new MobEffectInstance(MobEffects.JUMP, 8 * 20, 128, false, false));
+        target.addEffect(new MobEffectInstance(MobEffects.DIG_SLOWDOWN, 8 * 20, 2, false, true));
+        target.setDeltaMovement(0, 0, 0);
+        target.hurtMarked = true;
+        playCastSound(SoundEvents.WOOD_PLACE, 0.5f);
+        if (this.boss.level() instanceof ServerLevel serverLevel) {
+            NarutoParticles.spawnSpiral(serverLevel, target.position(), 1.2, 0.22, 26, NarutoParticles.LOG_BROWN);
+        }
+    }
+
+    // --- Nagato ------------------------------------------------------------------
+
+    /** Shinra Tensei: everything near him stops being near him. */
+    private void castShinraTensei() {
+        for (LivingEntity caught : nearby(this.boss.position(), 9.0)) {
+            caught.hurt(this.boss.damageSources().mobAttack(this.boss), 16f);
+            Vec3 push = caught.position().subtract(this.boss.position()).normalize().scale(3.0).add(0, 0.8, 0);
+            caught.setDeltaMovement(push);
+            caught.hurtMarked = true;
+        }
+        playCastSound(SoundEvents.GENERIC_EXPLODE, 0.5f);
+        if (this.boss.level() instanceof ServerLevel serverLevel) {
+            for (int ring = 1; ring <= 4; ring++) {
+                NarutoParticles.spawnRing(serverLevel, this.boss.position().add(0, 1.0, 0),
+                        ring * 2.2, 34, ParticleTypes.CLOUD);
+            }
+        }
+    }
+
+    /** Chibaku Tensei: a core drops and everything is dragged into it. */
+    private void castChibakuTensei(LivingEntity target) {
+        Vec3 core = target.position().add(0, 2.0, 0);
+        for (LivingEntity caught : nearby(core, 10.0)) {
+            Vec3 pull = core.subtract(caught.position()).normalize().scale(1.6);
+            caught.setDeltaMovement(caught.getDeltaMovement().add(pull));
+            caught.hurtMarked = true;
+            caught.hurt(this.boss.damageSources().indirectMagic(this.boss, this.boss), 9f);
+        }
+        playCastSound(SoundEvents.END_PORTAL_SPAWN, 1.3f);
+        if (this.boss.level() instanceof ServerLevel serverLevel) {
+            NarutoParticles.spawnSpiral(serverLevel, core, 4.0, -0.25, 40, NarutoParticles.SHADOW_PURPLE);
+            serverLevel.sendParticles(ParticleTypes.PORTAL, core.x, core.y, core.z, 60, 1.5, 1.5, 1.5, 0.6);
+        }
+    }
+
+    /** Preta Path: for a few seconds, hitting him feeds him. */
+    private void castPretaAbsorb() {
+        this.boss.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 6 * 20, 3, false, true));
+        this.boss.addEffect(new MobEffectInstance(MobEffects.REGENERATION, 6 * 20, 2, false, true));
+        playCastSound(SoundEvents.ENCHANTMENT_TABLE_USE, 0.6f);
+        if (this.boss.level() instanceof ServerLevel serverLevel) {
+            NarutoParticles.spawnRing(serverLevel, this.boss.position().add(0, 1.0, 0), 1.8, 28,
+                    NarutoParticles.SHADOW_PURPLE);
+        }
+    }
+
+    // --- Naruto ------------------------------------------------------------------
+
+    /** A thrown Rasenshuriken: wide, shredding, and it does not care about armour. */
+    private void castRasenshuriken(LivingEntity target) {
+        Vec3 impact = target.position().add(0, 1.0, 0);
+        for (LivingEntity caught : nearby(impact, 5.0)) {
+            caught.hurt(this.boss.damageSources().indirectMagic(this.boss, this.boss), 20f);
+            caught.addEffect(new MobEffectInstance(MobEffects.WEAKNESS, 10 * 20, 2, false, true));
+            caught.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 6 * 20, 1, false, true));
+        }
+        playCastSound(SoundEvents.PHANTOM_SWOOP, 0.7f);
+        if (this.boss.level() instanceof ServerLevel serverLevel) {
+            NarutoParticles.spawnBolt(serverLevel, this.boss.getEyePosition(), impact, 3, 0.4,
+                    NarutoParticles.RASENGAN_BLUE);
+            for (int ring = 1; ring <= 3; ring++) {
+                NarutoParticles.spawnRing(serverLevel, impact, ring * 1.7, 32, NarutoParticles.ROTATION_WHITE);
+            }
+        }
+    }
+
+    /** A Rasengan driven into the chest, with the grinding knockback that goes with it. */
+    private void castRasenganSlam(LivingEntity target) {
+        target.hurt(this.boss.damageSources().mobAttack(this.boss), 18f);
+        Vec3 push = target.position().subtract(this.boss.position()).normalize().scale(2.4).add(0, 0.4, 0);
+        target.setDeltaMovement(push);
+        target.hurtMarked = true;
+        playCastSound(SoundEvents.PLAYER_ATTACK_CRIT, 0.8f);
+        if (this.boss.level() instanceof ServerLevel serverLevel) {
+            NarutoParticles.spawnSpiral(serverLevel, target.position().add(0, 1.0, 0), 1.1, 0.1, 24,
+                    NarutoParticles.RASENGAN_BLUE);
+        }
+    }
+
+    /** The fox's chakra: faster, stronger, and it stops the fight going the wrong way. */
+    private void castKuramaCloak() {
+        this.boss.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SPEED, 20 * 20, 2, false, true));
+        this.boss.addEffect(new MobEffectInstance(MobEffects.DAMAGE_BOOST, 20 * 20, 1, false, true));
+        this.boss.addEffect(new MobEffectInstance(MobEffects.REGENERATION, 20 * 20, 1, false, true));
+        this.boss.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 20 * 20, 1, false, true));
+        playCastSound(SoundEvents.ENDER_DRAGON_GROWL, 1.4f);
+        if (this.boss.level() instanceof ServerLevel serverLevel) {
+            NarutoParticles.spawnSpiral(serverLevel, this.boss.position(), 1.6, 0.2, 34,
+                    NarutoParticles.KURAMA_ORANGE);
+        }
+    }
+
+    // --- Hinata ------------------------------------------------------------------
+
+    /** Hakke Kusho: a palm thrust that arrives as compressed air a dozen blocks away. */
+    private void castVacuumPalm(LivingEntity target) {
+        target.hurt(this.boss.damageSources().indirectMagic(this.boss, this.boss), 11f);
+        Vec3 push = target.position().subtract(this.boss.position()).normalize().scale(1.8).add(0, 0.35, 0);
+        target.setDeltaMovement(target.getDeltaMovement().add(push));
+        target.hurtMarked = true;
+        playCastSound(SoundEvents.PLAYER_ATTACK_SWEEP, 1.3f);
+        if (this.boss.level() instanceof ServerLevel serverLevel) {
+            NarutoParticles.spawnBolt(serverLevel, this.boss.getEyePosition(),
+                    target.position().add(0, 1.0, 0), 2, 0.3, NarutoParticles.ROTATION_WHITE);
+        }
+    }
+
+    /** Closes the gap the way a Hyuga does: instantly, and already inside your guard. */
+    private void castGentleFistDash(LivingEntity target) {
+        Vec3 toTarget = target.position().subtract(this.boss.position()).normalize();
+        this.boss.setDeltaMovement(toTarget.scale(1.7).add(0, 0.3, 0));
+        this.boss.hurtMarked = true;
+        gentleFistHit(target, 8f);
+    }
+
+    /** Kaiten: he spins, and everything touching him leaves. */
+    private void castRotation() {
+        for (LivingEntity caught : nearby(this.boss.position(), 5.0)) {
+            caught.hurt(this.boss.damageSources().mobAttack(this.boss), 10f);
+            Vec3 push = caught.position().subtract(this.boss.position()).normalize().scale(2.2).add(0, 0.5, 0);
+            caught.setDeltaMovement(push);
+            caught.hurtMarked = true;
+        }
+        playCastSound(SoundEvents.ELYTRA_FLYING, 1.6f);
+        if (this.boss.level() instanceof ServerLevel serverLevel) {
+            for (int ring = 1; ring <= 3; ring++) {
+                NarutoParticles.spawnRing(serverLevel, this.boss.position().add(0, ring * 0.6, 0),
+                        4.0, 36, NarutoParticles.ROTATION_WHITE);
+            }
+        }
+    }
+
+    /**
+     * One Gentle Fist strike. Magic damage on purpose: the whole point of the style is that
+     * it goes through armour to the chakra network, so routing it through the normal
+     * armour-reduced melee path would be exactly backwards.
+     */
+    private void gentleFistHit(LivingEntity target, float damage) {
+        target.hurt(this.boss.damageSources().indirectMagic(this.boss, this.boss), damage);
+        target.addEffect(new MobEffectInstance(MobEffects.WEAKNESS, 6 * 20, 1, false, true));
+        target.addEffect(new MobEffectInstance(MobEffects.DIG_SLOWDOWN, 6 * 20, 1, false, true));
+        playCastSound(SoundEvents.PLAYER_ATTACK_KNOCKBACK, 1.5f);
+        if (this.boss.level() instanceof ServerLevel serverLevel) {
+            NarutoParticles.spawnBurst(serverLevel, target.position().add(0, 1.1, 0), 12, 0.5,
+                    NarutoParticles.ROTATION_WHITE);
+        }
+    }
+
+    // --- Shikamaru ---------------------------------------------------------------
+
+    /** Shadow Possession: you are still alive, you simply do not get to move. */
+    private void castShadowBind(LivingEntity target) {
+        target.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 6 * 20, 6, false, true));
+        target.addEffect(new MobEffectInstance(MobEffects.JUMP, 6 * 20, 128, false, false));
+        target.addEffect(new MobEffectInstance(MobEffects.WEAKNESS, 6 * 20, 2, false, true));
+        target.setDeltaMovement(0, target.getDeltaMovement().y, 0);
+        target.hurtMarked = true;
+        playCastSound(SoundEvents.SCULK_BLOCK_CHARGE, 0.8f);
+        if (this.boss.level() instanceof ServerLevel serverLevel) {
+            NarutoParticles.spawnBolt(serverLevel, this.boss.position(), target.position(), 2, 0.15,
+                    NarutoParticles.SHADOW_PURPLE);
+            NarutoParticles.spawnRing(serverLevel, target.position(), 1.0, 20, NarutoParticles.SHADOW_PURPLE);
+        }
+    }
+
+    /** Shadow Sewing: the shadow sharpens and comes up through the floor. */
+    private void castShadowSewing(LivingEntity target) {
+        target.hurt(this.boss.damageSources().indirectMagic(this.boss, this.boss), 13f);
+        target.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 4 * 20, 2, false, true));
+        playCastSound(SoundEvents.SCULK_SHRIEKER_SHRIEK, 1.4f);
+        if (this.boss.level() instanceof ServerLevel serverLevel) {
+            NarutoParticles.spawnBurst(serverLevel, target.position(), 22, 0.9, NarutoParticles.SHADOW_PURPLE);
+        }
+    }
+
+    /** Shadow Strangle: it reaches the throat and stays there. */
+    private void castShadowStrangle(LivingEntity target) {
+        target.addEffect(new MobEffectInstance(MobEffects.WITHER, 8 * 20, 2, false, true));
+        target.addEffect(new MobEffectInstance(MobEffects.BLINDNESS, 5 * 20, 0, false, false));
+        target.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 8 * 20, 3, false, true));
+        target.hurt(this.boss.damageSources().indirectMagic(this.boss, this.boss), 8f);
+        playCastSound(SoundEvents.WARDEN_HEARTBEAT, 0.7f);
+        if (this.boss.level() instanceof ServerLevel serverLevel) {
+            NarutoParticles.spawnSpiral(serverLevel, target.position(), 0.9, 0.16, 22,
+                    NarutoParticles.SHADOW_PURPLE);
+        }
+    }
+
     // ------------------------------------------------------------------ sustained steps
 
     /** Deidara: a detonation every few ticks, walking in from short of the target. */
@@ -783,6 +1322,74 @@ public class BossJutsuGoal extends Goal {
                     target.position().add(0, 1.0, 0), 1, 0.15, POISON_GREEN);
         }
         if (++this.sustainedStep >= 6) {
+            this.sustained = null;
+        }
+    }
+
+    /**
+     * Hinata: the Eight Trigrams sequence, and it doubles the way the count does - two
+     * palms, then four, then eight. Each strike bypasses armour and shaves the target's
+     * ability to fight back rather than simply their health.
+     */
+    private void stepSixtyFourPalms(LivingEntity target) {
+        if (this.sustainedTicks % 3 != 0) {
+            return;
+        }
+        if (this.boss.distanceTo(target) > 4.5) {
+            this.sustained = null; // they broke away; the sequence cannot follow
+            return;
+        }
+        // Later palms in the sequence land harder, matching the two-four-eight escalation.
+        float damage = 4f + this.sustainedStep * 0.7f;
+        gentleFistHit(target, damage);
+        if (++this.sustainedStep >= 12) {
+            this.sustained = null;
+        }
+    }
+
+    /** Naruto: clones pile in one after another from wherever they happen to be. */
+    private void stepCloneFlurry(LivingEntity target) {
+        if (this.sustainedTicks % 4 != 0) {
+            return;
+        }
+        double angle = this.boss.getRandom().nextDouble() * Math.PI * 2;
+        Vec3 from = target.position().add(Math.cos(angle) * 2.2, 0, Math.sin(angle) * 2.2);
+        target.hurt(this.boss.damageSources().mobAttack(this.boss), 6f);
+        Vec3 push = target.position().subtract(from).normalize().scale(0.5).add(0, 0.25, 0);
+        target.setDeltaMovement(target.getDeltaMovement().add(push));
+        target.hurtMarked = true;
+        playCastSound(SoundEvents.PLAYER_ATTACK_STRONG, 1.3f);
+
+        if (this.boss.level() instanceof ServerLevel serverLevel) {
+            NarutoParticles.spawnBurst(serverLevel, from.add(0, 1.0, 0), 14, 0.5,
+                    NarutoParticles.ROTATION_WHITE);
+        }
+        if (++this.sustainedStep >= 8) {
+            this.sustained = null;
+        }
+    }
+
+    /** Hashirama: a wooden head drives forward through the ground toward the target. */
+    private void stepWoodDragon(LivingEntity target) {
+        if (this.sustainedTicks % 3 != 0) {
+            return;
+        }
+        Vec3 direction = target.position().subtract(this.boss.position()).normalize();
+        double reach = 2.0 + this.sustainedStep * 1.6;
+        Vec3 head = this.boss.position().add(direction.scale(reach)).add(0, 0.5, 0);
+
+        for (LivingEntity caught : nearby(head, 2.2)) {
+            caught.hurt(this.boss.damageSources().mobAttack(this.boss), 9f);
+            caught.setDeltaMovement(caught.getDeltaMovement().add(direction.scale(0.7)).add(0, 0.35, 0));
+            caught.hurtMarked = true;
+        }
+        playCastSound(SoundEvents.WOOD_BREAK, 0.5f);
+
+        if (this.boss.level() instanceof ServerLevel serverLevel) {
+            NarutoParticles.spawnRing(serverLevel, head, 1.8, 24, NarutoParticles.LOG_BROWN);
+            serverLevel.sendParticles(ParticleTypes.COMPOSTER, head.x, head.y, head.z, 14, 0.7, 0.5, 0.7, 0.03);
+        }
+        if (++this.sustainedStep >= 8) {
             this.sustained = null;
         }
     }

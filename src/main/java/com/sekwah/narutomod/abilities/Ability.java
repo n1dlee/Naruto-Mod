@@ -116,6 +116,22 @@ public abstract class Ability {
     }
 
     /**
+     * How long this jutsu's cast stance holds, in ticks, before PlayerAnimHandler blends the
+     * player back to their normal animation.
+     *
+     * This used to be a flat 8 for every INSTANT ability in the mod, which made a summoning
+     * and a substitution take exactly as long to perform. Overriding it is how a technique
+     * gets weight: a slow, deliberate jutsu should hold the stance long enough to read as
+     * effort, and an escape should be over before the player registers it happened.
+     *
+     * Only the hold is set here - the ease in and ease out on either side are added by
+     * PoseBlender and are not counted in this number.
+     */
+    public int castPoseTicks() {
+        return 8;
+    }
+
+    /**
      * Phase 15 C: scroll-taught jutsu must be learned before casting. Checked centrally
      * from the activation/channel packet handlers together with the element gate.
      */

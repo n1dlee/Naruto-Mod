@@ -35,6 +35,12 @@ public class CrowGenjutsuAbility extends Ability implements Ability.Cooldown {
         return ActivationType.INSTANT;
     }
 
+    /** Same as the Sharingan genjutsu it is built on. */
+    @Override
+    public int castPoseTicks() {
+        return 14;
+    }
+
     @Override
     public long defaultCombo() {
         return 1133;

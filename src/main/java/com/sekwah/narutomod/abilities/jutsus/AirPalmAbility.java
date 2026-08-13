@@ -35,6 +35,12 @@ public class AirPalmAbility extends Ability implements Ability.Cooldown {
         return ActivationType.INSTANT;
     }
 
+    /** A single sharp palm thrust - crisp, not slow. */
+    @Override
+    public int castPoseTicks() {
+        return 10;
+    }
+
     @Override
     public long defaultCombo() {
         return 111;

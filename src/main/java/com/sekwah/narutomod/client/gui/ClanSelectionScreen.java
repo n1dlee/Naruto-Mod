@@ -45,7 +45,10 @@ public class ClanSelectionScreen extends Screen {
 
         for (int i = 0; i < CLAN_IDS.length; i++) {
             final String clanId = CLAN_IDS[i];
-            String label = CLAN_NAMES[i] + " — " + CLAN_DESCRIPTIONS[i];
+            // ASCII hyphen, not an em-dash. With Embeddium/Oculus installed a non-ASCII glyph
+        // switches the font to another page mid-string and everything after it renders as
+        // garbage - which is exactly what the clan buttons were showing.
+        String label = CLAN_NAMES[i] + " - " + CLAN_DESCRIPTIONS[i];
             this.addRenderableWidget(Button.builder(Component.literal(label), (btn) -> {
                 PacketHandler.sendToServer(new ServerSelectClanPacket(clanId));
                 this.minecraft.setScreen(null);

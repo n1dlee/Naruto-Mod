@@ -41,8 +41,25 @@ import java.util.UUID;
 public class PlayerEvents {
 
     private static final UUID NINJA_HEALTH_MODIFIER_ID = UUID.fromString("d26b89a1-8dc2-4d13-a68e-fb10c2a5e95e");
-    private static final double[] HEALTH_BONUS_VALUES = new double[] {0.0D, 8.0D, 16.0D, 28.0D, 48.0D};
-    private static final float[] MOB_DAMAGE_MULTIPLIERS = new float[] {1.0F, 0.9F, 0.8F, 0.65F, 0.5F};
+    // Indexed by the 0-13 rank ladder (see INinjaData#getRankIndex), not the 0-4 base rank.
+    // The old five-entry tables meant Jonin to Kage handed over twenty hearts and a third of
+    // all incoming damage in one step; spread over three tiers it arrives in readable pieces.
+    private static final double[] HEALTH_BONUS_VALUES = new double[] {
+            0.0D,
+            8.0D, 10.0D, 13.0D,
+            16.0D, 20.0D, 24.0D,
+            28.0D, 34.0D, 41.0D,
+            48.0D, 58.0D, 70.0D,
+            90.0D
+    };
+    private static final float[] MOB_DAMAGE_MULTIPLIERS = new float[] {
+            1.0F,
+            0.90F, 0.88F, 0.85F,
+            0.80F, 0.75F, 0.70F,
+            0.65F, 0.61F, 0.56F,
+            0.50F, 0.45F, 0.40F,
+            0.32F
+    };
     private static final DustParticleOptions CHIDORI_PARTICLE = new DustParticleOptions(new Vector3f(0.45F, 0.85F, 1.0F), 1.0F);
 
     @SubscribeEvent
@@ -114,7 +131,10 @@ public class PlayerEvents {
         // wall in a way none of them covered - jump off at the same moment the jutsu is
         // toggled off - and gravity was never handed back, so the player simply floated
         // away. Reconciling it here means no exit path has to remember any more.
-        boolean shouldFloat = shouldPhase || player.getCapability(NinjaCapabilityHandler.NINJA_DATA)
+        // Phasing is no longer in this list: it uses real creative flight now and wants
+        // gravity left switched on, because flight is what holds the player up. Only
+        // wall-walking still needs the gravity flag itself turned off.
+        boolean shouldFloat = player.getCapability(NinjaCapabilityHandler.NINJA_DATA)
                 .map(INinjaData::isWallWalkAttached)
                 .orElse(false);
         if (!shouldFloat && player.isNoGravity()) {
@@ -131,10 +151,16 @@ public class PlayerEvents {
         // forever, because the phasing teardown above only runs while noPhysics is set and
         // by then it no longer is.
         boolean inKamui = com.sekwah.narutomod.world.KamuiDimension.isKamui(player.level());
-        if (inKamui && !player.getAbilities().mayfly) {
+        // Complete Body Susanoo flies in canon, and it is most of the reason to grow one:
+        // up to stage 3 you have a shell, at stage 4 you have an aircraft carrier. Same
+        // reconcile as everything else so it is handed back the moment the stage drops.
+        boolean completeBody = player.getCapability(NinjaCapabilityHandler.NINJA_DATA)
+                .map(data -> data.isSusanooActive() && data.getSusanooStage() >= 4)
+                .orElse(false);
+        if ((inKamui || completeBody) && !player.getAbilities().mayfly) {
             player.getAbilities().mayfly = true;
             player.onUpdateAbilities();
-        } else if (!inKamui && !shouldPhase && player.getAbilities().mayfly
+        } else if (!inKamui && !completeBody && !shouldPhase && player.getAbilities().mayfly
                 && !player.isCreative()) {
             player.getAbilities().mayfly = false;
             player.getAbilities().flying = false;
@@ -142,13 +168,33 @@ public class PlayerEvents {
         }
     }
 
+    /**
+     * Complete Body Susanoo cannot be staggered. A thirteen-block avatar being knocked back
+     * by an arrow was the clearest sign that stage 4 was cosmetic - the whole point of the
+     * final form is that nothing moves it.
+     */
+    @SubscribeEvent
+    public static void onKnockback(net.minecraftforge.event.entity.living.LivingKnockBackEvent event) {
+        if (!(event.getEntity() instanceof Player player)) {
+            return;
+        }
+        boolean immovable = player.getCapability(NinjaCapabilityHandler.NINJA_DATA)
+                .map(data -> data.isNinjaModeEnabled()
+                        && data.isSusanooActive() && data.getSusanooStage() >= 4)
+                .orElse(false);
+        if (immovable) {
+            event.setCanceled(true);
+        }
+    }
+
     private static void applyRankSurvivability(Player player, INinjaData ninjaData) {
         int rank = Math.min(Math.max(ninjaData.getNinjaRank(), 0), 4);
+        int index = Math.min(Math.max(ninjaData.getRankIndex(), 0), HEALTH_BONUS_VALUES.length - 1);
         if (player.tickCount % 40 != 0) {
             return;
         }
 
-        syncNinjaHealth(player, rank);
+        syncNinjaHealth(player, index);
         player.removeEffect(MobEffects.HEALTH_BOOST);
 
         if (rank >= 3) {
@@ -166,13 +212,14 @@ public class PlayerEvents {
         }
     }
 
-    private static void syncNinjaHealth(Player player, int rank) {
+    private static void syncNinjaHealth(Player player, int rankIndex) {
         AttributeInstance maxHealth = player.getAttribute(Attributes.MAX_HEALTH);
         if (maxHealth == null) {
             return;
         }
 
-        double targetBonus = HEALTH_BONUS_VALUES[Math.min(Math.max(rank, 0), 4)];
+        double targetBonus = HEALTH_BONUS_VALUES[
+                Math.min(Math.max(rankIndex, 0), HEALTH_BONUS_VALUES.length - 1)];
         AttributeModifier currentModifier = maxHealth.getModifier(NINJA_HEALTH_MODIFIER_ID);
         if (targetBonus <= 0.0D) {
             if (currentModifier != null) {
@@ -205,7 +252,12 @@ public class PlayerEvents {
     private static final float[] KURAMA_DAMAGE_REDUCTION = {0f, 0.10f, 0.10f, 0.10f, 0.30f, 0.30f, 0.30f, 0.30f, 0.50f, 0.80f}; // by tail count 0-9
     private static final float SHARINGAN_DANGER_SENSE_REDUCTION = 0.15f; // 3-tomoe Sharingan, see applyTransformationDamageSponge
     private static final float RINNEGAN_DROP_CHANCE = 0.15f; // per Mangekyo boss kill
-    private static final float SHARINGAN_EYE_DROP_CHANCE = 0.35f; // per Uchiha boss kill
+    /**
+     * Per Uchiha boss kill. Raised alongside the boss spawn weight coming down to 4: with
+     * bosses this rare, a one-in-three roll meant most players would never see an eye from
+     * the source that is supposed to be the canonical one.
+     */
+    private static final float SHARINGAN_EYE_DROP_CHANCE = 0.60f;
     private static final float CHAKRA_FLOW_BONUS = 5.0f;     // bonus damage per chakra-flowed hit
     private static final float CHAKRA_FLOW_HIT_COST = 3.0f;
 
@@ -216,8 +268,12 @@ public class PlayerEvents {
      *
      * Vanilla monsters deliberately keep the generic 10 + maxHealth/2 formula - grinding
      * zombies should stay far slower than hunting ninja.
+     *
+     * The boss payout is sized against the rank ladder rather than against a rogue: Jonin to
+     * Kage is 35000, so 4000 puts a Kage roughly nine bosses away. At the old 1500 it was
+     * twenty-three, which made the rarest fight in the mod worse value than three rogues.
      */
-    private static final float BOSS_KILL_XP = 1500f;
+    private static final float BOSS_KILL_XP = 4000f;
     /** Chunin rogue. A Jonin is worth the multiplier below, and a clan rogue is a Jonin. */
     private static final float ROGUE_NINJA_KILL_XP = 200f;
     private static final float ROGUE_JONIN_XP_MULTIPLIER = 2.5f;
@@ -244,15 +300,35 @@ public class PlayerEvents {
      * drain in KamuiPhaseAbility is what keeps it from being permanent.
      */
     private static void applyKamuiIntangibility(LivingHurtEvent event) {
-        if (!(event.getEntity() instanceof Player player)) {
-            return;
+        if (isPhasedIntangible(event.getEntity())) {
+            event.setCanceled(true);
         }
-        player.getCapability(NinjaCapabilityHandler.NINJA_DATA).ifPresent(ninjaData -> {
-            if (ninjaData.isNinjaModeEnabled()
-                    && ninjaData.getToggleAbilityData().getAbilitiesHashSet().contains(KAMUI_PHASE_ABILITY)) {
-                event.setCanceled(true);
-            }
-        });
+    }
+
+    /**
+     * The same immunity, one event earlier.
+     *
+     * LivingHurtEvent only removes the damage number. Everything else a technique does on
+     * contact - the hurt flash, the knockback, the shield of red particles, the projectile
+     * deciding it has hit something - has already happened by then, so a jutsu thrown at a
+     * phased Obito visibly connected and merely did nothing. Cancelling LivingAttackEvent is
+     * what actually makes it pass through him.
+     */
+    @SubscribeEvent
+    public static void onLivingAttack(net.minecraftforge.event.entity.living.LivingAttackEvent event) {
+        if (isPhasedIntangible(event.getEntity())) {
+            event.setCanceled(true);
+        }
+    }
+
+    private static boolean isPhasedIntangible(net.minecraft.world.entity.LivingEntity entity) {
+        if (!(entity instanceof Player player)) {
+            return false;
+        }
+        return player.getCapability(NinjaCapabilityHandler.NINJA_DATA)
+                .map(data -> data.isNinjaModeEnabled()
+                        && data.getToggleAbilityData().getAbilitiesHashSet().contains(KAMUI_PHASE_ABILITY))
+                .orElse(false);
     }
 
     private static final net.minecraft.resources.ResourceLocation PRETA_PATH_ABILITY =
@@ -449,7 +525,10 @@ public class PlayerEvents {
                 return;
             }
             ninjaData.useChakra(CHAKRA_FLOW_HIT_COST, 10);
-            event.setAmount(event.getAmount() + CHAKRA_FLOW_BONUS * ninjaData.getRankDamageMultiplier());
+            // Rank scaling capped: at Six Paths the raw multiplier is 4.2, which made a coat
+            // of chakra worth more than the blade under it.
+            float rankScale = Math.min(ninjaData.getRankDamageMultiplier(), 2.5F);
+            event.setAmount(event.getAmount() + CHAKRA_FLOW_BONUS * rankScale);
             if (attacker.level() instanceof ServerLevel serverLevel) {
                 Vec3 pos = event.getEntity().position().add(0, event.getEntity().getBbHeight() * 0.6, 0);
                 serverLevel.sendParticles(NarutoParticles.CHIDORI_CYAN,
@@ -629,8 +708,8 @@ public class PlayerEvents {
             if (!ninjaData.isNinjaModeEnabled()) {
                 return;
             }
-            int rank = Math.min(Math.max(ninjaData.getNinjaRank(), 0), 4);
-            event.setAmount(event.getAmount() * MOB_DAMAGE_MULTIPLIERS[rank]);
+            int index = Math.min(Math.max(ninjaData.getRankIndex(), 0), MOB_DAMAGE_MULTIPLIERS.length - 1);
+            event.setAmount(event.getAmount() * MOB_DAMAGE_MULTIPLIERS[index]);
         });
     }
 
@@ -708,6 +787,52 @@ public class PlayerEvents {
      */
     private static final float[] RANK_MELEE_FLAT_BONUS = {0F, 1F, 2F, 4F, 6F};
 
+    /** Hard ceiling on how much every buff together may multiply one melee swing. */
+    private static final float MELEE_MULTIPLIER_CAP = 3.5F;
+    private static final float MELEE_MULTIPLIER_CAP_PVP = 2.0F;
+
+    /**
+     * The single place a melee swing gets multiplied.
+     *
+     * It used to be three: the mode multiplier here, the Susanoo and Kurama multipliers in
+     * applyTransformationMeleeHit, and Chakra Flow's bonus in between - and all of them
+     * multiplied. Sage Mode times Kurama Chakra Mode times the cloak times the shell reached
+     * forty-three, which is why a Six Paths player put Madara down in four swings despite his
+     * seven hundred effective health.
+     *
+     * Two rules fix the shape rather than just shaving numbers:
+     *
+     *  - alternatives take the MAX, not the product. Sage Mode and Kurama Chakra Mode are two
+     *    ways of powering the same punch, and so are the shell and the cloak; stacking them
+     *    multiplicatively was never a design decision, it was three handlers not knowing
+     *    about each other.
+     *  - whatever comes out is clamped. A cap means new buffs added later cannot silently
+     *    reopen this, which is the part that actually matters.
+     */
+    private static float meleeStateMultiplier(INinjaData ninjaData) {
+        // Chakra states: the strongest one you are in, not all of them at once.
+        float state = 1.0F;
+        if (ninjaData.isSageModeActive()) {
+            state = Math.max(state, 2.0F);
+        }
+        if (ninjaData.isKcmActive()) {
+            state = Math.max(state, 3.0F);
+        }
+        // Manifested forms: likewise the strongest, not the product.
+        float form = 1.0F;
+        if (ninjaData.isKuramaCloakActive()) {
+            form = Math.max(form, ninjaData.getKuramaMeleeDamageMultiplier());
+        }
+        if (ninjaData.isSusanooActive()) {
+            form = Math.max(form, ninjaData.getSusanooMeleeDamageMultiplier());
+        }
+        // The Gates are pure taijutsu, so they genuinely do compound - but additively, and
+        // the cap below still contains them.
+        float gates = 1.0F + ninjaData.getGatesOpen() * 0.20F;
+
+        return Math.max(state, form) * gates;
+    }
+
     private static void applyRankMeleeDamage(LivingHurtEvent event) {
         if (!event.getSource().is(net.minecraft.world.damagesource.DamageTypes.PLAYER_ATTACK)) {
             return;
@@ -723,23 +848,14 @@ public class PlayerEvents {
             int rank = Math.min(Math.max(ninjaData.getNinjaRank(), 0), 4);
             float flat = RANK_MELEE_FLAT_BONUS[rank];
 
-            float modeMultiplier = 1.0F;
-            if (ninjaData.isSageModeActive()) {
-                modeMultiplier *= 2.0F;
-            }
-            if (ninjaData.isKcmActive()) {
-                modeMultiplier *= 3.5F;
-            }
-            if (ninjaData.getGatesOpen() > 0) {
-                modeMultiplier *= 1.0F + ninjaData.getGatesOpen() * 0.35F;
-            }
+            float modeMultiplier = meleeStateMultiplier(ninjaData);
 
-            // PvP stays a fight, not a one-punch delete: half the flat bonus, modes capped
-            // at 2x. Mobs get the full anime treatment.
+            // PvP stays a fight, not a one-punch delete: half the flat bonus and a tighter cap.
             if (versusPlayer) {
                 flat *= 0.5F;
-                modeMultiplier = Math.min(modeMultiplier, 2.0F);
             }
+            modeMultiplier = Math.min(modeMultiplier,
+                    versusPlayer ? MELEE_MULTIPLIER_CAP_PVP : MELEE_MULTIPLIER_CAP);
             event.setAmount((event.getAmount() + flat) * modeMultiplier);
         });
     }
@@ -954,10 +1070,10 @@ public class PlayerEvents {
             if (!ninjaData.isNinjaModeEnabled()) {
                 return;
             }
-            float multiplier = ninjaData.getKuramaMeleeDamageMultiplier() * ninjaData.getSusanooMeleeDamageMultiplier();
-            if (multiplier != 1.0F) {
-                event.setAmount(event.getAmount() * multiplier);
-            }
+            // No multiplication here any more - the shell's and the cloak's contributions are
+            // folded into meleeStateMultiplier, which caps the total. Applying them a second
+            // time is what turned a swing into two hundred damage. This handler now only does
+            // what it is uniquely for: the area attacks the manifested forms swing alongside.
             ninjaData.triggerSusanooArmSwipe(attacker, target);
             ninjaData.triggerKuramaTailLash(attacker, target);
         });
@@ -1014,6 +1130,57 @@ public class PlayerEvents {
     }
 
     /**
+     * Everything a felled wielder leaves behind when it is not a Mangekyo.
+     *
+     * The roster used to be a binary - Uchiha hand over an eye, everyone else drops a sword -
+     * and that has no answer for a Rinnegan, a Byakugan, or a Senju who carries neither. Each
+     * legend now leaves the thing that was actually theirs.
+     */
+    private static void awardNonMangekyoSpoils(Player killer, MangekyoBossEntity boss,
+                                               MangekyoBossVariant variant) {
+        killer.getCapability(NinjaCapabilityHandler.NINJA_DATA)
+                .ifPresent(data -> data.addChakraXp(BOSS_KILL_XP));
+
+        switch (variant.dropKind()) {
+            case BLADE -> {
+                net.minecraft.world.item.Item trophy = switch (variant) {
+                    case KISAME -> com.sekwah.narutomod.item.NarutoItems.SAMEHADA.get();
+                    case ZABUZA -> com.sekwah.narutomod.item.NarutoItems.KUBIKIRIBOCHO.get();
+                    case HIDAN -> com.sekwah.narutomod.item.NarutoItems.KABUTOWARI.get();
+                    case DEIDARA -> com.sekwah.narutomod.item.NarutoItems.SHIBUKI.get();
+                    default -> com.sekwah.narutomod.item.NarutoItems.NUIBARI.get();
+                };
+                boss.spawnAtLocation(new net.minecraft.world.item.ItemStack(trophy));
+            }
+            case RINNEGAN ->
+                // Nagato IS the Rinnegan. A 15% incidental roll would be absurd here, so his
+                // is guaranteed - and it is the only reliable source of one in the game.
+                    boss.spawnAtLocation(new net.minecraft.world.item.ItemStack(
+                            com.sekwah.narutomod.item.NarutoItems.RINNEGAN_EYE.get()));
+            case BYAKUGAN -> boss.spawnAtLocation(new net.minecraft.world.item.ItemStack(
+                    com.sekwah.narutomod.item.NarutoItems.BYAKUGAN_EYE.get()));
+            case SHARINGAN ->
+                // Kakashi's was transplanted in the first place; taking it is how the eye
+                // has always changed hands.
+                    boss.spawnAtLocation(new net.minecraft.world.item.ItemStack(
+                            com.sekwah.narutomod.item.NarutoItems.SHARINGAN_EYE.get()));
+            case SCROLL -> {
+                net.minecraft.world.item.Item scroll = switch (variant) {
+                    case HASHIRAMA -> com.sekwah.narutomod.item.NarutoItems.SCROLL_KUCHIYOSE.get();
+                    case NARUTO -> com.sekwah.narutomod.item.NarutoItems.SCROLL_RASENSHURIKEN.get();
+                    default -> com.sekwah.narutomod.item.NarutoItems.SCROLL_SHADOW_CLONE.get();
+                };
+                boss.spawnAtLocation(new net.minecraft.world.item.ItemStack(scroll));
+            }
+            default -> { }
+        }
+
+        killer.displayClientMessage(Component.translatable("mangekyo.boss.trophy",
+                        Component.translatable(variant.translationKey()).withStyle(ChatFormatting.RED))
+                .withStyle(ChatFormatting.GOLD), false);
+    }
+
+    /**
      * Phase 16: defeating one of the roaming Mangekyo wielders takes their eyes. An
      * ordinary Mangekyo becomes Eternal — no more escalating blindness — and the killer
      * gains that wielder's signature technique. Beating several stacks their techniques,
@@ -1029,38 +1196,48 @@ public class PlayerEvents {
             return;
         }
         MangekyoBossVariant variant = boss.getVariant();
-        // A few of these wielders had transplanted a Rinnegan — rarely, it survives them.
-        if (boss.level().random.nextFloat() < RINNEGAN_DROP_CHANCE) {
+        // Every felled wielder counts toward the Six Paths step, Uchiha or missing-nin alike.
+        killer.getCapability(NinjaCapabilityHandler.NINJA_DATA).ifPresent(data -> {
+            if (data.recordMangekyoBossKill()) {
+                killer.displayClientMessage(Component.translatable("rank.six_paths.unlocked")
+                        .withStyle(ChatFormatting.GOLD), false);
+                killer.level().playSound(null, killer.blockPosition(),
+                        net.minecraft.sounds.SoundEvents.UI_TOAST_CHALLENGE_COMPLETE,
+                        net.minecraft.sounds.SoundSource.PLAYERS, 1.0f, 1.0f);
+            }
+        });
+
+        // A few of these wielders had transplanted a Rinnegan - rarely, it survives them.
+        //
+        // Restricted to the Mangekyo tier. This roll used to run for every boss in the game,
+        // which was defensible when the roster was five Uchiha and five Akatsuki, and stopped
+        // being defensible the moment Hinata and Shikamaru joined it: the rarest item in the
+        // mod would have been farmable off the two weakest new bosses, neither of whom has
+        // any business carrying one. Nagato is excluded for the opposite reason - his is
+        // handed over outright below, and rolling here as well would sometimes drop two.
+        if (variant.dropKind() == MangekyoBossVariant.BossDrop.MANGEKYO
+                && boss.level().random.nextFloat() < RINNEGAN_DROP_CHANCE) {
             boss.spawnAtLocation(new net.minecraft.world.item.ItemStack(
                     com.sekwah.narutomod.item.NarutoItems.RINNEGAN_EYE.get()));
         }
+
+        // Anything other than a Mangekyo is settled here and the method returns: the tail of
+        // this method is entirely about upgrading the killer's own Mangekyo to Eternal, which
+        // is meaningless for a Senju, a Hyuga or a jinchuriki.
+        if (variant.dropKind() != MangekyoBossVariant.BossDrop.MANGEKYO) {
+            awardNonMangekyoSpoils(killer, boss, variant);
+            return;
+        }
+
         // An Uchiha corpse still has its eyes. This is how a non-Uchiha ever gets one.
-        if (variant.isUchiha() && boss.level().random.nextFloat() < SHARINGAN_EYE_DROP_CHANCE) {
+        if (boss.level().random.nextFloat() < SHARINGAN_EYE_DROP_CHANCE) {
             boss.spawnAtLocation(new net.minecraft.world.item.ItemStack(
                     com.sekwah.narutomod.item.NarutoItems.SHARINGAN_EYE.get()));
         }
 
-        // The missing-nin have no Mangekyo to hand over — they drop the blade that made
-        // their name instead, which is the whole reason to hunt them.
-        if (!variant.isUchiha()) {
-            net.minecraft.world.item.Item trophy = switch (variant) {
-                case KISAME -> com.sekwah.narutomod.item.NarutoItems.SAMEHADA.get();
-                case ZABUZA -> com.sekwah.narutomod.item.NarutoItems.KUBIKIRIBOCHO.get();
-                case HIDAN -> com.sekwah.narutomod.item.NarutoItems.KABUTOWARI.get();
-                case DEIDARA -> com.sekwah.narutomod.item.NarutoItems.SHIBUKI.get();
-                default -> com.sekwah.narutomod.item.NarutoItems.NUIBARI.get();
-            };
-            boss.spawnAtLocation(new net.minecraft.world.item.ItemStack(trophy));
-            killer.getCapability(NinjaCapabilityHandler.NINJA_DATA)
-                    .ifPresent(data -> data.addChakraXp(BOSS_KILL_XP));
-            killer.displayClientMessage(Component.translatable("mangekyo.boss.trophy",
-                    Component.translatable(variant.translationKey()).withStyle(ChatFormatting.RED))
-                    .withStyle(ChatFormatting.GOLD), false);
-            return;
-        }
-
         killer.getCapability(NinjaCapabilityHandler.NINJA_DATA).ifPresent(ninjaData -> {
             ninjaData.addChakraXp(BOSS_KILL_XP);
+
             if (!ninjaData.isMangekyoAwakened()) {
                 // No Mangekyo to upgrade yet — the kill still counts for the XP above.
                 killer.displayClientMessage(Component.translatable("mangekyo.ems.nomangekyo")

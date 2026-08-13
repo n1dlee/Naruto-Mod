@@ -62,6 +62,17 @@ public class KuramaTailRenderer {
         avatarModel = bakedModel;
     }
 
+    // Exposed for BossKuramaLayer so the Naruto boss manifests exactly the fox the player
+    // does, instead of a second, quietly divergent copy of the same geometry.
+
+    static KuramaAvatarModel avatarModel() {
+        return avatarModel;
+    }
+
+    static ResourceLocation avatarTexture() {
+        return AVATAR_TEXTURE;
+    }
+
     /**
      * Tails 1-8 are NOT drawn here any more.
      *

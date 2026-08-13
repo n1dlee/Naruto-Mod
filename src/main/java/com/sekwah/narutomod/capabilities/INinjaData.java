@@ -91,6 +91,22 @@ public interface INinjaData extends INBTSerializable<Tag> {
     void addChakraXp(float amount);
     int getNinjaRank();
     void setNinjaRank(int rank);
+
+    /**
+     * Position on the full rank ladder: 0 Academy, 1-3 Genin Low/Mid/High, 4-6 Chunin,
+     * 7-9 Jonin, 10-12 Kage, 13 Six Paths. Stats scale on this; permissions still scale on
+     * {@link #getNinjaRank()}, so a tier never unlocks anything a whole rank is meant to.
+     */
+    int getRankIndex();
+    /** Low/Mid/High within the current base rank, 0-2. Always 0 at Academy. */
+    int getRankTier();
+    void setRankTier(int tier);
+    boolean isSixPaths();
+    int getMangekyoBossKills();
+    /** @return true if this kill was the one that opened the Six Paths step */
+    boolean recordMangekyoBossKill();
+    /** Chakra restored per tick of Chakra Charge channelling at this rank. */
+    float getChakraChargePerTick(boolean moving);
     String getClanId();
     void setClanId(String clanId);
     String getNatureAffinity();
@@ -196,6 +212,13 @@ public interface INinjaData extends INBTSerializable<Tag> {
     void setMangekyoAwakened(boolean awakened);
     String getMangekyoForm();
     void setMangekyoForm(String form);
+    /** Chosen Susanoo tint as packed 0xRRGGBB, or -1 for the wielder's canon colour. */
+    int getSusanooColor();
+    void setSusanooColor(int packedRgb);
+    /** Movement keys held at the last cast, -1/0/1 per axis; see NinjaData for why. */
+    void setMoveInput(float strafe, float forward);
+    float getMoveStrafe();
+    float getMoveForward();
     void registerMangekyoUse(Player player);
     /** UUID string of the creature branded with the Flying Thunder God seal, or empty. */
     String getHiraishinEntityMark();

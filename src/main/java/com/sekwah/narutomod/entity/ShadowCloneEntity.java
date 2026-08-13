@@ -72,6 +72,29 @@ public class ShadowCloneEntity extends PathfinderMob {
         this.entityData.set(OWNER_UUID, Optional.of(owner.getUUID()));
     }
 
+    /**
+     * Turns a clone against players, for the ones a boss makes rather than a player.
+     *
+     * The default target selector only looks for Monster, which is right for a clone fighting
+     * at your side and useless for one Naruto just threw at you - it would stand there hunting
+     * zombies while its owner fought you. Goal selectors are protected, so the switch has to
+     * live on the entity; the vanilla monster-hunting goal is left in place so a boss clone
+     * still defends itself if something else picks a fight.
+     */
+    public void makeHostileToPlayers(float health, float attackDamage) {
+        this.targetSelector.addGoal(0,
+                new NearestAttackableTargetGoal<>(this, Player.class, true));
+        var maxHealth = this.getAttribute(Attributes.MAX_HEALTH);
+        if (maxHealth != null) {
+            maxHealth.setBaseValue(health);
+            this.setHealth(health);
+        }
+        var damage = this.getAttribute(Attributes.ATTACK_DAMAGE);
+        if (damage != null) {
+            damage.setBaseValue(attackDamage);
+        }
+    }
+
     @Override
     public void tick() {
         super.tick();

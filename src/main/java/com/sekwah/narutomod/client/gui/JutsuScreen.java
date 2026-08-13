@@ -59,6 +59,28 @@ public class JutsuScreen extends Screen {
     /** "You have this technique" but we can't cheaply verify clan/rank gates from the GUI. */
     private static final int COLOR_INNATE = 0xDDDDDD;
 
+    // --- Panel chrome. Plain filled rectangles rather than a nine-slice texture: the screen
+    // has to survive any window size, and a stretched background is worse than none.
+    private static final int PANEL_FILL = 0xB0101018;
+    private static final int PANEL_EDGE = 0x40FFFFFF;
+    private static final int HEADER_FILL = 0xC0141422;
+    private static final int TRACK_FILL = 0xFF20202C;
+    private static final int PANEL_PAD = 5;
+
+    /** Susanoo tints an Uchiha can paint their shell with; the first hands it back to canon. */
+    private static final int[] SUSANOO_SWATCHES = {
+            -1,
+            0xE03A1E, 0xF08A20, 0xF5D040, 0x3FC94A, 0x28C8B8,
+            0x2B62F0, 0x8B3FE0, 0x6A1FB0, 0xF060C0, 0xF0F0FF, 0x241830
+    };
+    private static final int SWATCH_SIZE = 9;
+    private static final int SWATCH_GAP = 2;
+
+    /** Where the swatches ended up this frame, so clicks can be matched against them. */
+    private int swatchRowX, swatchRowY;
+    private int swatchColumns;
+    private boolean swatchesVisible;
+
     private final Map<String, List<JutsuEntry>> byElement = new LinkedHashMap<>();
     /** Every non-elemental jutsu: dojutsu, clan kekkei genkai, utility, summons — all of it. */
     private final List<JutsuEntry> other = new ArrayList<>();
@@ -181,7 +203,6 @@ public class JutsuScreen extends Screen {
     @Override
     public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
         this.renderBackground(guiGraphics);
-        GuiUtils.centeredText(guiGraphics, this.font, this.title, this.width / 2, 8);
 
         var player = this.minecraft.player;
         if (player == null) {
@@ -189,35 +210,28 @@ public class JutsuScreen extends Screen {
             return;
         }
         player.getCapability(NinjaCapabilityHandler.NINJA_DATA).ifPresent(ninjaData -> {
-            // --- Profile line ---
-            int rank = Math.min(Math.max(ninjaData.getNinjaRank(), 0), 4);
-            String xpText = rank >= 4
-                    ? (int) ninjaData.getChakraXp() + " XP"
-                    : (int) ninjaData.getChakraXp() + " / " + (int) RANK_XP_THRESHOLDS[rank + 1] + " XP";
-            String clan = ninjaData.getClanId().isEmpty() ? "-" : capitalize(ninjaData.getClanId());
-            // Nature slots are shown because an empty slot is the only thing that lets
-            // chakra paper work, and without this the paper just refuses with no context.
-            String natures = ninjaData.getUnlockedElements().size() + "/" + ninjaData.getMaxElementSlots();
-            GuiUtils.centeredText(guiGraphics, this.font,
-                    Component.literal(RANK_NAMES[rank] + "  |  " + xpText + "  |  ")
-                            .append(Component.translatable("naruto.gui.jutsu.clan").append(": " + clan))
-                            .append("  |  ")
-                            .append(Component.translatable("naruto.gui.jutsu.natures").append(": " + natures))
-                            .withStyle(ChatFormatting.GRAY),
-                    this.width / 2, 20, 0xCCCCCC);
-
-            // --- Three columns: elements split in two + signature techniques ---
-            // Columns are laid out from the real screen width with explicit gutters, and
-            // every row is clipped to its own column, so long jutsu names can no longer
-            // spill sideways into the neighbouring list.
             int colWidth = Math.min(MAX_COL_WIDTH, (this.width - 2 * SIDE_MARGIN - 2 * COL_GUTTER) / 3);
             int totalWidth = colWidth * 3 + COL_GUTTER * 2;
             int col1X = (this.width - totalWidth) / 2;
             int col2X = col1X + colWidth + COL_GUTTER;
             int col3X = col2X + colWidth + COL_GUTTER;
-            int topY = 34;
+
+            int headerTop = 6;
+            int headerHeight = 34;
+            renderHeaderCard(guiGraphics, ninjaData, col1X, headerTop, totalWidth, headerHeight);
+
+            int topY = headerTop + headerHeight + 6;
             // Never draw into the button row at the bottom.
             int bottomY = this.height - 30;
+
+            // A panel behind each column. Without them the three lists read as one wall of
+            // text; with them the eye finds its column immediately.
+            panel(guiGraphics, col1X - PANEL_PAD, topY - PANEL_PAD,
+                    colWidth + PANEL_PAD * 2, bottomY - topY + PANEL_PAD * 2);
+            panel(guiGraphics, col2X - PANEL_PAD, topY - PANEL_PAD,
+                    colWidth + PANEL_PAD * 2, bottomY - topY + PANEL_PAD * 2);
+            panel(guiGraphics, col3X - PANEL_PAD, topY - PANEL_PAD,
+                    colWidth + PANEL_PAD * 2, bottomY - topY + PANEL_PAD * 2);
 
             int y1 = topY;
             for (String element : new String[]{"fire", "water", "earth"}) {
@@ -236,6 +250,10 @@ public class JutsuScreen extends Screen {
 
             List<PanelLine> dojutsuLines = buildDojutsuLines(ninjaData);
             int dojutsuHeight = dojutsuLines.isEmpty() ? 0 : HEADER_HEIGHT + dojutsuLines.size() * LINE_HEIGHT + 6;
+            // Reserve the palette's rows too. Without this the jutsu list above claimed the
+            // whole column, renderSusanooSwatches found no room left and silently returned -
+            // so the colour picker existed, worked, and was never once drawn on screen.
+            dojutsuHeight += susanooSwatchHeight(ninjaData, colWidth);
 
             this.otherColX = col3X;
             this.otherColWidth = colWidth;
@@ -266,10 +284,91 @@ public class JutsuScreen extends Screen {
                 }
             }
 
-            renderDojutsuPanel(guiGraphics, dojutsuLines, col3X, this.otherListBottom + 6, colWidth, bottomY);
+            renderDojutsuPanel(guiGraphics, dojutsuLines, ninjaData, col3X,
+                    this.otherListBottom + 6, colWidth, bottomY, mouseX, mouseY);
         });
 
         super.render(guiGraphics, mouseX, mouseY, partialTick);
+    }
+
+    /**
+     * The ninja card at the top: rank in its own colour, a bar filling toward the next step
+     * on the ladder, and the three numbers that actually change how the rest of the screen
+     * behaves. Replaces a single grey line of pipe-separated text that gave the most
+     * important information on the screen no more weight than a jutsu row.
+     */
+    private void renderHeaderCard(GuiGraphics guiGraphics, INinjaData ninjaData,
+                                  int x, int y, int width, int height) {
+        guiGraphics.fill(x - PANEL_PAD, y, x + width + PANEL_PAD, y + height, HEADER_FILL);
+        guiGraphics.fill(x - PANEL_PAD, y + height - 1, x + width + PANEL_PAD, y + height, PANEL_EDGE);
+
+        int rankIndex = ninjaData.getRankIndex();
+        int rankColor = com.sekwah.narutomod.capabilities.RankLadder.color(rankIndex);
+        String rankName = com.sekwah.narutomod.capabilities.RankLadder.name(rankIndex);
+
+        guiGraphics.drawString(this.font, Component.literal(rankName).withStyle(ChatFormatting.BOLD),
+                x, y + 5, rankColor, false);
+
+        String clan = ninjaData.getClanId().isEmpty() ? "-" : capitalize(ninjaData.getClanId());
+        String natures = ninjaData.getUnlockedElements().size() + "/" + ninjaData.getMaxElementSlots();
+        String meta = Component.translatable("naruto.gui.jutsu.clan").getString() + ": " + clan
+                + "   " + Component.translatable("naruto.gui.jutsu.natures").getString() + ": " + natures;
+        int metaWidth = this.font.width(meta);
+        guiGraphics.drawString(this.font, Component.literal(meta),
+                x + width - metaWidth, y + 5, 0xAAAAAA, false);
+
+        // Progress toward the next step. At High Kage the ladder stops being an XP problem,
+        // so the bar tracks felled bosses instead of pretending there is a number to reach.
+        float current = ninjaData.getChakraXp();
+        float floor = com.sekwah.narutomod.capabilities.RankLadder.XP_THRESHOLDS[rankIndex];
+        float next = com.sekwah.narutomod.capabilities.RankLadder.nextThreshold(rankIndex);
+        String progressText;
+        float fraction;
+        if (rankIndex == 12) {
+            int kills = ninjaData.getMangekyoBossKills();
+            fraction = Mth.clamp(kills / 10f, 0f, 1f);
+            progressText = kills + " / 10 Mangekyo wielders felled";
+        } else if (next < 0) {
+            fraction = 1f;
+            progressText = (int) current + " XP";
+        } else {
+            fraction = Mth.clamp((current - floor) / Math.max(1f, next - floor), 0f, 1f);
+            progressText = (int) current + " / " + (int) next + " XP";
+        }
+
+        int barY = y + 19;
+        int barHeight = 6;
+        guiGraphics.fill(x, barY, x + width, barY + barHeight, TRACK_FILL);
+        int filled = (int) (width * fraction);
+        if (filled > 0) {
+            guiGraphics.fill(x, barY, x + filled, barY + barHeight, 0xFF000000 | rankColor);
+            // A lighter top line reads as a highlight and stops the bar looking like a slab.
+            guiGraphics.fill(x, barY, x + filled, barY + 1, 0x60FFFFFF);
+        }
+        guiGraphics.fill(x, barY + barHeight, x + width, barY + barHeight + 1, PANEL_EDGE);
+
+        int textWidth = this.font.width(progressText);
+        guiGraphics.drawString(this.font, Component.literal(progressText),
+                x + (width - textWidth) / 2, barY - 1, 0xFFFFFF, true);
+    }
+
+    /** Vertical space the Susanoo palette needs, or 0 when the player has no Mangekyo. */
+    private int susanooSwatchHeight(INinjaData ninjaData, int colWidth) {
+        if (!ninjaData.isMangekyoAwakened()) {
+            return 0;
+        }
+        int perRow = Math.max(1, (colWidth + SWATCH_GAP) / (SWATCH_SIZE + SWATCH_GAP));
+        int rows = (SUSANOO_SWATCHES.length + perRow - 1) / perRow;
+        return LINE_HEIGHT + rows * (SWATCH_SIZE + SWATCH_GAP) + 4;
+    }
+
+    /** A translucent slab with a hairline border, used behind every column. */
+    private void panel(GuiGraphics guiGraphics, int x, int y, int width, int height) {
+        guiGraphics.fill(x, y, x + width, y + height, PANEL_FILL);
+        guiGraphics.fill(x, y, x + width, y + 1, PANEL_EDGE);
+        guiGraphics.fill(x, y + height - 1, x + width, y + height, PANEL_EDGE);
+        guiGraphics.fill(x, y, x + 1, y + height, PANEL_EDGE);
+        guiGraphics.fill(x + width - 1, y, x + width, y + height, PANEL_EDGE);
     }
 
     @Override
@@ -328,10 +427,13 @@ public class JutsuScreen extends Screen {
         return lines;
     }
 
-    private void renderDojutsuPanel(GuiGraphics guiGraphics, List<PanelLine> lines, int x, int y, int colWidth, int bottomY) {
+    private void renderDojutsuPanel(GuiGraphics guiGraphics, List<PanelLine> lines, INinjaData ninjaData,
+                                    int x, int y, int colWidth, int bottomY, int mouseX, int mouseY) {
+        this.swatchesVisible = false;
         if (lines.isEmpty() || y + HEADER_HEIGHT > bottomY) {
             return;
         }
+        guiGraphics.fill(x - 2, y - 3, x + colWidth + 2, y - 2, PANEL_EDGE);
         guiGraphics.drawString(this.font,
                 Component.translatable("naruto.gui.jutsu.dojutsu").withStyle(ChatFormatting.BOLD),
                 x, y, 0xFF8888, false);
@@ -341,6 +443,85 @@ public class JutsuScreen extends Screen {
         for (PanelLine line : lines) {
             y = drawPanelRow(guiGraphics, line.text(), x, y, rowWidth, bottomY, line.color());
         }
+
+        if (ninjaData.isMangekyoAwakened()) {
+            renderSusanooSwatches(guiGraphics, ninjaData, x, y + 2, colWidth, bottomY, mouseX, mouseY);
+        }
+    }
+
+    /**
+     * The Susanoo palette. An Uchiha inherits an eye, not a colour scheme, and until now the
+     * shell's tint was decided entirely by whose Mangekyo you happened to take - the one
+     * cosmetic choice the whole clan system never offered.
+     *
+     * The first swatch is struck through: it clears the override and hands the shell back to
+     * the wielder's canon colour.
+     */
+    private void renderSusanooSwatches(GuiGraphics guiGraphics, INinjaData ninjaData,
+                                       int x, int y, int colWidth, int bottomY, int mouseX, int mouseY) {
+        int perRow = Math.max(1, (colWidth + SWATCH_GAP) / (SWATCH_SIZE + SWATCH_GAP));
+        int rows = (SUSANOO_SWATCHES.length + perRow - 1) / perRow;
+        int needed = LINE_HEIGHT + rows * (SWATCH_SIZE + SWATCH_GAP);
+        if (y + needed > bottomY) {
+            return;
+        }
+
+        guiGraphics.drawString(this.font,
+                Component.translatable("naruto.gui.jutsu.susanoocolour"), x + ROW_INDENT, y, 0xBB99EE, false);
+        y += LINE_HEIGHT;
+
+        this.swatchRowX = x + ROW_INDENT;
+        this.swatchRowY = y;
+        this.swatchColumns = perRow;
+        this.swatchesVisible = true;
+
+        int selected = ninjaData.getSusanooColor();
+        for (int i = 0; i < SUSANOO_SWATCHES.length; i++) {
+            int cellX = this.swatchRowX + (i % perRow) * (SWATCH_SIZE + SWATCH_GAP);
+            int cellY = this.swatchRowY + (i / perRow) * (SWATCH_SIZE + SWATCH_GAP);
+            int value = SUSANOO_SWATCHES[i];
+
+            int fill = value < 0 ? 0xFF303040 : 0xFF000000 | value;
+            guiGraphics.fill(cellX, cellY, cellX + SWATCH_SIZE, cellY + SWATCH_SIZE, fill);
+            if (value < 0) {
+                // Diagonal tick marks read as "no colour" without needing a glyph.
+                guiGraphics.fill(cellX + 2, cellY + 4, cellX + SWATCH_SIZE - 2, cellY + 5, 0xFFCCCCCC);
+            }
+
+            boolean isSelected = value == selected;
+            boolean hovered = mouseX >= cellX && mouseX < cellX + SWATCH_SIZE
+                    && mouseY >= cellY && mouseY < cellY + SWATCH_SIZE;
+            if (isSelected || hovered) {
+                int border = isSelected ? 0xFFFFFFFF : 0x90FFFFFF;
+                guiGraphics.fill(cellX - 1, cellY - 1, cellX + SWATCH_SIZE + 1, cellY, border);
+                guiGraphics.fill(cellX - 1, cellY + SWATCH_SIZE, cellX + SWATCH_SIZE + 1, cellY + SWATCH_SIZE + 1, border);
+                guiGraphics.fill(cellX - 1, cellY, cellX, cellY + SWATCH_SIZE, border);
+                guiGraphics.fill(cellX + SWATCH_SIZE, cellY, cellX + SWATCH_SIZE + 1, cellY + SWATCH_SIZE, border);
+            }
+        }
+    }
+
+    @Override
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (this.swatchesVisible && button == 0) {
+            int perRow = Math.max(1, this.swatchColumns);
+            for (int i = 0; i < SUSANOO_SWATCHES.length; i++) {
+                int cellX = this.swatchRowX + (i % perRow) * (SWATCH_SIZE + SWATCH_GAP);
+                int cellY = this.swatchRowY + (i / perRow) * (SWATCH_SIZE + SWATCH_GAP);
+                if (mouseX >= cellX && mouseX < cellX + SWATCH_SIZE
+                        && mouseY >= cellY && mouseY < cellY + SWATCH_SIZE) {
+                    PacketHandler.sendToServer(
+                            new com.sekwah.narutomod.network.c2s.ServerSusanooColorPacket(SUSANOO_SWATCHES[i]));
+                    if (this.minecraft != null) {
+                        this.minecraft.getSoundManager().play(
+                                net.minecraft.client.resources.sounds.SimpleSoundInstance.forUI(
+                                        net.minecraft.sounds.SoundEvents.UI_BUTTON_CLICK, 1.0F));
+                    }
+                    return true;
+                }
+            }
+        }
+        return super.mouseClicked(mouseX, mouseY, button);
     }
 
     /** One clipped line of the dojutsu panel; returns the next free Y. */

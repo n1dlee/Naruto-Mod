@@ -29,6 +29,12 @@ public class NinkenAbility extends Ability implements Ability.Cooldown {
         return ActivationType.INSTANT;
     }
 
+    /** A summoning, just a smaller one. */
+    @Override
+    public int castPoseTicks() {
+        return 16;
+    }
+
     @Override
     public long defaultCombo() {
         return 323;

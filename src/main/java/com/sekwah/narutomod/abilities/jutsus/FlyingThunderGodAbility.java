@@ -43,6 +43,12 @@ public class FlyingThunderGodAbility extends Ability implements Ability.Cooldown
         return ActivationType.INSTANT;
     }
 
+    /** The whole point is that nobody sees the movement. */
+    @Override
+    public int castPoseTicks() {
+        return 3;
+    }
+
     @Override
     public long defaultCombo() {
         return 1213;
@@ -60,6 +66,10 @@ public class FlyingThunderGodAbility extends Ability implements Ability.Cooldown
 
     @Override
     public boolean handleCost(Player player, INinjaData ninjaData, int chargeAmount) {
+        // Erasing your own seals is not a technique, it is letting go of one - free.
+        if (player.isShiftKeyDown()) {
+            return true;
+        }
         if (ninjaData.getChakra() < SEAL_COST) {
             player.displayClientMessage(Component.translatable("jutsu.fail.notenoughchakra",
                     Component.translatable(this.getTranslationKey(ninjaData)).withStyle(ChatFormatting.YELLOW)), true);
@@ -71,6 +81,17 @@ public class FlyingThunderGodAbility extends Ability implements Ability.Cooldown
 
     @Override
     public void performServer(Player player, INinjaData ninjaData, int ticksActive) {
+        // 0. Sneaking clears your seals instead of laying another.
+        //
+        // There was no way to take a seal back, and the branded-creature one is the worst
+        // case: HiraishinTeleportAbility prefers a branded creature over a ground seal, so
+        // one misaimed cast at a passing cow quietly hijacked every jump afterwards, and the
+        // only escape was to spend fifty chakra branding something else.
+        if (player.isShiftKeyDown()) {
+            clearSeals(player, ninjaData);
+            return;
+        }
+
         // 1. A kunai in hand becomes a marked kunai — the classic use.
         for (InteractionHand hand : InteractionHand.values()) {
             ItemStack held = player.getItemInHand(hand);
@@ -103,6 +124,36 @@ public class FlyingThunderGodAbility extends Ability implements Ability.Cooldown
         sealEffect(player, here.getX() + 0.5, here.getY() + 0.1, here.getZ() + 0.5);
         player.displayClientMessage(Component.translatable("hiraishin.seal.position",
                 here.getX(), here.getY(), here.getZ()).withStyle(ChatFormatting.GOLD), true);
+    }
+
+    /**
+     * Wipes the branded creature and the ground seal.
+     *
+     * Thrown Hiraishin kunai are deliberately left alone: those are real items lying in the
+     * world, and you take one back by walking over and picking it up. Erasing them from here
+     * would delete the player's property from a distance.
+     */
+    private static void clearSeals(Player player, INinjaData ninjaData) {
+        boolean hadEntity = ninjaData.getHiraishinEntityMark() != null
+                && !ninjaData.getHiraishinEntityMark().isEmpty();
+        boolean hadGround = ninjaData.getThunderGodMark() != null;
+
+        if (!hadEntity && !hadGround) {
+            player.displayClientMessage(
+                    Component.translatable("hiraishin.clear.none").withStyle(ChatFormatting.GRAY), true);
+            return;
+        }
+        ninjaData.setHiraishinEntityMark("");
+        ninjaData.setThunderGodMark(null);
+
+        player.level().playSound(null, player.blockPosition(), SoundEvents.FIRE_EXTINGUISH,
+                SoundSource.PLAYERS, 0.7f, 1.5f);
+        if (player.level() instanceof ServerLevel serverLevel) {
+            NarutoParticles.spawnBurst(serverLevel, player.position().add(0, 1.0, 0), 18, 0.6,
+                    NarutoParticles.TELEPORT_GOLD);
+        }
+        player.displayClientMessage(
+                Component.translatable("hiraishin.clear.done").withStyle(ChatFormatting.GOLD), true);
     }
 
     private static void sealEffect(Player player, double x, double y, double z) {

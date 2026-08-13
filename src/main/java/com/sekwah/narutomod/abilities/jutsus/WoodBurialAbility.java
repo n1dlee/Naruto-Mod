@@ -45,6 +45,12 @@ public class WoodBurialAbility extends Ability implements Ability.Cooldown {
         return ActivationType.INSTANT;
     }
 
+    /** Roots take a moment to find the target. */
+    @Override
+    public int castPoseTicks() {
+        return 16;
+    }
+
     @Override
     public long defaultCombo() {
         return 3212;

@@ -38,6 +38,12 @@ public class MindDisturbanceAbility extends Ability implements Ability.Cooldown 
         return ActivationType.INSTANT;
     }
 
+    /** The Yamanaka hand frame is held, not flashed. */
+    @Override
+    public int castPoseTicks() {
+        return 14;
+    }
+
     @Override
     public long defaultCombo() {
         return 322;

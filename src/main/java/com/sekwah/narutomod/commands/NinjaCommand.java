@@ -58,6 +58,31 @@ public class NinjaCommand {
                                             }
                                             return mutateTarget(ctx, "rank", data -> data.setNinjaRank(rank));
                                         }))))
+                .then(Commands.literal("tier")
+                        .then(Commands.argument("target", EntityArgument.player())
+                                .then(Commands.argument("tier", StringArgumentType.word())
+                                        .executes(ctx -> {
+                                            int tier = parseTier(StringArgumentType.getString(ctx, "tier"));
+                                            if (tier < 0) {
+                                                sendInvalid(ctx.getSource(), "tier", "low, mid, high");
+                                                return 0;
+                                            }
+                                            return mutateTarget(ctx, "tier", data -> data.setRankTier(tier));
+                                        }))))
+                .then(Commands.literal("susanoo")
+                        .then(Commands.argument("target", EntityArgument.player())
+                                .then(Commands.argument("colour", StringArgumentType.word())
+                                        .executes(ctx -> {
+                                            int colour = parseSusanooColor(
+                                                    StringArgumentType.getString(ctx, "colour"));
+                                            if (colour == -2) {
+                                                sendInvalid(ctx.getSource(), "colour",
+                                                        "canon, red, orange, gold, green, teal, blue, violet, purple, pink, white, black");
+                                                return 0;
+                                            }
+                                            return mutateTarget(ctx, "susanoo",
+                                                    data -> data.setSusanooColor(colour));
+                                        }))))
                 .then(Commands.literal("clan")
                         .then(Commands.argument("target", EntityArgument.player())
                                 .then(Commands.argument("clan", StringArgumentType.word())
@@ -264,6 +289,35 @@ public class NinjaCommand {
             case "chunin" -> 2;
             case "jonin" -> 3;
             case "kage" -> 4;
+            default -> -1;
+        };
+    }
+
+    /** Named Susanoo shades, plus "canon" to hand the colour back to the wielder's form. */
+    private static int parseSusanooColor(String name) {
+        return switch (name.toLowerCase(Locale.ROOT)) {
+            case "canon", "default", "none" -> -1;
+            case "red" -> 0xE03A1E;
+            case "orange" -> 0xF08A20;
+            case "gold" -> 0xF5D040;
+            case "green" -> 0x3FC94A;
+            case "teal" -> 0x28C8B8;
+            case "blue" -> 0x2B62F0;
+            case "violet" -> 0x8B3FE0;
+            case "purple" -> 0x6A1FB0;
+            case "pink" -> 0xF060C0;
+            case "white" -> 0xF0F0FF;
+            case "black" -> 0x241830;
+            default -> -2; // unrecognised
+        };
+    }
+
+    /** Low/Mid/High within the current rank. Ignored at Academy, which has no grades. */
+    private static int parseTier(String tier) {
+        return switch (tier.toLowerCase(Locale.ROOT)) {
+            case "low" -> 0;
+            case "mid" -> 1;
+            case "high" -> 2;
             default -> -1;
         };
     }

@@ -39,6 +39,12 @@ public class ClayBombAbility extends Ability implements Ability.Cooldown {
         return ActivationType.INSTANT;
     }
 
+    /** Shape it, throw it. */
+    @Override
+    public int castPoseTicks() {
+        return 10;
+    }
+
     @Override
     public long defaultCombo() {
         return 2321;

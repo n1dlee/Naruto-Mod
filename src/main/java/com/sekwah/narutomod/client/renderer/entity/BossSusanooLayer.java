@@ -34,8 +34,12 @@ public class BossSusanooLayer extends RenderLayer<MangekyoBossEntity, HumanoidMo
     private static final ResourceLocation FALLBACK_TEXTURE =
             new ResourceLocation(NarutoMod.MOD_ID, "textures/entity/susanoo.png");
     private static final RenderType FALLBACK_TYPE = RenderType.entityTranslucent(FALLBACK_TEXTURE);
-    /** Bosses stay in the hovering-ribcage range - they never grow the Complete Body giant. */
-    private static final float[] FALLBACK_STAGE_SCALE = {0f, 1.8f, 2.4f, 3.2f};
+    /**
+     * Blocky-fallback scale per stage. Bosses used to be capped at 3 here and in the entity,
+     * so no wielder ever manifested a Complete Body - and the one form of the technique
+     * everybody actually wants to see was the one nothing in the world could show you.
+     */
+    private static final float[] FALLBACK_STAGE_SCALE = {0f, 1.8f, 2.4f, 3.2f, 6.5f};
     private static final float ALPHA = 0.55f;
     private static final float DETAILED_ALPHA = 0.85f;
 
@@ -51,11 +55,20 @@ public class BossSusanooLayer extends RenderLayer<MangekyoBossEntity, HumanoidMo
     public void render(PoseStack poseStack, MultiBufferSource bufferSource, int packedLight,
                        MangekyoBossEntity boss, float limbSwing, float limbSwingAmount, float partialTick,
                        float ageInTicks, float netHeadYaw, float headPitch) {
+        MangekyoBossVariant variant = boss.getVariant();
+        // The capability, not just the counter.
+        //
+        // The stage byte used to be Susanoo-only, so "stage > 0" was a safe proxy for "has a
+        // Susanoo". Then every wielder was put on the same escalation ladder, and this layer
+        // kept reading the counter alone - so Sasori, Hidan and every other non-Uchiha grew a
+        // spectral ribcage the moment their health dropped below three quarters.
+        if (!variant.hasSusanoo()) {
+            return;
+        }
         int stage = boss.getSusanooStage();
         if (stage <= 0) {
             return;
         }
-        MangekyoBossVariant variant = boss.getVariant();
 
         poseStack.pushPose();
         if (SusanooRenderer.detailedReady()) {
@@ -78,7 +91,7 @@ public class BossSusanooLayer extends RenderLayer<MangekyoBossEntity, HumanoidMo
      */
     private void renderDetailed(PoseStack poseStack, MultiBufferSource bufferSource, int packedLight,
                                 MangekyoBossVariant variant, int stage) {
-        int clamped = Mth.clamp(stage, 1, 3);
+        int clamped = Mth.clamp(stage, 1, 4);
         Model body = SusanooRenderer.detailedBodyForStage(clamped);
         ResourceLocation texture = SusanooRenderer.detailedTextureForStage(clamped);
         float modelHeightU = SusanooRenderer.detailedHeightForStage(clamped);

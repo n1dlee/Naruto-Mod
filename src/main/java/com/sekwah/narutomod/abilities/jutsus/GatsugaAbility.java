@@ -34,6 +34,12 @@ public class GatsugaAbility extends Ability implements Ability.Cooldown {
         return ActivationType.INSTANT;
     }
 
+    /** The spin does the talking. */
+    @Override
+    public int castPoseTicks() {
+        return 10;
+    }
+
     @Override
     public long defaultCombo() {
         return 223;

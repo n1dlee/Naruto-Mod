@@ -42,6 +42,12 @@ public class HiraishinTeleportAbility extends Ability implements Ability.Cooldow
         return ActivationType.INSTANT;
     }
 
+    /** Same as Flying Thunder God - gone before the stance registers. */
+    @Override
+    public int castPoseTicks() {
+        return 3;
+    }
+
     @Override
     public long defaultCombo() {
         return -1; // key-bound only

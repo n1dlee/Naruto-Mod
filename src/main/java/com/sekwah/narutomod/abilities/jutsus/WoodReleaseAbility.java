@@ -50,6 +50,12 @@ public class WoodReleaseAbility extends Ability implements Ability.Cooldown {
         return ActivationType.INSTANT;
     }
 
+    /** Wood grows; it does not appear. */
+    @Override
+    public int castPoseTicks() {
+        return 18;
+    }
+
     @Override
     public long defaultCombo() {
         return 3312;

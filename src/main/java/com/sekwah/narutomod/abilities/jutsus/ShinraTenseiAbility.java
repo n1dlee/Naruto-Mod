@@ -31,6 +31,12 @@ public class ShinraTenseiAbility extends Ability implements Ability.Cooldown {
         return ActivationType.INSTANT;
     }
 
+    /** The pause before the push is the whole drama of it. */
+    @Override
+    public int castPoseTicks() {
+        return 16;
+    }
+
     @Override
     public long defaultCombo() {
         return 1221;

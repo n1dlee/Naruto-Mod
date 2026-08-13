@@ -41,6 +41,12 @@ public class SharinganGenjutsuAbility extends Ability implements Ability.Cooldow
         return ActivationType.INSTANT;
     }
 
+    /** Genjutsu is eye contact, and eye contact takes time. */
+    @Override
+    public int castPoseTicks() {
+        return 14;
+    }
+
     @Override
     public long defaultCombo() {
         return 1123;

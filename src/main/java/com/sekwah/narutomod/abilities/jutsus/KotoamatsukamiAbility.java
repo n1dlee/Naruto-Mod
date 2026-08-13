@@ -33,6 +33,12 @@ public class KotoamatsukamiAbility extends Ability implements Ability.Cooldown {
         return ActivationType.INSTANT;
     }
 
+    /** The slowest genjutsu in the mod, and it should look it. */
+    @Override
+    public int castPoseTicks() {
+        return 24;
+    }
+
     @Override
     public long defaultCombo() {
         return 1211;

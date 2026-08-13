@@ -56,6 +56,7 @@ public class PacketHandler {
         NARUTO_CHANNEL.registerMessage(getPacketID(), ServerSelectClanPacket.class, ServerSelectClanPacket::encode, ServerSelectClanPacket::decode, ServerSelectClanPacket.Handler::handle);
         NARUTO_CHANNEL.registerMessage(getPacketID(), ServerWallWalkDetachPacket.class, ServerWallWalkDetachPacket::encode, ServerWallWalkDetachPacket::decode, ServerWallWalkDetachPacket.Handler::handle);
         NARUTO_CHANNEL.registerMessage(getPacketID(), ServerScrollAdjustPacket.class, ServerScrollAdjustPacket::encode, ServerScrollAdjustPacket::decode, ServerScrollAdjustPacket.Handler::handle);
+        NARUTO_CHANNEL.registerMessage(getPacketID(), ServerSusanooColorPacket.class, ServerSusanooColorPacket::encode, ServerSusanooColorPacket::decode, ServerSusanooColorPacket.Handler::handle);
     }
 
     private static int packetId = 0;

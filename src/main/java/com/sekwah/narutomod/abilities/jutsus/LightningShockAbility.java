@@ -37,6 +37,12 @@ public class LightningShockAbility extends Ability implements Ability.Cooldown {
         return ActivationType.INSTANT;
     }
 
+    /** Quick discharge. */
+    @Override
+    public int castPoseTicks() {
+        return 10;
+    }
+
     @Override
     public long defaultCombo() {
         return 222; // V V V — sits next to Chidori's own 22 in the lightning family

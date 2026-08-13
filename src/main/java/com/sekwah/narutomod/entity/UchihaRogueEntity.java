@@ -35,7 +35,7 @@ public class UchihaRogueEntity extends RogueNinjaEntity {
      * Half the 0.35 an Uchiha boss drops at. An eye should still be a find, and these are
      * far more common than a boss.
      */
-    private static final float EYE_DROP_CHANCE = 0.175f;
+    private static final float EYE_DROP_CHANCE = 0.10f;
 
     public UchihaRogueEntity(EntityType<? extends UchihaRogueEntity> type, Level level) {
         super(type, level);

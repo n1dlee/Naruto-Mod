@@ -41,6 +41,12 @@ public class KamuiWarpAbility extends Ability implements Ability.Cooldown {
         return ActivationType.INSTANT;
     }
 
+    /** A short spiral out, not a performance. */
+    @Override
+    public int castPoseTicks() {
+        return 5;
+    }
+
     @Override
     public long defaultCombo() {
         return 1313;
