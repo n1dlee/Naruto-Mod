@@ -55,6 +55,21 @@ public class ByakuganEyeItem extends Item {
                         Component.translatable("byakugan.transplant.fail.hyuga").withStyle(ChatFormatting.RED), true);
                 return;
             }
+            /*
+             * Two bloodlines the Byakugan will not take in.
+             *
+             * An Uchiha's eyes are already a dojutsu of their own and the two do not share a
+             * socket; an Uzumaki's chakra rejects it outright. Neither restriction touches the
+             * Sharingan or the Rinnegan - this is the Byakugan alone, which is why the check
+             * lives here rather than in the shared eye gate.
+             */
+            String clan = ninjaData.getClanId();
+            if ("uchiha".equals(clan) || "uzumaki".equals(clan)) {
+                player.displayClientMessage(
+                        Component.translatable("byakugan.transplant.fail.bloodline")
+                                .withStyle(ChatFormatting.RED), true);
+                return;
+            }
             if (ninjaData.getByakuganLevel() > 0) {
                 player.displayClientMessage(
                         Component.translatable("byakugan.transplant.fail.already").withStyle(ChatFormatting.RED), true);

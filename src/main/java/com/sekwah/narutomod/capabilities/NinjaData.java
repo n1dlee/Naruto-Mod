@@ -1360,6 +1360,45 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
         return BYAKUGAN_RANGE[Math.min(Math.max(this.byakuganLevel, 0), 4)];
     }
 
+    /** The Sharingan reads chakra, but only what is nearly in front of it. */
+    private static final int SHARINGAN_SIGHT_RANGE = 48;
+    /**
+     * Senjutsu sees further than any eye does.
+     *
+     * This is the one sensing feat the story is explicit about: Naruto in Sage Mode picked
+     * Nagato out at a distance nobody else in the village could, Byakugan included. So the
+     * number has to beat the Byakugan's own maximum rather than sit alongside it.
+     */
+    private static final int SENJUTSU_SIGHT_RANGE = 900;
+    /** Kurama lends his own senses; sharper than an eye, short of full senjutsu. */
+    private static final int KURAMA_SIGHT_RANGE = 400;
+
+    /**
+     * How far this ninja can feel chakra, whatever is providing it.
+     *
+     * One number for the whole vision overlay instead of a Byakugan-only figure: the
+     * Sharingan, Sage Mode and Kurama Chakra Mode all perceive chakra too, and each used to
+     * show the player nothing. Whichever source reaches furthest wins - they do not stack,
+     * because two ways of seeing the same chakra is still one sighting.
+     */
+    @Override
+    public int getChakraSightRange() {
+        if (!this.ninjaModeEnabled) {
+            return 0;
+        }
+        int range = this.getByakuganRange();
+        if (this.isSharinganActive()) {
+            range = Math.max(range, SHARINGAN_SIGHT_RANGE);
+        }
+        if (this.isKcmActive()) {
+            range = Math.max(range, KURAMA_SIGHT_RANGE);
+        }
+        if (this.isSageModeActive()) {
+            range = Math.max(range, SENJUTSU_SIGHT_RANGE);
+        }
+        return range;
+    }
+
     @Override
     public boolean isByakuganActive() {
         return this.toggleAbilityData.getAbilitiesHashSet().contains(BYAKUGAN_ABILITY);

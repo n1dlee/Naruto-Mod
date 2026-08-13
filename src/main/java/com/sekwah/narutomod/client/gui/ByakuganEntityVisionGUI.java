@@ -18,6 +18,8 @@ import java.util.List;
 public class ByakuganEntityVisionGUI implements PlayerGUI {
 
     private static final int MAX_TRACKED_ENTITIES = 128;
+    /** Beyond a 32-chunk render distance the client has nothing left to report. */
+    private static final int MAX_SEARCH_RADIUS = 512;
     private final Minecraft minecraft;
     private final List<LivingEntity> visibleEntities = new ArrayList<>();
     private boolean active;
@@ -75,8 +77,11 @@ public class ByakuganEntityVisionGUI implements PlayerGUI {
     @Override
     public void tick(Player player) {
         player.getCapability(NinjaCapabilityHandler.NINJA_DATA).ifPresent(ninjaData -> {
-            this.active = ninjaData.isByakuganActive();
-            this.range = ninjaData.getByakuganRange();
+            // Any chakra sense drives this now, not the Byakugan alone: the Sharingan reads
+            // chakra at short range, Kurama lends his own senses, and senjutsu reaches further
+            // than any eye - which is how Naruto found Nagato when the village could not.
+            this.range = ninjaData.getChakraSightRange();
+            this.active = this.range > 0;
         });
 
         if (!this.active || player.tickCount % 10 != 0) {
@@ -86,7 +91,10 @@ public class ByakuganEntityVisionGUI implements PlayerGUI {
             return;
         }
 
-        AABB search = player.getBoundingBox().inflate(this.range);
+        // The box is capped even when the range is not: the client is only told about
+        // entities in its own loaded chunks, so a wider sweep costs work and finds nothing.
+        // The range itself still drives the distance test and the marker fade.
+        AABB search = player.getBoundingBox().inflate(Math.min(this.range, MAX_SEARCH_RADIUS));
         Vec3 playerPos = player.position();
         this.visibleEntities.clear();
         this.visibleEntities.addAll(player.level().getEntitiesOfClass(LivingEntity.class, search, entity ->

@@ -137,6 +137,11 @@ public interface INinjaData extends INBTSerializable<Tag> {
     int getSharinganLevel();
     boolean isSharinganActive();
     int getByakuganRange();
+    /**
+     * How far this ninja can feel chakra from any source at all - Byakugan, Sharingan,
+     * Sage Mode or Kurama Chakra Mode - whichever reaches furthest. Drives the vision overlay.
+     */
+    int getChakraSightRange();
     boolean isByakuganActive();
     float getRankDamageMultiplier();
     float getClanLightningDamageMultiplier();

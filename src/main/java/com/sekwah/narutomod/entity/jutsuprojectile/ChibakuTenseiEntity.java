@@ -46,13 +46,32 @@ public class ChibakuTenseiEntity extends Entity {
     private static final int RISE_TICKS = 25;
     private static final int HOLD_TICKS = 8 * 20;
     private static final double RISE_SPEED = 0.35;
-    /** How far the core reaches, in blocks, at full size. */
-    private static final double PULL_RADIUS = 16.0;
-    /** Per tick, at the rim. Closer in it is stronger; see tickPull. */
-    private static final double PULL_STRENGTH = 0.09;
+    /**
+     * How far the core reaches, in blocks. This is a regional technique, not a room-sized
+     * one - at this range the whole area is being dragged toward one point, which is the
+     * only scale at which the technique means what its name means.
+     */
+    private static final double PULL_RADIUS = 128.0;
+    /**
+     * Ticks between sweeps. A 256-block box every tick is real work for no benefit, so the
+     * pull is applied in bursts and the impulse below is scaled to match - the acceleration
+     * a caught entity feels per second is the same either way.
+     */
+    private static final int PULL_INTERVAL = 4;
+    /** Per sweep, at the rim. Closer in it is stronger; see tickPull. */
+    private static final double PULL_STRENGTH = 0.11;
     private static final float CRUSH_DAMAGE = 3.5f;
     private static final double CRUSH_RADIUS = 3.0;
-    private static final float COLLAPSE_DAMAGE = 22f;
+
+    /** What the core does after it has finished gathering: it comes down. */
+    private static final double FALL_ACCELERATION = 0.06;
+    private static final double MAX_FALL_SPEED = 1.6;
+    /** The landing. Radius, damage at the centre, and how far the shock is felt. */
+    private static final double IMPACT_RADIUS = 24.0;
+    private static final float IMPACT_DAMAGE = 45f;
+    private static final double SHOCKWAVE_RADIUS = 48.0;
+
+    private double fallSpeed;
 
     private Optional<UUID> ownerUUID = Optional.empty();
     private int age;
@@ -95,11 +114,37 @@ public class ChibakuTenseiEntity extends Entity {
             return;
         }
         if (this.age > RISE_TICKS) {
-            this.tickPull();
+            if (this.age % PULL_INTERVAL == 0) {
+                this.tickPull();
+            }
         }
+        // Once it has gathered for long enough it stops holding itself up and drops. The
+        // landing is the technique's actual finish - a core this size does not fade out.
         if (this.age >= RISE_TICKS + HOLD_TICKS) {
-            this.collapse();
+            this.tickFall();
         }
+    }
+
+    /**
+     * Brings the core down and detonates it the moment it meets something solid.
+     *
+     * Checked against the block below rather than run through the physics engine: this entity
+     * has noPhysics set so that it can hang in the air during the gather, and turning that off
+     * mid-flight would have it fight its own collision box on the way down.
+     */
+    private void tickFall() {
+        this.fallSpeed = Math.min(MAX_FALL_SPEED, this.fallSpeed + FALL_ACCELERATION);
+        double next = this.getY() - this.fallSpeed;
+        net.minecraft.core.BlockPos below = net.minecraft.core.BlockPos.containing(
+                this.getX(), next - this.getSize(), this.getZ());
+
+        if (next - this.getSize() <= this.level().getMinBuildHeight()
+                || !this.level().getBlockState(below).isAir()) {
+            this.setPos(this.getX(), next, this.getZ());
+            this.impact();
+            return;
+        }
+        this.setPos(this.getX(), next, this.getZ());
     }
 
     /**
@@ -121,7 +166,8 @@ public class ChibakuTenseiEntity extends Entity {
                 continue;
             }
             double falloff = 1.0 - Math.min(1.0, distance / radius);
-            Vec3 pull = toCore.normalize().scale(PULL_STRENGTH * (0.35 + falloff));
+            // Scaled by the sweep interval so a burst applies what four quiet ticks would have.
+            Vec3 pull = toCore.normalize().scale(PULL_STRENGTH * (0.35 + falloff) * PULL_INTERVAL);
             caught.setDeltaMovement(caught.getDeltaMovement().add(pull));
             caught.hurtMarked = true;
             caught.fallDistance = 0.0f;
@@ -133,26 +179,50 @@ public class ChibakuTenseiEntity extends Entity {
         }
     }
 
-    /** The core comes apart, and everything it gathered comes down with it. */
-    private void collapse() {
+    /**
+     * The landing.
+     *
+     * Everything it gathered arrives at once, so this is the heaviest single hit in the mod:
+     * lethal at the centre, still enough to throw you clear out to two dozen blocks, and felt
+     * as a shove for twice that. Terrain survives - the same rule every technique here
+     * follows, because these get cast next to whatever someone has built.
+     */
+    private void impact() {
         if (this.level() instanceof ServerLevel serverLevel) {
             Vec3 core = this.position();
+
             for (LivingEntity caught : this.level().getEntitiesOfClass(LivingEntity.class,
-                    new AABB(core, core).inflate(PULL_RADIUS * 0.6), this::affects)) {
+                    new AABB(core, core).inflate(SHOCKWAVE_RADIUS), this::affects)) {
                 double distance = caught.position().distanceTo(core);
-                float falloff = (float) Math.max(0.0, 1.0 - distance / (PULL_RADIUS * 0.6));
-                caught.hurt(this.damageSource(), COLLAPSE_DAMAGE * (0.3f + 0.7f * falloff));
-                Vec3 push = caught.position().subtract(core).normalize().scale(1.2 * falloff);
-                caught.setDeltaMovement(push.x, 0.4 * falloff, push.z);
+                Vec3 away = caught.position().subtract(core);
+                Vec3 push = (away.lengthSqr() < 1.0E-4 ? new Vec3(0, 1, 0) : away.normalize());
+
+                if (distance <= IMPACT_RADIUS) {
+                    float falloff = (float) Math.max(0.0, 1.0 - distance / IMPACT_RADIUS);
+                    caught.hurt(this.damageSource(), IMPACT_DAMAGE * (0.35f + 0.65f * falloff));
+                    caught.setDeltaMovement(push.x * 2.2 * falloff, 0.9 * falloff, push.z * 2.2 * falloff);
+                } else {
+                    // Outside the crater it is a shockwave: it moves you, it does not kill you.
+                    double falloff = 1.0 - (distance - IMPACT_RADIUS) / (SHOCKWAVE_RADIUS - IMPACT_RADIUS);
+                    caught.setDeltaMovement(caught.getDeltaMovement()
+                            .add(push.x * 0.9 * falloff, 0.35 * falloff, push.z * 0.9 * falloff));
+                }
                 caught.hurtMarked = true;
             }
-            for (double r = 2.0; r <= 10.0; r += 2.0) {
-                NarutoParticles.spawnRing(serverLevel, core, r, (int) (r * 8), NarutoParticles.SHADOW_PURPLE);
+
+            for (double r = 4.0; r <= IMPACT_RADIUS; r += 4.0) {
+                NarutoParticles.spawnRing(serverLevel, core, r, (int) (r * 5), NarutoParticles.SHADOW_PURPLE);
             }
             serverLevel.sendParticles(ParticleTypes.EXPLOSION_EMITTER,
-                    core.x, core.y, core.z, 4, 2.0, 2.0, 2.0, 0.0);
+                    core.x, core.y + 1.0, core.z, 12, 5.0, 2.0, 5.0, 0.0);
+            serverLevel.sendParticles(ParticleTypes.CAMPFIRE_SIGNAL_SMOKE,
+                    core.x, core.y + 1.0, core.z, 120, 8.0, 1.0, 8.0, 0.05);
+            // Two layers so it reads as an impact rather than a firework: the crack, and the
+            // low roll under it that carries to whoever is only watching.
             serverLevel.playSound(null, this.blockPosition(), SoundEvents.GENERIC_EXPLODE,
-                    SoundSource.HOSTILE, 4.0f, 0.4f);
+                    SoundSource.HOSTILE, 8.0f, 0.35f);
+            serverLevel.playSound(null, this.blockPosition(), SoundEvents.LIGHTNING_BOLT_THUNDER,
+                    SoundSource.HOSTILE, 6.0f, 0.5f);
         }
         this.discard();
     }
