@@ -18,11 +18,42 @@ public class MangekyoBossRenderer extends HumanoidMobRenderer<MangekyoBossEntity
 
     public MangekyoBossRenderer(EntityRendererProvider.Context context) {
         super(context, new HumanoidModel<>(context.bakeLayer(ModelLayers.PLAYER)), 0.5F);
+        // Armour has to be skipped explicitly rather than left to setAllVisible below:
+        // HumanoidModel.copyPropertiesTo copies part transforms, not part visibility, so a
+        // hidden wielder would still have their cloak and headband floating in the giant.
         this.addLayer(new HumanoidArmorLayer<>(this,
                 new HumanoidModel<>(context.bakeLayer(ModelLayers.PLAYER_INNER_ARMOR)),
                 new HumanoidModel<>(context.bakeLayer(ModelLayers.PLAYER_OUTER_ARMOR)),
-                context.getModelManager()));
-        this.addLayer(new ItemInHandLayer<>(this, context.getItemInHandRenderer()));
+                context.getModelManager()) {
+            @Override
+            public void render(com.mojang.blaze3d.vertex.PoseStack poseStack,
+                               net.minecraft.client.renderer.MultiBufferSource bufferSource,
+                               int packedLight, MangekyoBossEntity boss, float limbSwing,
+                               float limbSwingAmount, float partialTick, float ageInTicks,
+                               float netHeadYaw, float headPitch) {
+                if (boss.isGiant()) {
+                    return;
+                }
+                super.render(poseStack, bufferSource, packedLight, boss, limbSwing,
+                        limbSwingAmount, partialTick, ageInTicks, netHeadYaw, headPitch);
+            }
+        });
+        // Held weapons vanish with the body once the wielder is a giant - otherwise a kunai
+        // hangs in mid-air inside the Susanoo's ribs.
+        this.addLayer(new ItemInHandLayer<>(this, context.getItemInHandRenderer()) {
+            @Override
+            public void render(com.mojang.blaze3d.vertex.PoseStack poseStack,
+                               net.minecraft.client.renderer.MultiBufferSource bufferSource,
+                               int packedLight, MangekyoBossEntity boss, float limbSwing,
+                               float limbSwingAmount, float partialTick, float ageInTicks,
+                               float netHeadYaw, float headPitch) {
+                if (boss.isGiant()) {
+                    return;
+                }
+                super.render(poseStack, bufferSource, packedLight, boss, limbSwing,
+                        limbSwingAmount, partialTick, ageInTicks, netHeadYaw, headPitch);
+            }
+        });
         this.addLayer(new BossSusanooLayer(this, context));
         this.addLayer(new BossKuramaLayer(this));
     }
@@ -39,6 +70,14 @@ public class MangekyoBossRenderer extends HumanoidMobRenderer<MangekyoBossEntity
         this.getModel().rightArmPose = entity.getMainHandItem().isEmpty()
                 ? HumanoidModel.ArmPose.EMPTY
                 : HumanoidModel.ArmPose.ITEM;
+
+        // The player disappears inside their own final form; the boss did not, so a
+        // full-height Naruto stood at the foot of an eighteen-block fox and the whole thing
+        // read as broken geometry rather than as a transformation.
+        //
+        // Set on every render call, never assumed: one model instance serves every boss on
+        // screen, so whatever the last one left here is what the next one would inherit.
+        this.getModel().setAllVisible(!entity.isGiant());
         super.render(entity, entityYaw, partialTick, poseStack, bufferSource, packedLight);
     }
 

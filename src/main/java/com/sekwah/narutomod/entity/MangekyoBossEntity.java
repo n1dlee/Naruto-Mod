@@ -60,8 +60,8 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
     /** Shell absorbs more the further the fight has gone; index = susanoo stage 0-4. */
     private static final float[] SUSANOO_ABSORB = {0f, 0.25f, 0.45f, 0.65f, 0.85f};
 
-    /** How tall the Complete Body stands, matching SusanooRenderer.STAGE_TARGET_HEIGHT[4]. */
-    private static final float COMPLETE_BODY_HEIGHT = 13.0f;
+    /** How tall the Complete Body stands. Shared with every renderer that draws a final form. */
+    private static final float COMPLETE_BODY_HEIGHT = com.sekwah.narutomod.util.GiantForm.HEIGHT_BLOCKS;
     /**
      * Clear blocks needed overhead before the giant can rise.
      *
@@ -69,7 +69,7 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
      * rest of the fight embedded in stone. Checked only on the way in - once it is standing,
      * walking under an overhang must not shrink it back, or it would flicker between forms.
      */
-    private static final int COMPLETE_BODY_HEADROOM = 14;
+    private static final int COMPLETE_BODY_HEADROOM = com.sekwah.narutomod.util.GiantForm.HEADROOM;
     /** Standing army ceiling for a boss's Shadow Clones. */
     private static final int MAX_BOSS_CLONES = 8;
     private static final float BOSS_CLONE_HEALTH = 24f;

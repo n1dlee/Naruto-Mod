@@ -33,6 +33,14 @@ public class KuramaAvatarModel extends Model {
     public static final ModelLayerLocation LAYER_LOCATION =
             new ModelLayerLocation(new ResourceLocation(NarutoMod.MOD_ID, "kurama_avatar"), "main");
 
+    /**
+     * Feet to ear tip, in blocks, unscaled: the fox stands from local Y=0 up to Y=-59 (head
+     * pivot -40, ear pivot -8 from that, ear box 11 tall). Both renderers divide the height
+     * they want by this, so neither carries a magic scale factor that can drift from the
+     * other's - which is exactly how the player's fox ended up four times the boss's.
+     */
+    public static final float FULL_BODY_HEIGHT_BLOCKS = 59f / 16f;
+
     // Worn stages (tails 4-8)
     private final ModelPart leftClaw;
     private final ModelPart rightClaw;

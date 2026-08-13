@@ -32,16 +32,15 @@ import net.minecraft.util.Mth;
  */
 public class BossKuramaLayer extends RenderLayer<MangekyoBossEntity, HumanoidModel<MangekyoBossEntity>> {
 
-    /** KuramaAvatarModel's own height in blocks, feet to ear-tip, unscaled. */
-    private static final float AVATAR_MODEL_HEIGHT = 3.4f;
     /**
-     * The player's avatar is drawn at 14x because the player's hitbox never grows and the
-     * giant is pure spectacle. The boss's hitbox does grow, to the thirteen blocks Complete
-     * Body uses, so its fox has to match: a 48-block model over a 13-block hitbox would mean
-     * swinging at a leg and connecting with nothing.
+     * The boss's fox stands at the shared final-form height, and so does the player's, and so
+     * does either one's Susanoo. A model drawn taller than the hitbox you can actually hit is
+     * the same class of bug as a model drawn as two floating claws, so the size is taken from
+     * {@link com.sekwah.narutomod.util.GiantForm} - the number the boss's hitbox uses too -
+     * and divided by the model's own measured height rather than hand-tuned here.
      */
-    private static final float AVATAR_TARGET_HEIGHT = 13.0f;
-    private static final float AVATAR_SCALE = AVATAR_TARGET_HEIGHT / AVATAR_MODEL_HEIGHT;
+    private static final float AVATAR_SCALE =
+            com.sekwah.narutomod.util.GiantForm.HEIGHT_BLOCKS / KuramaAvatarModel.FULL_BODY_HEIGHT_BLOCKS;
 
     /** The stage index KuramaAvatarModel treats as "draw the entire fox". */
     private static final int AVATAR_FULL_BODY_STAGE = 3;

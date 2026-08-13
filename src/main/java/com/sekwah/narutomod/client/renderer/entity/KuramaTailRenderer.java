@@ -44,15 +44,18 @@ public class KuramaTailRenderer {
     private static KuramaAvatarModel avatarModel;
 
     /**
-     * Kurama's Full Avatar is canonically comparable to or bigger than Susanoo's Complete
-     * Body (roughly "Hokage Rock"-sized once Naruto has Six Paths chakra) — far larger than
-     * the old flat 1.0-1.3x range, which made the endgame form barely bigger than the player
-     * it was supposed to be hiding. This only applies at tail 9 (exoStage 3); the worn
-     * exoskeleton stages (tails 4-8) stay close to human scale since the player model is
-     * still visible underneath them. Tuned against KuramaAvatarModel's new ground-anchored
-     * full-body geometry (~55 units / ~3.4 blocks tall unscaled, legs to ear-tip).
+     * Kurama's Full Avatar stands at exactly the height every other final form does - see
+     * {@link com.sekwah.narutomod.util.GiantForm}. It is canonically Susanoo's Complete Body's
+     * peer, and it has to be able to fight one.
+     *
+     * This used to be a flat 14x on top of the model's own ~3.7 blocks, which put the fox at
+     * sixty-three blocks: taller than it can be seen from the ground, and more than four times
+     * the Naruto boss's own fox. Deriving it from the shared height instead means the two
+     * cannot drift apart again. Only the tail-9 form uses it; the worn stages (tails 4-8) stay
+     * near human scale because the player is still visible underneath them.
      */
-    private static final float FULL_AVATAR_BASE_SCALE = 14.0f;
+    private static final float FULL_AVATAR_SCALE =
+            com.sekwah.narutomod.util.GiantForm.HEIGHT_BLOCKS / KuramaAvatarModel.FULL_BODY_HEIGHT_BLOCKS;
 
     public static void setModel(KuramaTailModel bakedModel) {
         model = bakedModel;
@@ -165,8 +168,10 @@ public class KuramaTailRenderer {
                 poseStack.translate(0.0, -0.9, 0.6);
                 float bob = (float) Math.sin(ageInTicks * 0.05) * 0.15f;
                 poseStack.translate(0.0, bob, 0.0);
-                float avatarScale = FULL_AVATAR_BASE_SCALE + power * 3.0f;
-                poseStack.scale(-avatarScale, -avatarScale, avatarScale);
+                // No power-surge term: the boss's fox has no surge to match, and a form whose
+                // size depends on the scroll wheel cannot be the same size as its opposite
+                // number. The surge still drives damage and duration.
+                poseStack.scale(-FULL_AVATAR_SCALE, -FULL_AVATAR_SCALE, FULL_AVATAR_SCALE);
             }
             avatarModel.renderToBuffer(poseStack, avatarConsumer, packedLight, OverlayTexture.NO_OVERLAY,
                     1.0f, 0.45f, 0.1f, 0.35f);

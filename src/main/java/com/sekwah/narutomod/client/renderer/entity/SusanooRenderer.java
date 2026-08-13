@@ -89,8 +89,15 @@ public class SusanooRenderer {
     private static final float WINGED_HEIGHT_U = 37.0f;
     private static final float WINGED_BOTTOM_U = 24.0f;
 
-    /** How tall the Susanoo should actually stand, in blocks, per stage. */
-    private static final float[] STAGE_TARGET_HEIGHT = {0f, 3.2f, 4.6f, 6.5f, 13.0f};
+    /**
+     * How tall the Susanoo should actually stand, in blocks, per stage.
+     *
+     * Stage 4 comes from {@link com.sekwah.narutomod.util.GiantForm} rather than a number of
+     * its own, because the boss's Complete Body, the boss's Kurama and the player's Kurama all
+     * have to land on the same height - they are meant to fight each other.
+     */
+    private static final float[] STAGE_TARGET_HEIGHT =
+            {0f, 3.2f, 4.6f, 6.5f, com.sekwah.narutomod.util.GiantForm.HEIGHT_BLOCKS};
 
     public static void setModel(SusanooModel bakedModel) {
         model = bakedModel;
@@ -277,7 +284,13 @@ public class SusanooRenderer {
 
         // Derive the scale from the height this stage should stand, so each body lands at
         // the right size regardless of how it happened to be authored.
-        float scale = (STAGE_TARGET_HEIGHT[clamped] / (modelHeightU / 16f)) * (1.0f + power * 0.35f);
+        //
+        // No power-surge multiplier. It used to add up to another 35% here and nowhere else,
+        // so a player at full surge stood a third taller than Madara's Susanoo at the same
+        // stage - which is what "my Susanoo is much bigger than theirs" was. The surge still
+        // does what it always did to damage and duration; it no longer silently changes who
+        // is bigger in a fight between two of the same technique.
+        float scale = STAGE_TARGET_HEIGHT[clamped] / (modelHeightU / 16f);
 
         poseStack.pushPose();
         // Lift the model so its lowest geometry rests at the player's feet. These bodies
