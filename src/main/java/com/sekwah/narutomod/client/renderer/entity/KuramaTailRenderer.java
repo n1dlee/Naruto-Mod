@@ -7,6 +7,7 @@ import com.sekwah.narutomod.NarutoMod;
 import com.sekwah.narutomod.capabilities.INinjaData;
 import com.sekwah.narutomod.capabilities.NinjaCapabilityHandler;
 import com.sekwah.narutomod.client.model.entity.KuramaAvatarModel;
+import com.sekwah.narutomod.client.model.entity.KuramaFoxModel;
 import com.sekwah.narutomod.client.model.entity.KuramaTailModel;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MultiBufferSource;
@@ -40,22 +41,27 @@ public class KuramaTailRenderer {
             new ResourceLocation(NarutoMod.MOD_ID, "textures/entity/kurama_avatar.png");
     private static final RenderType AVATAR_RENDER_TYPE = RenderType.entityTranslucent(AVATAR_TEXTURE);
 
+    /** The imported fox's own skin, in its Kurama Chakra Mode colouring. */
+    private static final ResourceLocation FOX_TEXTURE =
+            new ResourceLocation(NarutoMod.MOD_ID, "textures/entity/biju/ninetailskcm.png");
+    private static final RenderType FOX_RENDER_TYPE = RenderType.entityTranslucent(FOX_TEXTURE);
+
     private static KuramaTailModel model;
     private static KuramaAvatarModel avatarModel;
+    private static KuramaFoxModel foxModel;
 
     /**
      * Kurama's Full Avatar stands at exactly the height every other final form does - see
      * {@link com.sekwah.narutomod.util.GiantForm}. It is canonically Susanoo's Complete Body's
      * peer, and it has to be able to fight one.
      *
-     * This used to be a flat 14x on top of the model's own ~3.7 blocks, which put the fox at
-     * sixty-three blocks: taller than it can be seen from the ground, and more than four times
-     * the Naruto boss's own fox. Deriving it from the shared height instead means the two
-     * cannot drift apart again. Only the tail-9 form uses it; the worn stages (tails 4-8) stay
-     * near human scale because the player is still visible underneath them.
+     * The divisor is the fox's SKULL height, not its overall extent: the tails arc well above
+     * the head, and matching those to the hitbox would shrink the body that the hitbox is
+     * actually drawn around. At this scale the head fills the eighteen blocks and the tails
+     * reach about thirty, which is the silhouette the form is supposed to have.
      */
     private static final float FULL_AVATAR_SCALE =
-            com.sekwah.narutomod.util.GiantForm.HEIGHT_BLOCKS / KuramaAvatarModel.FULL_BODY_HEIGHT_BLOCKS;
+            com.sekwah.narutomod.util.GiantForm.HEIGHT_BLOCKS / KuramaFoxModel.BODY_HEIGHT_BLOCKS;
 
     public static void setModel(KuramaTailModel bakedModel) {
         model = bakedModel;
@@ -65,6 +71,10 @@ public class KuramaTailRenderer {
         avatarModel = bakedModel;
     }
 
+    public static void setFoxModel(KuramaFoxModel bakedModel) {
+        foxModel = bakedModel;
+    }
+
     // Exposed for BossKuramaLayer so the Naruto boss manifests exactly the fox the player
     // does, instead of a second, quietly divergent copy of the same geometry.
 
@@ -72,8 +82,24 @@ public class KuramaTailRenderer {
         return avatarModel;
     }
 
+    static KuramaFoxModel foxModel() {
+        return foxModel;
+    }
+
     static ResourceLocation avatarTexture() {
         return AVATAR_TEXTURE;
+    }
+
+    /** The boss's fox uses the plain orange skin; the player's is the chakra-mode one. */
+    static ResourceLocation foxTexture() {
+        return BOSS_FOX_TEXTURE;
+    }
+
+    private static final ResourceLocation BOSS_FOX_TEXTURE =
+            new ResourceLocation(NarutoMod.MOD_ID, "textures/entity/biju/ninetails.png");
+
+    static float fullAvatarScale() {
+        return FULL_AVATAR_SCALE;
     }
 
     /**
@@ -156,38 +182,42 @@ public class KuramaTailRenderer {
         // world units, not compounded by tailScale (this used to nest inside the tail-scaled
         // block, which threw the Full Avatar's position and size off by an extra tailScale
         // multiplier on top of its own).
-        if (tailCount >= 4 && avatarModel != null) {
-            VertexConsumer avatarConsumer = bufferSource.getBuffer(AVATAR_RENDER_TYPE);
-            int exoStage = tailCount >= 9 ? 3 : (tailCount >= 8 ? 2 : 1);
-            avatarModel.setStage(exoStage);
-
-            // NOTE: KuramaAvatarModel (unlike KuramaTailModel) is authored in the standard
-            // vanilla entity-model convention (negative Y = up), so both branches below use
-            // the vanilla flip scale(-S,-S,S). The tails above are authored for the unflipped
-            // renderer and must NOT get the flip.
+        if (tailCount >= 9 && foxModel != null) {
+            // Full Avatar: the imported fox itself, not a stand-in. Everything below draws
+            // in the standard vanilla entity convention (model +Y runs downward), so it takes
+            // the vanilla flip scale(-S,-S,S). The procedural tails above are authored for
+            // the unflipped renderer and must NOT get that flip.
             poseStack.pushPose();
-            if (exoStage < 3) {
-                // Worn stages: stay fitted on the player's own body, no extra offset/bob
-                float wornScale = 0.9f + power * 0.3f;
-                poseStack.scale(-wornScale, -wornScale, wornScale);
-            } else {
-                // Full Avatar: a genuine giant standing on the ground, not a slightly-bigger
-                // shell floating behind the player — this is the form that hides the player
-                // model entirely, so it needs to actually read as "the thing you're now
-                // piloting from inside." The -0.9 cancels out the translate(0, 0.9, 0.15)
-                // applied above (which is meant for the tails, not this ground-anchored
-                // body) so the model's own legs (Y=0 to Y=-22) land at the player's real feet.
-                poseStack.translate(0.0, -0.9, 0.6);
-                float bob = (float) Math.sin(ageInTicks * 0.05) * 0.15f;
-                poseStack.translate(0.0, bob, 0.0);
-                // No power-surge term: the boss's fox has no surge to match, and a form whose
-                // size depends on the scroll wheel cannot be the same size as its opposite
-                // number. The surge still drives damage and duration.
-                poseStack.scale(-FULL_AVATAR_SCALE, -FULL_AVATAR_SCALE, FULL_AVATAR_SCALE);
-            }
-            // Solid enough to read as a body. At 0.35 an eighteen-block fox was a suggestion
-            // of orange haze against the sky, which is not what standing inside Kurama should
-            // look like.
+            // The -0.9 cancels the translate(0, 0.9, 0.15) applied above, which is meant for
+            // the tails and not for a body that has to stand on the ground.
+            poseStack.translate(0.0, -0.9, 0.6);
+            float bob = (float) Math.sin(ageInTicks * 0.05) * 0.15f;
+            poseStack.translate(0.0, bob, 0.0);
+            // No power-surge term: the boss's fox has no surge to match, and a form whose
+            // size depends on the scroll wheel cannot be the same size as its opposite
+            // number. The surge still drives damage and duration.
+            poseStack.scale(-FULL_AVATAR_SCALE, -FULL_AVATAR_SCALE, FULL_AVATAR_SCALE);
+            // This model's soles sit at +FEET_OFFSET, not at zero. Undoing that after the
+            // scale (so the shift is in model units) is what puts the fox on the ground
+            // instead of buried to the ribs.
+            poseStack.translate(0.0, -KuramaFoxModel.FEET_OFFSET, 0.0);
+
+            // Shared baked instance: pose it every frame, never assume the last caller left
+            // it where this one wants it.
+            foxModel.waveTails(ageInTicks);
+            foxModel.renderToBuffer(poseStack, bufferSource.getBuffer(FOX_RENDER_TYPE), packedLight,
+                    OverlayTexture.NO_OVERLAY, 1.0f, 1.0f, 1.0f, 0.9f);
+            poseStack.popPose();
+        } else if (tailCount >= 4 && avatarModel != null) {
+            // Worn stages (tails 4-8): claw plating fitted on the player's own forearms. The
+            // hand-built KuramaAvatarModel still owns these - it was only ever wrong as a
+            // whole fox.
+            VertexConsumer avatarConsumer = bufferSource.getBuffer(AVATAR_RENDER_TYPE);
+            avatarModel.setStage(tailCount >= 8 ? 2 : 1);
+
+            poseStack.pushPose();
+            float wornScale = 0.9f + power * 0.3f;
+            poseStack.scale(-wornScale, -wornScale, wornScale);
             avatarModel.renderToBuffer(poseStack, avatarConsumer, packedLight, OverlayTexture.NO_OVERLAY,
                     1.0f, 0.45f, 0.1f, 0.8f);
             poseStack.popPose();

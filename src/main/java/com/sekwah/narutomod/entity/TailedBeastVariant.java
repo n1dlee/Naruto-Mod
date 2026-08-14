@@ -8,9 +8,34 @@ import net.minecraft.util.RandomSource;
 import org.joml.Vector3f;
 
 /**
- * The eight tailed beasts, One through Eight. Kurama is deliberately absent: the Nine Tails
- * already exists in this mod twice over, as the player's own cloak and avatar and as the
- * Naruto boss's escalation, and a third Kurama walking around would undercut both.
+ * The eight tailed beasts, One through Eight. Kurama is deliberately absent from the roster:
+ * the Nine Tails already exists in this mod twice over, as the player's own cloak and avatar
+ * and as the Naruto boss's escalation, and a third Kurama walking around would undercut both.
+ * He still has a rung on the ladder below - see {@link #KURAMA_TAILS} - so whatever wears his
+ * shape is priced the same way everything else is.
+ *
+ * <h2>The power ladder</h2>
+ *
+ * Each tail doubles the beast. Kurama is half the Ten Tails, the Eight Tails a quarter, the
+ * Seven an eighth, on down to Shukaku at roughly a five-hundredth - which puts Kurama 256
+ * times above the One Tail. Nothing here is typed in by hand: {@link #powerMultiplier} is the
+ * ladder, and health and damage are read off it. That is the whole point of doing it this way
+ * - a table of hand-picked numbers is exactly how the old one drifted to a 1.8x spread from
+ * Shukaku to Gyuki, which made an eight-tailed beast feel like a slightly bigger one-tail.
+ *
+ * The doubling is split evenly between the two axes: health x sqrt(2) per tail, damage
+ * x sqrt(2) per tail, so their product is the full 2x per tail and the ladder comes out
+ * exactly right end to end. It is split rather than loaded onto health alone on purpose. All
+ * 256x in health would make Kurama a twelve-thousand-hit-point sponge and Shukaku a
+ * one-punch, and neither of those is a fight; split, Kurama is sixteen times harder to kill
+ * AND hits sixteen times harder, which is what "two hundred and fifty times stronger"
+ * actually feels like from the other end of it.
+ *
+ * {@code toughnessBias} then trades health against damage WITHIN a rung - Isobu's shell up,
+ * his damage correspondingly down; Chomei fragile and vicious - by multiplying one and
+ * dividing the other, so a beast can have a character without leaving its rung.
+ *
+ * <h2>Sizes</h2>
  *
  * Sizes come from the imported geometry rather than from taste: every model was measured
  * (tools/model_extents.py) and the scale here is the multiplier that puts it at the target
@@ -28,50 +53,64 @@ public enum TailedBeastVariant {
 
     /** Shukaku, the One Tail. Wind and sand; the tanuki that never sleeps. */
     SHUKAKU("shukaku", "Shukaku", "onetail", 1,
-            435f, 20f, 0.28f, 2.4f, 6.6f, 2.20f, 1.5300f,
+            1.00f, 0.28f, 2.4f, 6.6f, 2.20f, 1.5300f,
             new Vector3f(0.85f, 0.75f, 0.45f)),
 
-    /** Matatabi, the Two Tails. The blue-flame cat. */
+    /** Matatabi, the Two Tails. The blue-flame cat: quick, and made of paper by comparison. */
     MATATABI("matatabi", "Matatabi", "twotails", 2,
-            490f, 21f, 0.34f, 3.6f, 7.1f, 1.35f, 2.4613f,
+            0.85f, 0.34f, 3.6f, 7.1f, 1.35f, 2.4613f,
             new Vector3f(0.25f, 0.55f, 1.0f)),
 
     /** Isobu, the Three Tails. The armoured turtle; slow, and very hard to move. */
     ISOBU("isobu", "Isobu", "threetails", 3,
-            560f, 22f, 0.24f, 6.2f, 7.8f, 4.00f, 1.5000f,
+            1.30f, 0.24f, 6.2f, 7.8f, 4.00f, 1.5000f,
             new Vector3f(0.35f, 0.7f, 0.85f)),
 
     /** Son Goku, the Four Tails. Lava Release: what he hits stays burning. */
     SON_GOKU("son_goku", "Son Goku", "fourtails", 4,
-            600f, 26f, 0.30f, 6.0f, 8.4f, 5.20f, 1.5513f,
+            1.00f, 0.30f, 6.0f, 8.4f, 5.20f, 1.5513f,
             new Vector3f(1.0f, 0.35f, 0.1f)),
 
     /** Kokuo, the Five Tails. Boil Release, and a charge that goes through people. */
     KOKUO("kokuo", "Kokuo", "fivetails", 5,
-            640f, 25f, 0.36f, 2.5f, 9.0f, 4.80f, 1.7369f,
+            1.05f, 0.36f, 2.5f, 9.0f, 4.80f, 1.7369f,
             new Vector3f(0.9f, 0.9f, 0.95f)),
 
     /** Saiken, the Six Tails. Corrosive slime; everything it touches rots. */
     SAIKEN("saiken", "Saiken", "sixtails", 6,
-            690f, 24f, 0.26f, 6.0f, 9.6f, 7.80f, 1.5000f,
+            1.15f, 0.26f, 6.0f, 9.6f, 7.80f, 1.5000f,
             new Vector3f(0.75f, 0.95f, 0.55f)),
 
     /** Chomei, the Seven Tails. The only one that flies, and it never stops moving. */
     CHOMEI("chomei", "Chomei", "seventails", 7,
-            660f, 24f, 0.40f, 2.5f, 10.1f, 2.60f, 3.3656f,
+            0.90f, 0.40f, 2.5f, 10.1f, 2.60f, 3.3656f,
             new Vector3f(0.55f, 0.9f, 0.35f)),
 
     /** Gyuki, the Eight Tails. The ox-octopus, and the largest thing here. */
     GYUKI("gyuki", "Gyuki", "eighttails", 8,
-            790f, 30f, 0.29f, 5.0f, 10.7f, 2.80f, 1.7500f,
+            1.15f, 0.29f, 5.0f, 10.7f, 2.80f, 1.7500f,
             new Vector3f(0.35f, 0.35f, 0.55f));
+
+    /**
+     * How much stronger a beast is than the one below it. Canon, and not a tuning knob: the
+     * whole ladder - Kurama at half the Ten Tails, the One Tail at a five-hundredth - is this
+     * number applied eight times.
+     */
+    public static final double POWER_PER_TAIL = 2.0;
+
+    /** Kurama's rung. He is not in the roster; his numbers still come from here. */
+    public static final int KURAMA_TAILS = 9;
+
+    /** Shukaku's health and melee damage. Everything else is these, times the ladder. */
+    private static final float BASE_HEALTH = 220f;
+    private static final float BASE_DAMAGE = 10f;
 
     private final String name;
     private final String displayName;
     private final String textureName;
     private final int tails;
-    private final float health;
-    private final float damage;
+    /** Health up, damage down by the same factor: character without leaving the rung. */
+    private final float toughnessBias;
     private final float speed;
     private final float width;
     private final float height;
@@ -82,20 +121,49 @@ public enum TailedBeastVariant {
     private final Vector3f chakraColour;
 
     TailedBeastVariant(String name, String displayName, String textureName, int tails,
-                       float health, float damage, float speed, float width, float height,
+                       float toughnessBias, float speed, float width, float height,
                        float renderScale, float feetOffset, Vector3f chakraColour) {
         this.name = name;
         this.displayName = displayName;
         this.textureName = textureName;
         this.tails = tails;
-        this.health = health;
-        this.damage = damage;
+        this.toughnessBias = toughnessBias;
         this.speed = speed;
         this.width = width;
         this.height = height;
         this.renderScale = renderScale;
         this.feetOffset = feetOffset;
         this.chakraColour = chakraColour;
+    }
+
+    /**
+     * Where a given tail count sits on the ladder, relative to the One Tail. Nine tails
+     * returns 256, which is the "Kurama is two hundred and fifty times Shukaku" the whole
+     * scheme is built around.
+     *
+     * Public because the Naruto boss's fox and anything else wearing a beast's shape has to
+     * be priced off the same ladder rather than off its own guess.
+     */
+    public static float powerMultiplier(int tails) {
+        return (float) Math.pow(POWER_PER_TAIL, Math.max(0, tails - 1));
+    }
+
+    /**
+     * The ladder split evenly across the two axes: the square root of the power multiplier,
+     * so health and damage each carry half of it and their product carries all of it.
+     */
+    public static float statMultiplier(int tails) {
+        return (float) Math.sqrt(powerMultiplier(tails));
+    }
+
+    /** Health for a beast of this many tails at neutral bias. */
+    public static float healthForTails(int tails) {
+        return BASE_HEALTH * statMultiplier(tails);
+    }
+
+    /** Melee damage for a beast of this many tails at neutral bias. */
+    public static float damageForTails(int tails) {
+        return BASE_DAMAGE * statMultiplier(tails);
     }
 
     public String getName() {
@@ -112,11 +180,16 @@ public enum TailedBeastVariant {
     }
 
     public float getHealth() {
-        return this.health;
+        return healthForTails(this.tails) * this.toughnessBias;
     }
 
     public float getDamage() {
-        return this.damage;
+        return damageForTails(this.tails) / this.toughnessBias;
+    }
+
+    /** This beast's standing relative to Shukaku, for anything that wants to say it out loud. */
+    public float getPowerMultiplier() {
+        return powerMultiplier(this.tails);
     }
 
     public float getSpeed() {

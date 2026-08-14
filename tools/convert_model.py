@@ -54,14 +54,21 @@ class Part:
 # ModelBiped's own fields, as javap prints them. Models that extend it re-declare all the
 # geometry themselves, so nothing needs injecting -- but the obfuscated names make the
 # emitted model unreadable, so they are given back their meaning here.
+#
+# The names are prefixed rather than bare ("biped_body", not "body"). A Blockbench export
+# routinely declares its own field called `body` or `head` and then hangs it off the
+# inherited biped part of the same name; with bare aliases the two collapse into one entry
+# and the part ends up its own parent, at which point it is no longer a root, nothing
+# reaches it, and the emitter silently drops it and its entire subtree. That is exactly how
+# Kurama converted to nine empty tails and a hat.
 BIPED_ALIASES = {
-    "field_78116_c": "head",
-    "field_178720_f": "hat",
-    "field_78115_e": "body",
-    "field_178723_h": "right_arm",
-    "field_178724_i": "left_arm",
-    "field_178721_j": "right_leg",
-    "field_178722_k": "left_leg",
+    "field_78116_c": "biped_head",
+    "field_178720_f": "biped_hat",
+    "field_78115_e": "biped_body",
+    "field_178723_h": "biped_right_arm",
+    "field_178724_i": "biped_left_arm",
+    "field_178721_j": "biped_right_leg",
+    "field_178722_k": "biped_left_leg",
 }
 
 
@@ -303,8 +310,15 @@ def parse(path):
                 child = stack.pop()
                 parent = stack.pop()
                 cname, pname = nm(child), nm(parent)
-                part(cname).parent = pname
-                part(pname).children.append(cname)
+                if cname == pname:
+                    # A part cannot parent itself. When this happens it means two distinct
+                    # ModelRenderers resolved to one name, and honouring the link would
+                    # orphan the whole subtree from the root walk. Leave it a root instead:
+                    # a wrong pivot is visible and fixable, a dropped body is not.
+                    sys.stderr.write("  self-parent on %r ignored (name collision)\n" % cname)
+                else:
+                    part(cname).parent = pname
+                    part(pname).children.append(cname)
             elif "setRotationAngle" in sig:
                 z, y, x = stack.pop(), stack.pop(), stack.pop()
                 target = stack.pop()

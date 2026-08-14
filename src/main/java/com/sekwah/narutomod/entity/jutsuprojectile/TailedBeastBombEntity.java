@@ -160,12 +160,17 @@ public class TailedBeastBombEntity extends AbstractNonGlowingHurtingProjectile {
                 victim -> victim != owner && victim.isAlive()
                         && !(owner != null && victim.getType() == owner.getType()));
 
+        // Whose bomb this is matters. The beasts sit on a ladder where each tail doubles the
+        // one below (see TailedBeastVariant), and a Bijudama that hit for the same 26 whether
+        // it came from Shukaku or Gyuki was quietly flattening the top two thirds of it.
+        float tier = TailedBeastVariant.statMultiplier(this.getVariant().getTails());
+
         for (LivingEntity victim : caught) {
             // Falls off with distance so being at the edge of the blast is survivable and
             // being under it is not.
             double distance = victim.position().distanceTo(centre);
             float falloff = (float) Math.max(0.0, 1.0 - distance / radius);
-            float damage = BASE_DAMAGE * (0.35f + 0.65f * falloff) * (radius / 5.0f);
+            float damage = BASE_DAMAGE * tier * (0.35f + 0.65f * falloff) * (radius / 5.0f);
             if (damage <= 0) {
                 continue;
             }

@@ -3,7 +3,6 @@ package com.sekwah.narutomod.client.renderer.entity;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.sekwah.narutomod.client.model.entity.BijuCloakModel;
-import com.sekwah.narutomod.client.model.entity.KuramaAvatarModel;
 import com.sekwah.narutomod.entity.MangekyoBossEntity;
 import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.renderer.MultiBufferSource;
@@ -22,10 +21,9 @@ import net.minecraft.util.Mth;
  *
  * Two things about these models are easy to get wrong and were both wrong here first:
  *
- *  - KuramaAvatarModel is a shared singleton whose setStage() decides whether it draws the
- *    whole fox or only the two forearm claws. The player's renderer moves that flag around,
- *    so a layer that does not set it draws whatever the last caller left behind - which, at
- *    the worn stages, is two 2x2x6 boxes and nothing else. That is the "long stick".
+ *  - KuramaFoxModel is a shared baked instance the player's renderer also draws. Its tail
+ *    pose is state, so this layer sets it every frame instead of inheriting whatever the
+ *    last caller left. The same trap once left the avatar showing only its forearm claws.
  *  - a RenderLayer inherits a pose stack LivingEntityRenderer has already rotated and
  *    flipped by scale(-1,-1,1). Both of these models are authored with +Y downward, so they
  *    come out upright here only as long as nothing re-applies that flip.
@@ -40,10 +38,8 @@ public class BossKuramaLayer extends RenderLayer<MangekyoBossEntity, HumanoidMod
      * and divided by the model's own measured height rather than hand-tuned here.
      */
     private static final float AVATAR_SCALE =
-            com.sekwah.narutomod.util.GiantForm.HEIGHT_BLOCKS / KuramaAvatarModel.FULL_BODY_HEIGHT_BLOCKS;
-
-    /** The stage index KuramaAvatarModel treats as "draw the entire fox". */
-    private static final int AVATAR_FULL_BODY_STAGE = 3;
+            com.sekwah.narutomod.util.GiantForm.HEIGHT_BLOCKS
+                    / com.sekwah.narutomod.client.model.entity.KuramaFoxModel.BODY_HEIGHT_BLOCKS;
 
     /** Shroud size per stage, as a multiple of the body it hangs on. */
     private static final float[] SHROUD_SCALE = {0f, 1.10f, 1.18f, 1.28f};
@@ -70,7 +66,7 @@ public class BossKuramaLayer extends RenderLayer<MangekyoBossEntity, HumanoidMod
             return;
         }
         if (stage >= 4) {
-            renderAvatar(poseStack, bufferSource, packedLight);
+            renderAvatar(poseStack, bufferSource, packedLight, ageInTicks);
         } else {
             renderShroud(poseStack, bufferSource, packedLight, stage);
         }
@@ -98,25 +94,30 @@ public class BossKuramaLayer extends RenderLayer<MangekyoBossEntity, HumanoidMod
     }
 
     /** Stage 4: the Full Avatar, sized to the boss's real hitbox. */
-    private void renderAvatar(PoseStack poseStack, MultiBufferSource bufferSource, int packedLight) {
-        KuramaAvatarModel avatar = KuramaTailRenderer.avatarModel();
-        if (avatar == null) {
+    private void renderAvatar(PoseStack poseStack, MultiBufferSource bufferSource, int packedLight,
+                              float ageInTicks) {
+        com.sekwah.narutomod.client.model.entity.KuramaFoxModel fox = KuramaTailRenderer.foxModel();
+        if (fox == null) {
             return;
         }
-        // Set every frame, never assumed: the player's renderer shares this instance and
-        // leaves it on whatever stage it last drew.
-        avatar.setStage(AVATAR_FULL_BODY_STAGE);
-
         VertexConsumer consumer = bufferSource.getBuffer(
-                RenderType.entityTranslucent(KuramaTailRenderer.avatarTexture()));
+                RenderType.entityTranslucent(KuramaTailRenderer.foxTexture()));
 
         poseStack.pushPose();
         // Origin sits 1.501 above the feet in this space, and +Y runs downward here, so this
-        // drops the model's feet onto the ground the boss is standing on.
+        // puts the origin on the ground the boss is standing on.
         poseStack.translate(0.0D, 1.501D, 0.0D);
         poseStack.scale(AVATAR_SCALE, AVATAR_SCALE, AVATAR_SCALE);
-        avatar.renderToBuffer(poseStack, consumer, packedLight, OverlayTexture.NO_OVERLAY,
-                1.0f, 0.45f, 0.1f, AVATAR_ALPHA);
+        // The imported model's soles are at +FEET_OFFSET rather than at zero, and +Y is down
+        // here, so the fox has to come back up by that much or it stands in a hole.
+        poseStack.translate(0.0D,
+                -com.sekwah.narutomod.client.model.entity.KuramaFoxModel.FEET_OFFSET, 0.0D);
+
+        // Shared baked instance - the player's renderer poses it too, so this sets the tails
+        // every frame rather than inheriting whatever the last caller left.
+        fox.waveTails(ageInTicks);
+        fox.renderToBuffer(poseStack, consumer, packedLight, OverlayTexture.NO_OVERLAY,
+                1.0f, 1.0f, 1.0f, AVATAR_ALPHA);
         poseStack.popPose();
     }
 }
