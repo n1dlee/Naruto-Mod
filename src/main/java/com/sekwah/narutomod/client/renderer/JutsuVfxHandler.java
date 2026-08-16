@@ -59,9 +59,12 @@ public final class JutsuVfxHandler {
                 if (ninjaData.isChidoriActive()) {
                     renderChidori(player);
                 }
-                if (ninjaData.getGatesOpen() > 0) {
-                    renderGateAura(player, ninjaData.getGatesOpen());
-                }
+                // The Gates aura is NOT particles any more. A shell of dust sprites around
+                // your own body is a fog bank you are standing inside: it hid everything
+                // within a couple of blocks, which in a technique meant for close combat is
+                // the worst possible place to lose visibility. It is drawn as geometry by
+                // JutsuWorldRenderer instead, which can be seen by other people without
+                // filling the wearer's screen.
             });
         }
     }
@@ -89,46 +92,6 @@ public final class JutsuVfxHandler {
                 NarutoParticles.ROTATION_WHITE);
     }
 
-    /**
-     * The Gates aura, escalating in colour as they open.
-     *
-     * Gates 1-3 burn green - the ordinary chakra a body can survive releasing. From the
-     * fourth the output turns blue as the technique stops being sustainable, and the Gate of
-     * Death burns a deep red that is meant to read as a warning, not as power. It was one flat
-     * green at every gate before, which threw away the only visual the technique had for
-     * telling you how far past safe you were.
-     */
-    private static void renderGateAura(Player player, int gates) {
-        net.minecraft.core.particles.ParticleOptions colour;
-        if (gates <= 3) {
-            colour = NarutoParticles.GATE_GREEN;
-        } else if (gates <= 7) {
-            colour = GATE_BLUE;
-        } else {
-            colour = GATE_DEEP_RED;
-        }
-
-        float intensity = Math.min(1.0f, (gates - 1) / 7.0f);
-        Vec3 feet = player.position();
-        JutsuVfx.gateAura(player.level(), feet, player.getBbHeight() * 1.15,
-                player.tickCount + 1.0f, intensity, colour);
-
-        // From the fifth gate the shell starts shedding embers outward as well - the body is
-        // now losing chakra faster than it can shape it.
-        if (gates >= 5 && player.tickCount % 2 == 0) {
-            JutsuVfx.gateAura(player.level(), feet.add(0, 0.2, 0), player.getBbHeight() * 0.9,
-                    (player.tickCount + 1.0f) * 1.7f, intensity, colour);
-        }
-    }
-
-    /** Gates 4-7: the output has gone past what green chakra represents. */
-    private static final net.minecraft.core.particles.DustParticleOptions GATE_BLUE =
-            new net.minecraft.core.particles.DustParticleOptions(
-                    new org.joml.Vector3f(0.35f, 0.6f, 1.0f), 1.2f);
-    /** The Gate of Death. Deliberately dark - this is not a power-up colour. */
-    private static final net.minecraft.core.particles.DustParticleOptions GATE_DEEP_RED =
-            new net.minecraft.core.particles.DustParticleOptions(
-                    new org.joml.Vector3f(0.62f, 0.04f, 0.06f), 1.5f);
 
     /** Arcs reseeded each tick, plus vanilla sparks for the bright flecks between them. */
     private static void renderChidori(Player player) {

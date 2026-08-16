@@ -47,7 +47,26 @@ public class SusanooAbility extends Ability implements Ability.Toggled, Ability.
 
     @Override
     public boolean canStartToggle(Player player, INinjaData ninjaData) {
-        return validateAccess(player, ninjaData) && validateChakra(player, ninjaData);
+        return validateNotBroken(player, ninjaData)
+                && validateAccess(player, ninjaData)
+                && validateChakra(player, ninjaData);
+    }
+
+    /**
+     * Refuses to raise a shell that was broken minutes ago.
+     *
+     * Breaking a Susanoo has to be worth doing, and it only is if the wearer cannot put
+     * another one up on the next tick. The lockout is the reward for getting through it.
+     */
+    private boolean validateNotBroken(Player player, INinjaData ninjaData) {
+        int locked = ninjaData.getSusanooBrokenTicks();
+        if (locked <= 0) {
+            return true;
+        }
+        player.displayClientMessage(Component.literal(
+                        String.format("Susanoo is shattered - %ds", locked / 20))
+                .withStyle(ChatFormatting.DARK_PURPLE), true);
+        return false;
     }
 
     @Override
@@ -63,6 +82,10 @@ public class SusanooAbility extends Ability implements Ability.Toggled, Ability.
     public void performServer(Player player, INinjaData ninjaData, int ticksActive) {
         if (!ninjaData.isSusanooActive()) {
             ninjaData.setSusanooActive(true);
+            // A freshly raised shell is whole. Integrity is not carried over between
+            // manifestations - dropping the technique to dodge a hit and putting it straight
+            // back up would otherwise be strictly better than holding it.
+            ninjaData.setSusanooDurability(ninjaData.getSusanooMaxDurability());
             player.displayClientMessage(
                     Component.literal("Susanoo manifests!").withStyle(ChatFormatting.LIGHT_PURPLE), true);
         }
@@ -71,6 +94,7 @@ public class SusanooAbility extends Ability implements Ability.Toggled, Ability.
     @Override
     public void handleAbilityEnded(Player player, INinjaData ninjaData, int ticksActive) {
         ninjaData.setSusanooActive(false);
+        ninjaData.setSusanooDurability(0f);
     }
 
     @Override

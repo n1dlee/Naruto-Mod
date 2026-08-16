@@ -252,7 +252,9 @@ public class PlayerEvents {
         }
     }
 
-    private static final float[] SUSANOO_DAMAGE_REDUCTION = {0f, 0.30f, 0.50f, 0.70f, 0.90f}; // by stage 0-4
+    // The old percentage-reduction table lived here. It is gone with the mechanic: the shell
+    // has its own integrity now (NinjaData.getSusanooDurability) and absorbs damage outright
+    // rather than discounting it.
     private static final float[] KURAMA_DAMAGE_REDUCTION = {0f, 0.10f, 0.10f, 0.10f, 0.30f, 0.30f, 0.30f, 0.30f, 0.50f, 0.80f}; // by tail count 0-9
     private static final float SHARINGAN_DANGER_SENSE_REDUCTION = 0.15f; // 3-tomoe Sharingan, see applyTransformationDamageSponge
     private static final float RINNEGAN_DROP_CHANCE = 0.15f; // per Mangekyo boss kill
@@ -877,40 +879,85 @@ public class PlayerEvents {
      *
      * Kurama Cloak keeps the tail-scaled percentage sponge.
      */
+    /**
+     * The shell taking a hit: sound, sparks, and an arm swatting a melee attacker away.
+     *
+     * The pitch and the particle count both track how close to breaking it is, so the state
+     * of the armour is readable from outside without a health bar - which is how Tsunade
+     * cracking Madara's reads on screen, and the only feedback an attacker gets on whether
+     * they are making progress.
+     */
+    private static void susanooImpact(Player player, LivingHurtEvent event,
+                                      INinjaData ninjaData, boolean shattering) {
+        float max = Math.max(1f, ninjaData.getSusanooMaxDurability());
+        float integrity = ninjaData.getSusanooDurability() / max;
+
+        if (!shattering && event.getSource().getDirectEntity() instanceof LivingEntity attacker
+                && attacker == event.getSource().getEntity()
+                && attacker.distanceTo(player) < 4.0) {
+            Vec3 away = attacker.position().subtract(player.position()).normalize();
+            attacker.knockback(1.6, -away.x, -away.z);
+            attacker.hurtMarked = true;
+        }
+
+        player.level().playSound(null, player,
+                shattering ? net.minecraft.sounds.SoundEvents.GLASS_BREAK
+                        : net.minecraft.sounds.SoundEvents.SHIELD_BLOCK,
+                SoundSource.PLAYERS, shattering ? 2.2f : 0.8f,
+                shattering ? 0.5f : 0.5f + integrity * 0.5f);
+
+        if (player.level() instanceof ServerLevel serverLevel) {
+            int count = shattering ? 90 : (int) (6 + (1f - integrity) * 18);
+            serverLevel.sendParticles(
+                    new DustParticleOptions(new Vector3f(0.55f, 0.25f, 0.85f), shattering ? 2.2f : 1.4f),
+                    player.getX(), player.getY() + player.getBbHeight() * 0.5, player.getZ(),
+                    count, shattering ? 2.5 : 0.6, shattering ? 2.5 : 0.7, shattering ? 2.5 : 0.6,
+                    shattering ? 0.35 : 0.03);
+        }
+    }
+
+    /** Brings the armour down and starts the lockout that makes breaking it worth doing. */
+    private static void shatterSusanoo(Player player, INinjaData ninjaData) {
+        ninjaData.setSusanooActive(false);
+        ninjaData.setSusanooStage(0);
+        ninjaData.setSusanooBrokenTicks(com.sekwah.narutomod.capabilities.NinjaData.SUSANOO_BROKEN_LOCKOUT);
+        player.displayClientMessage(net.minecraft.network.chat.Component
+                .literal("Your Susanoo shatters.")
+                .withStyle(net.minecraft.ChatFormatting.DARK_PURPLE), true);
+    }
+
     private static void applyTransformationDamageSponge(LivingHurtEvent event) {
         if (!(event.getEntity() instanceof Player player)) {
             return;
         }
         player.getCapability(NinjaCapabilityHandler.NINJA_DATA).ifPresent(ninjaData -> {
             float reduction = 0f;
-            if (ninjaData.isSusanooActive()) {
-                int stage = Math.min(Math.max(ninjaData.getSusanooStage(), 0), 4);
+            if (ninjaData.isSusanooActive() && ninjaData.getSusanooDurability() > 0f) {
+                // The shell eats the blow outright. It used to pay chakra per hit and then
+                // fall back to a percentage reduction, which meant Susanoo was a discount on
+                // your own health bar - you still died, just slower, and there was nothing to
+                // break. Now the armour has its own integrity and the fight is about opening
+                // it: get through the shell, then reach the person inside.
+                float durability = ninjaData.getSusanooDurability();
+                float incoming = event.getAmount();
 
-                boolean physicalHit = event.getSource().getDirectEntity() != null;
-                float blockCost = 18f - stage * 2.5f;
-                if (physicalHit && ninjaData.getChakra() >= blockCost) {
-                    ninjaData.useChakra(blockCost, 10);
+                if (incoming < durability) {
+                    ninjaData.setSusanooDurability(durability - incoming);
                     event.setCanceled(true);
-
-                    // The Susanoo's arm swats melee attackers back out of reach
-                    if (event.getSource().getDirectEntity() instanceof LivingEntity attacker
-                            && attacker == event.getSource().getEntity()
-                            && attacker.distanceTo(player) < 4.0) {
-                        Vec3 away = attacker.position().subtract(player.position()).normalize();
-                        attacker.knockback(1.6, -away.x, -away.z);
-                    }
-
-                    player.level().playSound(null, player,
-                            net.minecraft.sounds.SoundEvents.SHIELD_BLOCK, SoundSource.PLAYERS, 0.8f, 0.6f);
-                    if (player.level() instanceof ServerLevel serverLevel) {
-                        serverLevel.sendParticles(
-                                new DustParticleOptions(new Vector3f(0.55f, 0.25f, 0.85f), 1.4f),
-                                player.getX(), player.getY() + player.getBbHeight() * 0.5, player.getZ(),
-                                12, 0.6, 0.7, 0.6, 0.03);
-                    }
+                    susanooImpact(player, event, ninjaData, false);
                     return;
                 }
-                reduction = Math.max(reduction, SUSANOO_DAMAGE_REDUCTION[stage]);
+
+                // Overflow passes through. Absorbing a two-thousand-point hit on the last
+                // point of integrity would make the final blow the safest one to take.
+                ninjaData.setSusanooDurability(0f);
+                shatterSusanoo(player, ninjaData);
+                susanooImpact(player, event, ninjaData, true);
+                event.setAmount(incoming - durability);
+                if (event.getAmount() <= 0f) {
+                    event.setCanceled(true);
+                    return;
+                }
             }
             if (ninjaData.isKuramaCloakActive()) {
                 int tails = Math.min(Math.max(ninjaData.getKuramaTailCount(), 0), 9);

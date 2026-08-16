@@ -50,12 +50,20 @@ public class ChibakuTenseiEntity extends Entity {
 
     // --- Building the moon -------------------------------------------------------------
     /** How wide a circle it tears out of the ground beneath itself. */
-    private static final double EXCAVATE_RADIUS = 12.0;
+    private static final double EXCAVATE_RADIUS = 26.0;
     /** Ticks between excavation passes, and how many blocks each pass lifts. */
-    private static final int GATHER_INTERVAL = 3;
-    private static final int GATHER_PER_PASS = 6;
+    private static final int GATHER_INTERVAL = 2;
+    private static final int GATHER_PER_PASS = 22;
     /** Hard ceiling on how much earth one core can ever move. */
-    private static final int MAX_GATHERED = 420;
+    private static final int MAX_GATHERED = 2600;
+    /**
+     * How far down a single column is stripped before the pass moves on.
+     *
+     * Taking only the surface block, which is what this did, scrapes the grass off a field and
+     * leaves it flat. The technique in the source tears the landscape open - so each column is
+     * mined downward and a real crater forms under the core.
+     */
+    private static final int EXCAVATE_DEPTH = 6;
 
     /** Where every lifted block was put, so the sphere can be taken apart when it falls. */
     private final java.util.List<net.minecraft.core.BlockPos> gathered = new java.util.ArrayList<>();
@@ -170,12 +178,25 @@ public class ChibakuTenseiEntity extends Entity {
             double radius = Math.min(EXCAVATE_RADIUS, this.gatherRing) * Math.sqrt(this.random.nextDouble());
             int x = net.minecraft.util.Mth.floor(this.getX() + Math.cos(angle) * radius);
             int z = net.minecraft.util.Mth.floor(this.getZ() + Math.sin(angle) * radius);
-            int y = serverLevel.getHeight(
+            int surface = serverLevel.getHeight(
                     net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z) - 1;
-            net.minecraft.core.BlockPos from = new net.minecraft.core.BlockPos(x, y, z);
 
-            net.minecraft.world.level.block.state.BlockState state = serverLevel.getBlockState(from);
-            if (!this.canLift(serverLevel, from, state)) {
+            // Walk down the column until something liftable is found, rather than taking only
+            // whatever is on top. Once the surface has gone this is what keeps the same spot
+            // producing material, which is how the hole gets deeper instead of wider forever.
+            net.minecraft.core.BlockPos from = null;
+            net.minecraft.world.level.block.state.BlockState state = null;
+            for (int depth = 0; depth < EXCAVATE_DEPTH; depth++) {
+                net.minecraft.core.BlockPos candidate =
+                        new net.minecraft.core.BlockPos(x, surface - depth, z);
+                net.minecraft.world.level.block.state.BlockState found = serverLevel.getBlockState(candidate);
+                if (this.canLift(serverLevel, candidate, found)) {
+                    from = candidate;
+                    state = found;
+                    break;
+                }
+            }
+            if (from == null) {
                 continue;
             }
             net.minecraft.core.BlockPos to = this.nextShellPosition();
@@ -303,8 +324,41 @@ public class ChibakuTenseiEntity extends Entity {
             if (distance < CRUSH_RADIUS && this.age % 10 == 0) {
                 caught.hurt(this.damageSource(), CRUSH_DAMAGE);
             }
+            this.smother(caught, distance);
         }
     }
+
+    /**
+     * Being sealed inside the sphere.
+     *
+     * The technique does not kill by impact - it encases you in the middle of a growing ball
+     * of rock, which is a slower and much worse way to go. Anything dragged inside the shell
+     * now runs out of air: the vanilla air supply is drained, and once it is gone the target
+     * takes drowning damage exactly as it would buried in sand.
+     *
+     * Vanilla's own air track is used rather than a custom meter so the bubble bar on the HUD
+     * empties, respiration enchantments help, and anything already immune to suffocation - a
+     * player in creative, an undead that does not breathe - stays immune without a special
+     * case here.
+     */
+    private void smother(LivingEntity caught, double distance) {
+        if (distance > SMOTHER_RADIUS || !caught.canBeSeenAsEnemy()) {
+            return;
+        }
+        int air = caught.getAirSupply();
+        if (air > -20) {
+            caught.setAirSupply(air - SMOTHER_AIR_PER_TICK);
+        }
+        if (caught.getAirSupply() <= -20) {
+            caught.setAirSupply(0);
+            caught.hurt(caught.damageSources().drown(), SMOTHER_DAMAGE);
+        }
+    }
+
+    /** Inside this the sphere has closed over you and there is no air left. */
+    private static final double SMOTHER_RADIUS = 9.0;
+    private static final int SMOTHER_AIR_PER_TICK = 8;
+    private static final float SMOTHER_DAMAGE = 2.0f;
 
     /**
      * The landing.

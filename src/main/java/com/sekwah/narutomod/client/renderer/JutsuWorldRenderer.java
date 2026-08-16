@@ -7,6 +7,7 @@ import com.sekwah.narutomod.capabilities.NinjaCapabilityHandler;
 import com.sekwah.narutomod.util.JutsuVfx;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.util.Mth;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.api.distmarker.Dist;
@@ -85,6 +86,11 @@ public final class JutsuWorldRenderer {
                         camera, player.tickCount);
                 drewAnything = true;
             }
+            int gates = ninjaData.getGatesOpen();
+            if (gates > 0 && !isOwnFirstPersonBody(minecraft, player)) {
+                drawGateCloak(poseStack, consumer, player, gates, partialTick, age);
+                drewAnything = true;
+            }
         }
 
         poseStack.popPose();
@@ -147,6 +153,107 @@ public final class JutsuWorldRenderer {
         double y = centre.y + Math.cos(lat) * r;
         double z = centre.z + Math.sin(lat) * Math.sin(lon) * r;
         consumer.vertex(matrix, (float) x, (float) y, (float) z).color(red, green, blue, alpha).endVertex();
+    }
+
+    // --- Eight Gates cloak ---
+
+    /** Rings up the body, and points around each ring. Enough to read as a skin of fire. */
+    private static final int CLOAK_RINGS = 9;
+    private static final int CLOAK_POINTS = 10;
+
+    /**
+     * The shroud of chakra a body with the Gates open is burning off.
+     *
+     * This is a surface wrapped around the wearer rather than a cloud around them, which is
+     * the whole difference the user asked for: a particle aura is fog you stand inside and it
+     * blinds you at exactly the range this technique is fought at. A shell has an inside and
+     * an outside, so from the wearer's own eyes there is nothing in the way, and from anyone
+     * else's it is unmistakable.
+     *
+     * The silhouette is a flame: widest at the hips, drawn in to the shoulders and torn into
+     * tongues above the head. Each ring's radius is modulated by two out-of-phase sines so the
+     * surface boils instead of sitting there as a smooth cylinder.
+     */
+    private static void drawGateCloak(PoseStack poseStack, VertexConsumer consumer, Player player,
+                                      int gates, float partialTick, float age) {
+        // Gates 1-3 green, 4-7 blue, the eighth a deep red that is a warning rather than a
+        // power-up colour. This is the only readout of how far past safe the wearer is.
+        float red;
+        float green;
+        float blue;
+        if (gates <= 3) {
+            red = 0.30f; green = 0.95f; blue = 0.35f;
+        } else if (gates <= 7) {
+            red = 0.35f; green = 0.62f; blue = 1.00f;
+        } else {
+            red = 0.85f; green = 0.08f; blue = 0.10f;
+        }
+        float intensity = Math.min(1.0f, (gates - 1) / 7.0f);
+        float alpha = 0.16f + intensity * 0.26f;
+
+        double x = Mth.lerp(partialTick, player.xo, player.getX());
+        double y = Mth.lerp(partialTick, player.yo, player.getY());
+        double z = Mth.lerp(partialTick, player.zo, player.getZ());
+        double height = player.getBbHeight() * (1.18 + intensity * 0.22);
+        double waist = 0.42 + intensity * 0.22;
+
+        Matrix4f matrix = poseStack.last().pose();
+        double[] prev = null;
+        for (int ring = 0; ring <= CLOAK_RINGS; ring++) {
+            double t = ring / (double) CLOAK_RINGS;
+            // Flame profile: full at the hips, pinched at the shoulders, guttering out above.
+            double profile = Math.sin(Math.min(1.0, t * 1.15) * Math.PI * 0.92);
+            double radius = waist * profile * (1.0 - t * 0.25);
+            double[] points = cloakRing(x, y + height * t, z, radius, t, age, intensity);
+            if (prev != null) {
+                for (int i = 0; i < CLOAK_POINTS; i++) {
+                    int j = (i + 1) % CLOAK_POINTS;
+                    // Fades out toward the tips so the tongues dissolve rather than end flat.
+                    float fadeLow = alpha * (float) (1.0 - (t - 1.0 / CLOAK_RINGS) * 0.8);
+                    float fadeHigh = alpha * (float) (1.0 - t * 0.8);
+                    put(matrix, consumer, prev[i * 3], prev[i * 3 + 1], prev[i * 3 + 2], red, green, blue, fadeLow);
+                    put(matrix, consumer, prev[j * 3], prev[j * 3 + 1], prev[j * 3 + 2], red, green, blue, fadeLow);
+                    put(matrix, consumer, points[j * 3], points[j * 3 + 1], points[j * 3 + 2], red, green, blue, fadeHigh);
+                    put(matrix, consumer, points[i * 3], points[i * 3 + 1], points[i * 3 + 2], red, green, blue, fadeHigh);
+                }
+            }
+            prev = points;
+        }
+    }
+
+    private static double[] cloakRing(double x, double y, double z, double radius,
+                                      double t, float age, float intensity) {
+        double[] out = new double[CLOAK_POINTS * 3];
+        for (int i = 0; i < CLOAK_POINTS; i++) {
+            double angle = Math.PI * 2 * i / CLOAK_POINTS;
+            // Two incommensurate frequencies, one running up the body and one around it, so
+            // the boil never settles into a pattern you can see repeating.
+            double boil = 1.0
+                    + Math.sin(angle * 3.0 + age * (0.22 + intensity * 0.3)) * 0.16
+                    + Math.sin(t * 7.0 - age * 0.17) * 0.12;
+            double r = radius * boil;
+            out[i * 3] = x + Math.cos(angle) * r;
+            out[i * 3 + 1] = y;
+            out[i * 3 + 2] = z + Math.sin(angle) * r;
+        }
+        return out;
+    }
+
+    /**
+     * True when this is the local player's own body in first person.
+     *
+     * Drawing the shroud there would put it directly over the camera - the exact complaint
+     * the particle version earned. In third person the player wants to see their own cloak,
+     * so only the first-person case is skipped.
+     */
+    private static boolean isOwnFirstPersonBody(Minecraft minecraft, Player player) {
+        return player == minecraft.player && minecraft.options.getCameraType().isFirstPerson();
+    }
+
+    private static void put(Matrix4f matrix, VertexConsumer consumer, double x, double y, double z,
+                            float red, float green, float blue, float alpha) {
+        consumer.vertex(matrix, (float) x, (float) y, (float) z)
+                .color(red, green, blue, Math.max(0f, alpha)).endVertex();
     }
 
     // --- Chidori ---

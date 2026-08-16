@@ -42,7 +42,9 @@ public final class PoseBlender {
         /** The one-off roar as a gate is forced open, distinct from the sustained tremor. */
         GATES_OPEN,
         /** Absorbing a drop. Ninja land in a crouch; they do not thump down flat-footed. */
-        LANDING
+        LANDING,
+        /** The Susanoo bringing its blade down. Overrides the standing stance while it runs. */
+        SUSANOO_SWING
     }
 
     /**

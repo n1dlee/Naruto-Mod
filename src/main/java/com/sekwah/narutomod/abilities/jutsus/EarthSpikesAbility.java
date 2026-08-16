@@ -50,17 +50,11 @@ import java.util.List;
 public class EarthSpikesAbility extends Ability implements Ability.Cooldown {
 
     private static final float CHAKRA_COST = 30f;
-    private static final int SPIKE_COUNT = 5;
     /** One earth block of root plus three dripstone segments that narrow to a point. */
     private static final int SPIKE_HEIGHT = 4;
-    private static final double SPIKE_SPACING = 2.0;
     private static final int LIFESPAN_TICKS = 8 * 20;
     private static final float SPIKE_DAMAGE = 8.0f;
 
-    /** How far ahead the technique looks for something to erupt under. */
-    private static final double TARGET_RANGE = 14.0;
-    /** Cone the caster's facing has to contain a target within - roughly 66 degrees each side. */
-    private static final double CONE_DOT = 0.4;
     /** Horizontal reach of a single spike's hitbox. Generous: it is a spear, not a needle. */
     private static final double SPIKE_REACH = 1.8;
     /** Ticks after eruption at which anything still impaled takes a second, weaker hit. */

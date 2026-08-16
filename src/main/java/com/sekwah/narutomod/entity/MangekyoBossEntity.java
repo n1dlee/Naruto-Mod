@@ -57,8 +57,59 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
      * are still effectively unlimited and the expensive ones genuinely cost a pause.
      */
     private static final float CHAKRA_REGEN = 0.55f;
-    /** Shell absorbs more the further the fight has gone; index = susanoo stage 0-4. */
-    private static final float[] SUSANOO_ABSORB = {0f, 0.25f, 0.45f, 0.65f, 0.85f};
+    /**
+     * Shell integrity by stage. Matched to the player's own table so the same fight reads the
+     * same from either side of it - what a Kage can break, a Kage-tier boss can also lose.
+     */
+    private static final float[] SUSANOO_DURABILITY = {0f, 220f, 480f, 950f, 1800f};
+    /** Three minutes without a shell after it breaks, same as the player pays. */
+    private static final int SUSANOO_LOCKOUT = 3 * 60 * 20;
+
+    private float susanooDurability = 0f;
+    private int susanooBrokenTicks = 0;
+
+    public float getSusanooDurability() {
+        return this.susanooDurability;
+    }
+
+    public void setSusanooDurability(float durability) {
+        this.susanooDurability = Math.max(0f, durability);
+    }
+
+    public float getSusanooMaxDurability() {
+        return SUSANOO_DURABILITY[Math.min(Math.max(this.getSusanooStage(), 0), SUSANOO_DURABILITY.length - 1)];
+    }
+
+    /** True while the boss is locked out of raising a new shell. */
+    public boolean isSusanooBroken() {
+        return this.susanooBrokenTicks > 0;
+    }
+
+    /** Drops the armour and starts the window the fight is actually decided in. */
+    private void shatterSusanoo() {
+        this.setSusanooStage(0);
+        this.susanooBrokenTicks = SUSANOO_LOCKOUT;
+    }
+
+    /** Feedback on the shell: pitch and spark count track how close it is to going. */
+    private void onSusanooStruck(boolean shattering) {
+        float max = Math.max(1f, this.getSusanooMaxDurability());
+        float integrity = this.susanooDurability / max;
+        this.level().playSound(null, this.blockPosition(),
+                shattering ? net.minecraft.sounds.SoundEvents.GLASS_BREAK
+                        : net.minecraft.sounds.SoundEvents.SHIELD_BLOCK,
+                net.minecraft.sounds.SoundSource.HOSTILE,
+                shattering ? 2.5f : 1.0f, shattering ? 0.5f : 0.5f + integrity * 0.5f);
+        if (this.level() instanceof net.minecraft.server.level.ServerLevel serverLevel) {
+            serverLevel.sendParticles(
+                    new net.minecraft.core.particles.DustParticleOptions(
+                            new org.joml.Vector3f(0.55f, 0.25f, 0.85f), shattering ? 2.2f : 1.4f),
+                    this.getX(), this.getY() + this.getBbHeight() * 0.5, this.getZ(),
+                    shattering ? 120 : (int) (8 + (1f - integrity) * 22),
+                    shattering ? 3.0 : 0.8, shattering ? 3.0 : 1.0, shattering ? 3.0 : 0.8,
+                    shattering ? 0.4 : 0.04);
+        }
+    }
 
     /** How tall the Complete Body stands. Shared with every renderer that draws a final form. */
     private static final float COMPLETE_BODY_HEIGHT = com.sekwah.narutomod.util.GiantForm.HEIGHT_BLOCKS;
@@ -223,10 +274,22 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
 
     public void setSusanooStage(int stage) {
         int clamped = Math.min(Math.max(stage, 0), 4);
+        // A shattered shell stays down for its full lockout; the boss cannot simply put
+        // another one up on the next phase transition.
+        if (clamped > 0 && this.susanooBrokenTicks > 0) {
+            return;
+        }
         if (clamped == this.getSusanooStage()) {
             return;
         }
         this.entityData.set(SUSANOO_STAGE, (byte) clamped);
+        // A newly raised shell is whole; carry damage across a stage change as a fraction so
+        // climbing the ladder does not repair it and dropping down does not shatter it.
+        float previousMax = SUSANOO_DURABILITY[Math.min(Math.max(this.getSusanooStage(), 0),
+                SUSANOO_DURABILITY.length - 1)];
+        float fraction = previousMax <= 0f ? 1f : this.susanooDurability / previousMax;
+        this.susanooDurability = this.getSusanooMaxDurability()
+                * net.minecraft.util.Mth.clamp(fraction, 0f, 1f);
         // Stage 4 is the only one that changes the entity's actual size, but refreshing
         // unconditionally keeps the box correct when a boss is restored from NBT mid-fight.
         this.refreshDimensions();
@@ -314,6 +377,11 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
             return;
         }
         NinjaMobMovement.tickWaterWalk(this);
+        // The lockout runs down whether or not a shell is up - it is the wait imposed by the
+        // last one breaking, and it is the window the fight is won in.
+        if (this.susanooBrokenTicks > 0) {
+            this.susanooBrokenTicks--;
+        }
         if (this.chakra < MAX_CHAKRA) {
             this.chakra = Math.min(MAX_CHAKRA, this.chakra + CHAKRA_REGEN);
         }
@@ -823,13 +891,27 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
         if (this.absorbWithKamui(source)) {
             return false;
         }
-        // The Susanoo tanks part of every blow, same idea as the player-side damage sponge.
+        // The Susanoo is a shell with its own integrity, exactly as it is for a player: the
+        // blow is spent on the armour and the wielder underneath is untouched until it breaks.
+        // It used to be a flat percentage off every hit, which meant the shell could never be
+        // destroyed - there was nothing to destroy, only a discount.
         int stage = this.getSusanooStage();
         if (stage > 0 && this.getVariant().hasSusanoo() && !source.isCreativePlayer()) {
-            // Gated on hasSusanoo deliberately: every boss climbs the stage ladder now, and
-            // handing a swordsman an 85% shell at stage 4 because he shares the counter
-            // would make the last twelve percent of his health longer than the rest of him.
-            amount *= (1f - SUSANOO_ABSORB[Math.min(stage, SUSANOO_ABSORB.length - 1)]);
+            float durability = this.getSusanooDurability();
+            if (durability > 0f) {
+                if (amount < durability) {
+                    this.setSusanooDurability(durability - amount);
+                    this.onSusanooStruck(false);
+                    return false;
+                }
+                this.setSusanooDurability(0f);
+                this.shatterSusanoo();
+                this.onSusanooStruck(true);
+                amount -= durability;
+                if (amount <= 0f) {
+                    return false;
+                }
+            }
         }
         if (this.blockedBySand(source, stage)) {
             return false;

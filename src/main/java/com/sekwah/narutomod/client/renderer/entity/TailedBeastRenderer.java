@@ -66,6 +66,9 @@ public class TailedBeastRenderer extends EntityRenderer<TailedBeastEntity> {
         poseStack.mulPose(Axis.YP.rotationDegrees(180.0F - bodyYaw));
         poseStack.scale(-scale, -scale, scale);
 
+        applyBijudamaCharge(poseStack, entity.getBijudamaCharge(),
+                entity.tickCount + partialTick);
+
         VertexConsumer consumer = bufferSource.getBuffer(
                 RenderType.entityCutoutNoCull(variant.getTexture()));
         model.renderToBuffer(poseStack, consumer, packedLight, OverlayTexture.NO_OVERLAY,
@@ -73,6 +76,44 @@ public class TailedBeastRenderer extends EntityRenderer<TailedBeastEntity> {
         poseStack.popPose();
 
         super.render(entity, entityYaw, partialTick, poseStack, bufferSource, packedLight);
+    }
+
+    /**
+     * Rearing back to spit a Bijudama.
+     *
+     * Applied to the whole body rather than to a head part, because these eight models were
+     * each converted separately from the 1.12.2 mod and their parts are named differently -
+     * there is no "head" every one of them agrees on. Leaning the entire animal is cruder than
+     * a neck rig, but it works identically for a tanuki, a turtle and an octopus, and at the
+     * size these things are it reads perfectly well.
+     *
+     * The curve is deliberately lopsided: most of the charge is spent hauling back, and the
+     * last fifth snaps forward. That snap is the moment the bomb leaves, so the tell and the
+     * attack line up.
+     *
+     * The model is in the flipped, +Y-downward space by this point, so the pitch sign here is
+     * inverted relative to what "lean back" would mean in world space.
+     */
+    private static void applyBijudamaCharge(PoseStack poseStack, float charge, float age) {
+        if (charge <= 0.001f) {
+            return;
+        }
+        float lean;
+        if (charge < 0.8f) {
+            // Winding up: rock backward, accelerating.
+            float t = charge / 0.8f;
+            lean = -22.0f * t * t;
+        } else {
+            // The spit: through the rest position and out the far side.
+            float t = (charge - 0.8f) / 0.2f;
+            lean = -22.0f + 46.0f * t;
+        }
+        // A tremor through the build-up - it is holding a great deal of chakra in its mouth.
+        float shudder = Mth.sin(age * 1.9f) * 1.6f * Math.min(1f, charge * 1.4f);
+
+        poseStack.mulPose(Axis.XP.rotationDegrees(lean + shudder));
+        // Settles back on its haunches as it draws in, then drives up as it fires.
+        poseStack.translate(0.0D, charge < 0.8f ? charge * 0.6D : (1.0f - charge) * 2.4D, 0.0D);
     }
 
     @Override

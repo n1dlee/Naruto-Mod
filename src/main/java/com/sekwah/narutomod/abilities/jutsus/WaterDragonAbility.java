@@ -105,6 +105,16 @@ public class WaterDragonAbility extends Ability implements Ability.Cooldown {
                 ? mainTarget.position().add(0, mainTarget.getBbHeight() * 0.5, 0)
                 : impactPoint;
 
+        // The dragon itself. It used to be a spiral of particles at the destination and a
+        // hit-scan - the technique announced a dragon and never put one on the field.
+        com.sekwah.narutomod.entity.jutsuprojectile.ChakraDragonEntity dragon =
+                new com.sekwah.narutomod.entity.jutsuprojectile.ChakraDragonEntity(
+                        player, eye.add(look.scale(1.5)).add(0, -0.4, 0), coalescePoint,
+                        com.sekwah.narutomod.entity.jutsuprojectile.ChakraDragonEntity.Kind.WATER)
+                        .speed(1.15)
+                        .damage(16f * ninjaData.getRankDamageMultiplier(), 3.5);
+        player.level().addFreshEntity(dragon);
+
         for (int i = 0; i < WINDUP_TICKS; i++) {
             final double shrink = 1.6 - i * 0.14;
             ninjaData.scheduleDelayedTickEvent(p -> {

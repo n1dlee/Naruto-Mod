@@ -1662,6 +1662,10 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
 
     @Override
     public void updateDataServer(Player player) {
+        // The giant's hitbox is real now, so the server has to notice the form appearing and
+        // disappearing too. Left client-only this would keep server-side hit detection on the
+        // old player-sized box while the client drew and collided with an eighteen-block one.
+        this.refreshGiantFormDimensions(player);
 
         if(this.invisibleTicks > 0) {
             this.invisibleTicks--;
@@ -1819,7 +1823,43 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
         this.useStamina(0.1F, 5);
     }
 
+    /**
+     * Lets a final form walk over the terrain instead of through it.
+     *
+     * Something eighteen blocks tall does not stop at a one-block ledge, and it does not
+     * clamber. Vanilla gives every entity a 0.6 step, so the giant caught on every fence post
+     * and slab it met, which is the opposite of how the fight should read.
+     *
+     * Four blocks: enough to walk up a cliff face or a small building without noticing, and
+     * still short enough that it cannot casually step onto a two-storey roof.
+     *
+     * Nothing is needed for the "should not fall into small caves" half of this. That comes
+     * free from the hitbox being genuinely wide: an entity six blocks across is supported by
+     * any ground under any part of that footprint, so a one-block shaft is just a dent in the
+     * floor to it. It only worked out that way because the width is real - back when the box
+     * was still 0.6 wide, the giant fell down holes a giant should bridge.
+     */
+    private static final java.util.UUID GIANT_STEP_UUID =
+            java.util.UUID.fromString("6e4c1f2a-9d3b-4a7e-8c15-2f0b7d9e4a11");
+    private static final double GIANT_STEP_HEIGHT = 4.0;
+
+    private void updateGiantStepHeight(Player player) {
+        AttributeInstance stepAttr = player.getAttribute(
+                net.minecraftforge.common.ForgeMod.STEP_HEIGHT_ADDITION.get());
+        if (stepAttr == null) {
+            return;
+        }
+        stepAttr.removeModifier(GIANT_STEP_UUID);
+        if (this.isGiantForm()) {
+            stepAttr.addTransientModifier(new net.minecraft.world.entity.ai.attributes.AttributeModifier(
+                    GIANT_STEP_UUID, "narutomod_giant_step", GIANT_STEP_HEIGHT,
+                    net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADDITION));
+        }
+    }
+
     private void updateNinjaSpeed(Player player) {
+        this.updateGiantStepHeight(player);
+
         AttributeInstance speedAttr = player.getAttribute(Attributes.MOVEMENT_SPEED);
         if (speedAttr == null) {
             return;
@@ -2374,6 +2414,62 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
     private int susanooStage = 0; // 0=inactive, 1=ribcage (Jonin), 2=full Susanoo (Kage)
 
     /**
+     * The armour's remaining integrity. Every point of damage aimed at the wearer is spent
+     * here instead of on their health, which is what makes Susanoo a wall rather than a
+     * percentage discount - the fight becomes "break the shell, then reach the person".
+     *
+     * syncGlobally: an attacker has to be able to see the shell cracking, or there is no way
+     * to tell a fight you are winning from one you are not.
+     */
+    @Sync(minTicks = 1, syncGlobally = true)
+    private float susanooDurability = 0f;
+
+    /**
+     * Ticks left before a shattered Susanoo can be raised again.
+     *
+     * The whole point of breaking it is the window afterwards. Without a lockout the wearer
+     * simply raises a fresh shell the same second and nothing was accomplished.
+     */
+    @Sync(minTicks = 20, syncGlobally = true)
+    private int susanooBrokenTicks = 0;
+
+    /**
+     * Integrity by stage. Deliberately steep: at a Six Paths player's roughly sixty per swing,
+     * a Complete Body takes about thirty clean hits to open, and that is before its own arms
+     * are swatting the attacker back out of reach.
+     */
+    private static final float[] SUSANOO_MAX_DURABILITY = {0f, 220f, 480f, 950f, 1800f};
+
+    /** Three minutes, as specified: long enough that losing the shell decides the fight. */
+    public static final int SUSANOO_BROKEN_LOCKOUT = 3 * 60 * 20;
+
+    @Override
+    public float getSusanooDurability() {
+        return this.susanooDurability;
+    }
+
+    @Override
+    public void setSusanooDurability(float durability) {
+        this.susanooDurability = Math.max(0f, durability);
+    }
+
+    @Override
+    public float getSusanooMaxDurability() {
+        int stage = Math.min(Math.max(this.susanooStage, 0), SUSANOO_MAX_DURABILITY.length - 1);
+        return SUSANOO_MAX_DURABILITY[stage];
+    }
+
+    @Override
+    public int getSusanooBrokenTicks() {
+        return this.susanooBrokenTicks;
+    }
+
+    @Override
+    public void setSusanooBrokenTicks(int ticks) {
+        this.susanooBrokenTicks = Math.max(0, ticks);
+    }
+
+    /**
      * Gated on owning a Sharingan rather than on being born Uchiha: Kakashi drove a
      * Mangekyo out of a transplanted eye, and there is no reason the mod should be
      * stricter than the source. What still separates the two is HOW it opens - a born
@@ -2701,25 +2797,43 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
          * the failure the Susanoo note above describes, repeated because the number lived in
          * two places instead of one.
          */
-        boolean giant = (this.susanooActive && this.susanooStage >= 4)
-                || (this.kuramaCloakActive && this.kuramaTailCount >= 9);
         // ~0.85 of the form's height puts the camera near its head, the ratio the original
         // Susanoo value used.
-        return giant ? com.sekwah.narutomod.util.GiantForm.HEIGHT_BLOCKS * 0.85f : -1f;
+        return this.isGiantForm() ? com.sekwah.narutomod.util.GiantForm.HEIGHT_BLOCKS * 0.85f : -1f;
     }
 
-    private boolean wasGiantFormActiveClient = false;
+    /**
+     * Whether a final form is standing right now.
+     *
+     * Split out from {@link #getGiantEyeHeight()} because the size handler needs the same
+     * question answered on the SERVER, where an eye height means nothing. Before this the
+     * giant was purely cosmetic: an eighteen-block avatar rendered around a hitbox that was
+     * still 0.6 by 1.8, so the wielder could be punched in the ankles by anything that walked
+     * up, could not block a doorway, and read as standing on the ground inside their own
+     * form - the complaint that a Susanoo user "фактически стоит на земле".
+     */
+    @Override
+    public boolean isGiantForm() {
+        return (this.susanooActive && this.susanooStage >= 4)
+                || (this.kuramaCloakActive && this.kuramaTailCount >= 9);
+    }
+
+    private boolean wasGiantFormActive = false;
 
     /**
      * EntityEvent.Size only fires on Pose changes and a few hardcoded scenarios, not every
-     * tick — so entering/leaving a giant form (which changes neither Pose nor size) needs an
-     * explicit refreshDimensions() call to force the camera-relevant eye height to actually
-     * update. Client-only by design (see getGiantEyeHeight()).
+     * tick - so entering or leaving a giant form, which changes neither Pose nor size as far
+     * as vanilla is concerned, needs an explicit refreshDimensions() to make the new hitbox
+     * and eye height take effect.
+     *
+     * Runs on both sides now. It used to be client-only, back when the giant was purely a
+     * camera trick; now the form has a real eighteen-block box and a server that never
+     * refreshed it would keep hit detection on the old player-sized one.
      */
-    private void refreshGiantFormEyeHeightClient(Player player) {
-        boolean isGiantNow = getGiantEyeHeight() > 0;
-        if (isGiantNow != this.wasGiantFormActiveClient) {
-            this.wasGiantFormActiveClient = isGiantNow;
+    private void refreshGiantFormDimensions(Player player) {
+        boolean isGiantNow = this.isGiantForm();
+        if (isGiantNow != this.wasGiantFormActive) {
+            this.wasGiantFormActive = isGiantNow;
             player.refreshDimensions();
         }
     }
@@ -2731,6 +2845,20 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
         // TOGGLE handleCost (called every tick by the toggle framework) and
         // handleAbilityEnded. This method handles stage progression (from transformPower,
         // see updateTransformPower()), extra Power Surge drain, buffs, and ambient VFX.
+        // The lockout runs whether or not a shell is up - it is the wait imposed by the last
+        // one breaking, so it has to count down while the wearer has nothing.
+        if (this.susanooBrokenTicks > 0) {
+            this.susanooBrokenTicks--;
+            if (this.susanooBrokenTicks == 0) {
+                player.displayClientMessage(Component.literal("Susanoo can be raised again.")
+                        .withStyle(ChatFormatting.LIGHT_PURPLE), true);
+            }
+        }
+
+        if (this.susanooSwingTicks > 0) {
+            this.susanooSwingTicks--;
+        }
+
         if (!this.susanooActive) {
             if (this.susanooStage != 0) {
                 this.susanooStage = 0;
@@ -2744,7 +2872,14 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
         int rankCeiling = this.ninjaRank >= 4 ? 4 : 2;
         int targetStage = 1 + (int) Math.floor(this.transformPower * (rankCeiling - 1));
         if (this.susanooStage != targetStage) {
+            // Carry the damage across the stage change as a FRACTION, not as a raw number.
+            // Keeping the absolute value would let a cracked ribcage be repaired by scrolling
+            // up to Complete Body, and scrolling back down would shatter a healthy one.
+            float before = this.getSusanooMaxDurability();
+            float fraction = before <= 0f ? 1f : this.susanooDurability / before;
             this.susanooStage = targetStage;
+            this.susanooDurability = this.getSusanooMaxDurability()
+                    * net.minecraft.util.Mth.clamp(fraction, 0f, 1f);
         }
 
         // Higher stages cost more chakra per tick — scales continuously with transformPower
@@ -2863,9 +2998,15 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
 
         Vec3 eye = player.getEyePosition();
         Vec3 look = player.getLookAngle();
-        double range = 5.0;
-        double halfAngleCos = Math.cos(Math.toRadians(45));
-        float damage = 8.0f * this.getRankDamageMultiplier();
+
+        // The blade is the Susanoo's, so its reach is the Susanoo's. A Complete Body carries a
+        // sword longer than a house; at the flat five blocks this used, the largest thing on
+        // the battlefield swung at exactly the distance a man with a katana does, and anything
+        // standing six blocks away was safe from it.
+        boolean giant = this.susanooStage >= 4;
+        double range = giant ? 22.0 : 5.0 + this.susanooStage * 1.5;
+        double halfAngleCos = Math.cos(Math.toRadians(giant ? 70 : 45));
+        float damage = (giant ? 38.0f : 8.0f + this.susanooStage * 3f) * this.getRankDamageMultiplier();
 
         this.processingMeleeAoE = true;
         try {
@@ -2877,16 +3018,52 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
                 if (toTarget.dot(look) < halfAngleCos) continue;
                 if (eye.distanceTo(target.position()) > range) continue;
                 target.hurt(player.damageSources().playerAttack(player), damage);
-                target.knockback(1.2, -look.x, -look.z);
+                target.knockback(giant ? 3.5 : 1.2, -look.x, -look.z);
+                target.hurtMarked = true;
             }
         } finally {
             this.processingMeleeAoE = false;
         }
 
-        serverLevel.sendParticles(
-                new DustParticleOptions(new Vector3f(0.55f, 0.25f, 0.85f), 1.5f),
-                eye.x + look.x * 2, eye.y + look.y * 2, eye.z + look.z * 2,
-                20, 0.6, 0.5, 0.6, 0.05);
+        // The swing is drawn as the arc the blade actually travels through. A puff in front of
+        // the wielder tells you nothing about a twenty-two-block sword.
+        this.susanooSwingTicks = SUSANOO_SWING_TICKS;
+        double baseAngle = Math.atan2(look.z, look.x);
+        int steps = giant ? 30 : 12;
+        for (int i = 0; i <= steps; i++) {
+            double t = i / (double) steps;
+            double sweep = baseAngle + Math.toRadians(-65 + 130.0 * t);
+            double reach = range * (giant ? 0.9 : 0.75);
+            // The blade falls as it crosses, so the arc drops rather than staying level.
+            double height = (giant ? 9.0 : 1.6) * (1.0 - t) + 0.6;
+            serverLevel.sendParticles(
+                    new DustParticleOptions(new Vector3f(0.55f, 0.25f, 0.85f), giant ? 3.2f : 1.5f),
+                    player.getX() + Math.cos(sweep) * reach,
+                    player.getY() + height,
+                    player.getZ() + Math.sin(sweep) * reach,
+                    2, 0.4, 0.4, 0.4, 0.02);
+        }
+        serverLevel.playSound(null, player.blockPosition(),
+                net.minecraft.sounds.SoundEvents.PLAYER_ATTACK_SWEEP,
+                net.minecraft.sounds.SoundSource.PLAYERS, giant ? 3.0f : 1.0f, giant ? 0.4f : 0.9f);
+    }
+
+    /**
+     * Ticks left in the sword swing, synced so every client can animate it.
+     *
+     * The swing has to be a pose, not just a burst of particles: the whole point of a Susanoo
+     * with a blade is watching it wind up and come down, and an avatar that damages everything
+     * in front of it while standing perfectly still reads as a bug.
+     */
+    @Sync(minTicks = 1, syncGlobally = true)
+    private int susanooSwingTicks = 0;
+
+    /** Long enough to read at giant scale; the pose curve fits inside it. */
+    public static final int SUSANOO_SWING_TICKS = 14;
+
+    @Override
+    public int getSusanooSwingTicks() {
+        return this.susanooSwingTicks;
     }
 
     /**
@@ -2901,9 +3078,16 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
 
         Vec3 eye = player.getEyePosition();
         Vec3 look = player.getLookAngle();
-        double range = 4.5;
-        double halfAngleCos = Math.cos(Math.toRadians(60));
-        float damage = 6.0f * this.getRankDamageMultiplier();
+
+        // Reach follows the form. The worn cloak swipes with chakra arms at arm's length; the
+        // Full Avatar is an eighteen-block fox whose tails are longer than most buildings, and
+        // giving it the same 4.5 blocks meant the giant could be stood next to safely - the
+        // one thing a giant must never be. At nine tails it sweeps wide enough to reach a
+        // Susanoo standing across from it, and hits like something that size should.
+        boolean fullAvatar = this.kuramaTailCount >= 9;
+        double range = fullAvatar ? 26.0 : 4.5;
+        double halfAngleCos = Math.cos(Math.toRadians(fullAvatar ? 85 : 60));
+        float damage = (fullAvatar ? 42.0f : 6.0f) * this.getRankDamageMultiplier();
 
         this.processingMeleeAoE = true;
         try {
@@ -2915,16 +3099,42 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
                 if (toTarget.dot(look) < halfAngleCos) continue;
                 if (eye.distanceTo(target.position()) > range) continue;
                 target.hurt(player.damageSources().playerAttack(player), damage);
-                target.knockback(1.0, -look.x, -look.z);
+                // A tail the size of a tower does not nudge. hurtMarked matters here or the
+                // server never sends the throw to a hit player at all.
+                target.knockback(fullAvatar ? 4.5 : 1.0, -look.x, -look.z);
+                if (fullAvatar) {
+                    target.setDeltaMovement(target.getDeltaMovement().add(0, 0.75, 0));
+                }
+                target.hurtMarked = true;
             }
         } finally {
             this.processingMeleeAoE = false;
         }
 
-        serverLevel.sendParticles(
-                new DustParticleOptions(new Vector3f(1.0f, 0.4f, 0.05f), 1.3f),
-                eye.x + look.x * 1.5, eye.y + look.y * 1.5, eye.z + look.z * 1.5,
-                14, 0.5, 0.4, 0.5, 0.04);
+        if (fullAvatar) {
+            // The sweep is drawn as an arc across the front of the fox rather than a puff at
+            // its nose: the attack covers most of a half-circle, and the effect has to show
+            // where it actually reached or the range is invisible.
+            double baseAngle = Math.atan2(look.z, look.x);
+            for (int i = 0; i <= 26; i++) {
+                double sweep = baseAngle + Math.toRadians(-80 + 160.0 * i / 26.0);
+                double reach = range * 0.85;
+                serverLevel.sendParticles(
+                        new DustParticleOptions(new Vector3f(1.0f, 0.4f, 0.05f), 3.0f),
+                        player.getX() + Math.cos(sweep) * reach,
+                        player.getY() + 2.0 + Math.sin(i * 0.7) * 1.5,
+                        player.getZ() + Math.sin(sweep) * reach,
+                        2, 0.6, 0.6, 0.6, 0.02);
+            }
+            serverLevel.playSound(null, player.blockPosition(),
+                    net.minecraft.sounds.SoundEvents.ENDER_DRAGON_FLAP,
+                    net.minecraft.sounds.SoundSource.PLAYERS, 3.0f, 0.5f);
+        } else {
+            serverLevel.sendParticles(
+                    new DustParticleOptions(new Vector3f(1.0f, 0.4f, 0.05f), 1.3f),
+                    eye.x + look.x * 1.5, eye.y + look.y * 1.5, eye.z + look.z * 1.5,
+                    14, 0.5, 0.4, 0.5, 0.04);
+        }
     }
 
     private void getConfigData() {
@@ -2972,7 +3182,7 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
     @Override
     public void updateDataClient(Player player) {
         this.doubleJumpData.stuckCheck();
-        this.refreshGiantFormEyeHeightClient(player);
+        this.refreshGiantFormDimensions(player);
     }
 
     @Override

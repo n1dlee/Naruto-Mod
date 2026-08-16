@@ -123,7 +123,82 @@ public class IceMirrorEntity extends Entity {
         }
         if (++this.age >= LIFESPAN) {
             this.shatter();
+            return;
         }
+        this.holdPrisoners();
+    }
+
+    /**
+     * Keeps whoever is inside the dome inside it.
+     *
+     * The technique is a cage - Haku's whole approach is that the opponent cannot leave while
+     * he moves between the panes - and the ring did not hold anyone at all. Eight thin entities
+     * have no collision worth the name, so anyone could simply walk out between two of them,
+     * which left the dome as decoration around a normal fight.
+     *
+     * Containment is done by pushing rather than by teleporting: a shove back toward the centre
+     * lets the trapped fighter still move, dodge and fight inside the ring, whereas snapping
+     * their position would fight their own movement every tick and feel broken.
+     *
+     * Only one pane needs to run this, or eight of them would each apply the full shove and
+     * launch the prisoner across the arena.
+     */
+    private void holdPrisoners() {
+        if (!this.isRingAnchor()) {
+            return;
+        }
+        Vec3 centre = this.ringCentre();
+        for (LivingEntity caught : this.level().getEntitiesOfClass(LivingEntity.class,
+                new net.minecraft.world.phys.AABB(centre, centre)
+                        .inflate(RING_RADIUS + 2.5, 4.0, RING_RADIUS + 2.5),
+                e -> e.isAlive() && !this.isOwner(e))) {
+            Vec3 offset = caught.position().subtract(centre);
+            double distance = offset.horizontalDistance();
+            if (distance <= RING_RADIUS - 0.6 || distance < 1.0E-4) {
+                continue;
+            }
+            // Scales with how far past the wall they are, so brushing it nudges and charging
+            // it throws you back hard.
+            double overshoot = Math.min(distance - (RING_RADIUS - 0.6), 2.5);
+            Vec3 inward = new Vec3(-offset.x / distance, 0, -offset.z / distance)
+                    .scale(0.18 + overshoot * 0.22);
+            caught.setDeltaMovement(caught.getDeltaMovement().add(inward.x, 0, inward.z));
+            caught.hurtMarked = true;
+
+            if (this.level() instanceof ServerLevel serverLevel && this.age % 4 == 0) {
+                Vec3 wall = centre.add(offset.x / distance * RING_RADIUS, 1.0,
+                        offset.z / distance * RING_RADIUS);
+                serverLevel.sendParticles(ParticleTypes.SNOWFLAKE, wall.x, wall.y, wall.z,
+                        3, 0.2, 0.4, 0.2, 0.01);
+            }
+        }
+    }
+
+    /**
+     * Whether this pane is the one that runs containment for its ring.
+     *
+     * Picked by lowest entity id among the panes sharing a centre, so exactly one runs it and
+     * the job moves to a survivor when that pane is broken.
+     */
+    private boolean isRingAnchor() {
+        Vec3 centre = this.ringCentre();
+        for (IceMirrorEntity other : this.level().getEntitiesOfClass(IceMirrorEntity.class,
+                new net.minecraft.world.phys.AABB(centre, centre).inflate(RING_RADIUS + 1.0, 3.0, RING_RADIUS + 1.0))) {
+            if (other.getId() < this.getId()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** The pane faces inward, so the centre is one radius along its own facing. */
+    private Vec3 ringCentre() {
+        double radians = Math.toRadians(this.getFacing());
+        return this.position().add(-Math.sin(radians) * RING_RADIUS, 0, Math.cos(radians) * RING_RADIUS);
+    }
+
+    private boolean isOwner(LivingEntity entity) {
+        return this.ownerUUID.isPresent() && this.ownerUUID.get().equals(entity.getUUID());
     }
 
     /**

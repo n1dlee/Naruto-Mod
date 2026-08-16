@@ -11,6 +11,7 @@ import net.minecraftforge.common.capabilities.CapabilityManager;
 import net.minecraftforge.common.capabilities.CapabilityToken;
 import net.minecraftforge.event.AttachCapabilitiesEvent;
 import net.minecraftforge.event.TickEvent;
+import net.minecraftforge.event.entity.EntityEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
@@ -76,13 +77,37 @@ public class NinjaCapabilityHandler {
 
     //public static final EntitySize STANDING_SIZE = EntitySize.flexible(0.1F, 0.1F);
 
-    // For things like the transformation jutsus (make sure to trigger it manually when you change)
-/*    @SubscribeEvent
+    /**
+     * Makes a final form take up the space it appears to.
+     *
+     * Until now the giant was only ever drawn. The hitbox stayed 0.6 by 1.8, so an
+     * eighteen-block Susanoo could be punched in the ankles by anything that walked up to it,
+     * could not block a corridor, fitted through a doorway, and read exactly as the complaint
+     * had it - the wielder standing on the ground with a picture around them.
+     *
+     * Runs on BOTH sides, unlike the client-only eye-height override in RenderEvents: the
+     * hitbox has to agree with the server or hits land nowhere near where they look.
+     *
+     * The width is kept well under the height on purpose. A box as wide as the form is tall
+     * would wedge in any terrain narrower than a plain, and a giant that cannot move is worse
+     * than one that is slightly too easy to hit.
+     */
+    @SubscribeEvent
     public static void playerSize(EntityEvent.Size event) {
-        Entity entity = event.getEntity();
-        if (entity instanceof Player) {
-            event.setNewEyeHeight(5f);
-            event.setNewSize(EntityDimensions.scalable(10F, 10F));
+        if (!(event.getEntity() instanceof Player player)) {
+            return;
         }
-    }*/
+        player.getCapability(NINJA_DATA).ifPresent(ninjaData -> {
+            if (!ninjaData.isGiantForm()) {
+                return;
+            }
+            float height = com.sekwah.narutomod.util.GiantForm.HEIGHT_BLOCKS;
+            event.setNewSize(net.minecraft.world.entity.EntityDimensions.scalable(
+                    height * GIANT_WIDTH_RATIO, height));
+            event.setNewEyeHeight(height * 0.85f);
+        });
+    }
+
+    /** Footprint as a fraction of height. A third keeps the giant mobile in real terrain. */
+    private static final float GIANT_WIDTH_RATIO = 0.33f;
 }

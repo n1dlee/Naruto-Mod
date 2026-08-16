@@ -134,6 +134,25 @@ public class NarutoEntities {
                             com.sekwah.narutomod.entity.jutsuprojectile.ChibakuTenseiEntity::new, MobCategory.MISC)
                     .sized(2.0F, 2.0F).clientTrackingRange(24).updateInterval(2));
 
+    /**
+     * The serpent summoned by Water Dragon and Kirin. One entity for both: they differ in
+     * colour and approach, not in kind. Drawn as procedural geometry, so no model layer.
+     */
+    public static final RegistryObject<EntityType<com.sekwah.narutomod.entity.jutsuprojectile.ChakraDragonEntity>>
+            CHAKRA_DRAGON = register("chakra_dragon",
+            EntityType.Builder.<com.sekwah.narutomod.entity.jutsuprojectile.ChakraDragonEntity>of(
+                            com.sekwah.narutomod.entity.jutsuprojectile.ChakraDragonEntity::new, MobCategory.MISC)
+                    .sized(1.2F, 1.2F).clientTrackingRange(32).updateInterval(1)
+                    .noSummon());
+
+    /** Susanoo's thrown seal. A billboard, like the original - there is no model to bake. */
+    public static final RegistryObject<EntityType<com.sekwah.narutomod.entity.jutsuprojectile.YasakaMagatamaEntity>>
+            YASAKA_MAGATAMA = register("yasaka_magatama",
+            EntityType.Builder.<com.sekwah.narutomod.entity.jutsuprojectile.YasakaMagatamaEntity>of(
+                            com.sekwah.narutomod.entity.jutsuprojectile.YasakaMagatamaEntity::new, MobCategory.MISC)
+                    .sized(1.0F, 1.0F).clientTrackingRange(48).updateInterval(1)
+                    .noSummon());
+
     /** Phase 22: one pane of Haku's mirrors. Attackable, which is the whole counterplay. */
     public static final RegistryObject<EntityType<com.sekwah.narutomod.entity.jutsuprojectile.IceMirrorEntity>>
             ICE_MIRROR = register("ice_mirror",

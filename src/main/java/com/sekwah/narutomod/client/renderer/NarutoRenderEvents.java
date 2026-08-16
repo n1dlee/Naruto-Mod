@@ -76,6 +76,10 @@ public class NarutoRenderEvents {
                 com.sekwah.narutomod.client.renderer.entity.ChibakuTenseiRenderer::new);
         event.registerEntityRenderer(NarutoEntities.ICE_MIRROR.get(),
                 com.sekwah.narutomod.client.renderer.entity.IceMirrorRenderer::new);
+        event.registerEntityRenderer(NarutoEntities.CHAKRA_DRAGON.get(),
+                com.sekwah.narutomod.client.renderer.entity.ChakraDragonRenderer::new);
+        event.registerEntityRenderer(NarutoEntities.YASAKA_MAGATAMA.get(),
+                com.sekwah.narutomod.client.renderer.entity.YasakaMagatamaRenderer::new);
 
     }
 
@@ -109,6 +113,8 @@ public class NarutoRenderEvents {
         event.registerLayerDefinition(com.sekwah.narutomod.client.model.entity.KuramaFoxModel.LAYER_LOCATION,
                 com.sekwah.narutomod.client.model.entity.KuramaFoxModel::createBodyLayer);
         event.registerLayerDefinition(SusanooModel.LAYER_LOCATION, SusanooModel::createLayer);
+        event.registerLayerDefinition(com.sekwah.narutomod.client.model.entity.DragonHeadModel.LAYER_LOCATION,
+                com.sekwah.narutomod.client.model.entity.DragonHeadModel::createBodyLayer);
         event.registerLayerDefinition(com.sekwah.narutomod.client.model.entity.BijuCloakModel.LAYER_LOCATION,
                 com.sekwah.narutomod.client.model.entity.BijuCloakModel::createBodyLayer);
         // Phase 18: the three detailed Susanoo bodies (skeleton / clothed / winged)

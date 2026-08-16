@@ -41,10 +41,28 @@ public final class SpikeField {
         return Math.min(MAX_RADIUS, Math.max(MIN_RADIUS, MIN_RADIUS + elementLevel));
     }
 
-    /** More ground to cover needs more spikes, or a wide field is just a sparse one. */
+    /**
+     * How many spikes come up. Roughly one per square metre of the disc, capped.
+     *
+     * The first version topped out at twenty, which spread across a twenty-block circle is one
+     * spike every sixty square metres - a scattering, not a field, and you could stroll
+     * between them. Deriving the count from the AREA instead means the density stays the same
+     * as the technique grows, so a mastered cast really does carpet the ground.
+     *
+     * {@link #MAX_SPIKES} is a performance ceiling rather than a design one: every spike is
+     * four block writes plus three scheduled callbacks, and an unbounded disc at radius twenty
+     * would ask for over twelve hundred of them in a single tick.
+     */
     public static int countFor(int elementLevel) {
-        return Math.min(20, 6 + elementLevel);
+        double radius = radiusFor(elementLevel);
+        int byArea = (int) Math.round(Math.PI * radius * radius * SPIKE_DENSITY);
+        return Math.max(8, Math.min(MAX_SPIKES, byArea));
     }
+
+    /** Spikes per square block of the disc. Just under one, so they read as a thicket. */
+    private static final double SPIKE_DENSITY = 0.55;
+    /** Hard ceiling; see {@link #countFor}. */
+    public static final int MAX_SPIKES = 150;
 
     /**
      * Picks the columns to erupt under.

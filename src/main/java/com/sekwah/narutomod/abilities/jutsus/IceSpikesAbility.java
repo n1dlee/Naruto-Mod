@@ -40,8 +40,6 @@ public class IceSpikesAbility extends Ability implements Ability.Cooldown {
 
     private static final float CHAKRA_COST = 65f;
     private static final float SPIKE_DAMAGE = 8f;
-    private static final int SPIKE_COUNT = 5;
-    private static final double SPIKE_SPACING = 2.2;
     /**
      * Four, not three. spikeSegment() tapers BASE -> FRUSTUM -> MIDDLE -> TIP, so a
      * three-block column stopped at MIDDLE and the spear never actually came to a point.
@@ -153,6 +151,7 @@ public class IceSpikesAbility extends Ability implements Ability.Cooldown {
             caught.hurt(player.damageSources().playerAttack(player), damage);
             // Ice chills rather than launches: the field is meant to hold ground.
             caught.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 100, 2, false, true));
+            chill(caught);
         }
 
         NarutoParticles.spawnBurst(serverLevel, Vec3.atCenterOf(root.above(1)), 12, 0.4,
@@ -160,6 +159,26 @@ public class IceSpikesAbility extends Ability implements Ability.Cooldown {
         serverLevel.playSound(null, root, SoundEvents.GLASS_BREAK, SoundSource.PLAYERS,
                 0.7f, 1.2f + (float) Math.random() * 0.2f);
     }
+
+    /**
+     * Drives the target toward the frozen state powder snow uses.
+     *
+     * This is vanilla's own freeze track, not a custom effect: the blue vignette, the shivering
+     * and the freeze damage all come for free, and armour that protects against powder snow
+     * protects against this too, which is the behaviour anyone would expect. Each spike adds to
+     * the meter rather than setting it, so walking through a field is what actually freezes you
+     * - one glancing spike should chill, not kill.
+     */
+    private static void chill(LivingEntity caught) {
+        int required = caught.getTicksRequiredToFreeze();
+        // Capped a little past the freezing threshold so the damage phase starts but the
+        // target is not locked solid for a minute after the field is gone.
+        int capped = Math.min(caught.getTicksFrozen() + FREEZE_PER_SPIKE, required + 60);
+        caught.setTicksFrozen(capped);
+    }
+
+    /** How much of the freeze meter one spike is worth. */
+    private static final int FREEZE_PER_SPIKE = 70;
 
     /**
      * The spear's silhouette, bottom to top: the same four-stage taper vanilla dripstone uses,

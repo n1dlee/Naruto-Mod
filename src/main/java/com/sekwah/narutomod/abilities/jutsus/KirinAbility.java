@@ -174,6 +174,17 @@ public class KirinAbility extends Ability implements Ability.Cooldown, Ability.C
             splashed.hurt(source, SPLASH_DAMAGE * multiplier);
         }
 
+        // Kirin is a lightning dragon that comes down out of the cloud. It was a bare
+        // vanilla bolt plus damage numbers, which is the one thing this technique is not.
+        Vec3 crown = target.position().add(0, 26, 0);
+        com.sekwah.narutomod.entity.jutsuprojectile.ChakraDragonEntity dragon =
+                new com.sekwah.narutomod.entity.jutsuprojectile.ChakraDragonEntity(
+                        player, crown, target.position().add(0, target.getBbHeight() * 0.5, 0),
+                        com.sekwah.narutomod.entity.jutsuprojectile.ChakraDragonEntity.Kind.LIGHTNING)
+                        .speed(2.6)
+                        .damage(DIRECT_DAMAGE * 0.35f * multiplier, SPLASH_RADIUS);
+        player.level().addFreshEntity(dragon);
+
         if (player.level() instanceof ServerLevel serverLevel) {
             strike(serverLevel, target.position());
             serverLevel.playSound(null, targetPos, SoundEvents.LIGHTNING_BOLT_IMPACT,

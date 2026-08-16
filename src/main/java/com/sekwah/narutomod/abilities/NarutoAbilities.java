@@ -172,6 +172,8 @@ public class NarutoAbilities {
 
     // --- Phase 7: Mangekyo Sharingan / Susanoo ---
     public static final RegistryObject<SusanooAbility> SUSANOO = ABILITY.register("susanoo", SusanooAbility::new);
+    public static final RegistryObject<com.sekwah.narutomod.abilities.jutsus.YasakaMagatamaAbility> YASAKA_MAGATAMA =
+            ABILITY.register("yasaka_magatama", com.sekwah.narutomod.abilities.jutsus.YasakaMagatamaAbility::new);
 
     // --- Phase 16: Eternal Mangekyo form signatures (each taken from the boss who owned it) ---
     public static final RegistryObject<TsukuyomiAbility> TSUKUYOMI = ABILITY.register("tsukuyomi", TsukuyomiAbility::new);

@@ -124,6 +124,18 @@ public class PlayerAnimHandler {
                 applySusanooPose(playerModel, susanooWeight, PoseBlender.elapsed(entity, Track.SUSANOO));
             }
 
+            // The sword swing overrides the standing stance for as long as it runs - it is the
+            // one thing the Susanoo does that has to be readable from across a battlefield.
+            int swingTicks = ninjaData.getSusanooSwingTicks();
+            float swingWeight = PoseBlender.weight(entity, Track.SUSANOO_SWING,
+                    swingTicks > 0, RAMP_CAST, ageInTicks);
+            if (swingWeight > PoseBlender.EPSILON) {
+                float swingPhase = swingTicks <= 0 ? 1f
+                        : Mth.clamp(1f - swingTicks / (float) com.sekwah.narutomod.capabilities
+                                .NinjaData.SUSANOO_SWING_TICKS, 0f, 1f);
+                applySusanooSwingPose(playerModel, swingWeight, swingPhase);
+            }
+
             int gatesOpen = ninjaData.getGatesOpen();
             float gatesWeight = PoseBlender.weight(entity, Track.GATES, gatesOpen >= 5, RAMP_GATES, ageInTicks);
             if (gatesWeight > PoseBlender.EPSILON) {
@@ -762,6 +774,46 @@ public class PlayerAnimHandler {
         PoseBlender.addRotation(playerModel.leftArm, weight, strain, 0F, strain * 0.5f);
         PoseBlender.addRotation(playerModel.body, weight, strain * 0.5f, 0F, 0F);
     }
+
+    /**
+     * The Susanoo bringing its blade across.
+     *
+     * Three beats, and the middle one is short on purpose: the arm hauls back and up over the
+     * shoulder, the strike crosses in about a fifth of the swing, and the rest is the body
+     * recovering from having swung something the size of a building. A swing whose fastest
+     * part is not much faster than its slowest reads as pushing, not cutting.
+     *
+     * The whole torso turns into it. An arm moving on its own is a wave; what makes a strike
+     * land is the shoulders arriving first and the blade catching up.
+     */
+    private static void applySusanooSwingPose(PlayerModel playerModel, float weight, float phase) {
+        SWING_RIGHT.rotate(playerModel.rightArm, phase, weight);
+        SWING_LEFT.rotate(playerModel.leftArm, phase, weight);
+        PoseBlender.addRotation(playerModel.body, weight, SWING_BODY.sampleX(phase),
+                SWING_BODY.sampleY(phase), 0F);
+        PoseBlender.addRotation(playerModel.head, weight, SWING_BODY.sampleX(phase) * 0.4f,
+                SWING_BODY.sampleY(phase) * 0.6f, 0F);
+        // Braced legs, staggered as the weight transfers across the strike.
+        PoseBlender.addRotation(playerModel.rightLeg, weight, -0.25F * (1F - phase), -0.15F, 0F);
+        PoseBlender.addRotation(playerModel.leftLeg, weight, 0.30F * phase, 0.15F, 0F);
+    }
+
+    private static final Curve SWING_RIGHT = Curve.of(
+            0.00f, -0.30f, -0.20f, 0.00f,   // guard
+            0.35f, -2.60f, -0.85f, -0.70f,  // hauled back over the shoulder
+            0.55f, 0.95f, 0.25f, 0.55f,     // the cut, crossing fast
+            1.00f, 0.35f, 0.10f, 0.30f);    // follow through, blade low
+    private static final Curve SWING_LEFT = Curve.of(
+            0.00f, -0.30f, 0.20f, 0.00f,
+            0.35f, -1.20f, 0.70f, 0.45f,
+            0.55f, -0.20f, -0.35f, -0.25f,
+            1.00f, -0.15f, -0.20f, -0.15f);
+    /** x = lean into the strike, y = how far the torso has turned through it. */
+    private static final Curve SWING_BODY = Curve.of(
+            0.00f, 0.00f, 0.00f, 0f,
+            0.35f, -0.18f, -0.45f, 0f,
+            0.55f, 0.30f, 0.50f, 0f,
+            1.00f, 0.10f, 0.30f, 0f);
 
     /** Sage Mode standing still: slow, deep, deliberately calm breathing. */
     private static void applySageIdlePose(PlayerModel playerModel, float weight, float elapsed) {

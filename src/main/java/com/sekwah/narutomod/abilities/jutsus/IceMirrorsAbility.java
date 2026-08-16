@@ -2,6 +2,8 @@ package com.sekwah.narutomod.abilities.jutsus;
 
 import com.sekwah.narutomod.abilities.Ability;
 import com.sekwah.narutomod.capabilities.INinjaData;
+import com.sekwah.narutomod.util.EyeTargeting;
+import net.minecraft.world.entity.LivingEntity;
 import com.sekwah.narutomod.entity.jutsuprojectile.IceMirrorEntity;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
@@ -104,12 +106,35 @@ public class IceMirrorsAbility extends Ability implements Ability.Cooldown {
             return;
         }
 
+        // The dome goes up around the OPPONENT, not around empty ground ahead of the caster.
+        // Haku traps his target inside and works from the panes; centring on a point in front
+        // of the caster meant the technique caged whatever happened to be standing there,
+        // usually nothing, and then teleported the caster into their own cage.
         Vec3 look = player.getLookAngle();
-        Vec3 centre = player.position().add(new Vec3(look.x, 0, look.z).normalize().scale(CAST_REACH));
+        LivingEntity target = EyeTargeting.raycastLiving(player, TRAP_RANGE);
+        Vec3 centre = target != null
+                ? target.position()
+                : player.position().add(new Vec3(look.x, 0, look.z).normalize().scale(CAST_REACH));
+
         IceMirrorEntity.raiseRing(player, centre);
-        // Put the caster inside their own ring, which is where the technique is fought from.
-        player.teleportTo(centre.x, player.getY(), centre.z);
+
+        if (target != null) {
+            // Pull the target to the middle so the ring closes on them rather than around
+            // wherever they were a moment ago.
+            target.teleportTo(centre.x, target.getY(), centre.z);
+            player.displayClientMessage(Component.literal("Trapped in the Crystal Ice Mirrors.")
+                    .withStyle(ChatFormatting.AQUA), true);
+        }
+        // The caster steps onto a pane, which is where the technique is fought from - inside
+        // the wall, not inside the cage with the prisoner.
+        java.util.List<IceMirrorEntity> raised = standingMirrors(player);
+        if (!raised.isEmpty()) {
+            stepToNextMirror(player, raised);
+        }
     }
+
+    /** How far ahead the technique will look for someone to cage. */
+    private static final double TRAP_RANGE = 12.0;
 
     /** Moves the caster to whichever surviving pane they are not currently standing at. */
     private void stepToNextMirror(Player player, java.util.List<IceMirrorEntity> standing) {

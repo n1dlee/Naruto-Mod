@@ -40,7 +40,7 @@ public class StormAuraAbility extends Ability implements Ability.Toggled, Abilit
 
     @Override
     public long defaultCombo() {
-        return 2313;
+        return 1332;
     }
 
     @Override

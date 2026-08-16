@@ -189,6 +189,8 @@ public class TailedBeastJutsuGoal extends Goal {
         this.beast.getNavigation().stop();
 
         this.chargeTicks++;
+        // Drives the rear-back pose in TailedBeastRenderer. The charge is the tell.
+        this.beast.setBijudamaCharge((float) this.chargeTicks / BIJUDAMA_CHARGE);
         if (this.beast.level() instanceof ServerLevel serverLevel) {
             Vec3 mouth = this.mouthPosition();
             float progress = (float) this.chargeTicks / BIJUDAMA_CHARGE;
@@ -203,12 +205,16 @@ public class TailedBeastJutsuGoal extends Goal {
         if (this.chargeTicks >= BIJUDAMA_CHARGE) {
             this.fireBijudama(target);
             this.charging = false;
+            this.beast.setBijudamaCharge(0f);
         }
     }
 
     @Override
     public void stop() {
         this.charging = false;
+        // Cleared here too: a charge interrupted by losing the target would otherwise leave
+        // the beast frozen mid-rear for as long as it lived.
+        this.beast.setBijudamaCharge(0f);
     }
 
     // ------------------------------------------------------------------ Bijudama
@@ -216,6 +222,7 @@ public class TailedBeastJutsuGoal extends Goal {
     private void beginBijudama() {
         this.charging = true;
         this.chargeTicks = 0;
+        this.beast.setBijudamaCharge(0f);
         this.hurtStampAtChargeStart = this.beast.getHurtCount();
         this.beast.playSound(this.beast.getVariant().getRoar(), 5.0f, 0.8f);
     }

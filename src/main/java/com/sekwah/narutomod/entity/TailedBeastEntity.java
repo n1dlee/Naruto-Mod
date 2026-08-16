@@ -52,6 +52,17 @@ public class TailedBeastEntity extends PathfinderMob implements Enemy {
     private static final EntityDataAccessor<Byte> VARIANT =
             SynchedEntityData.defineId(TailedBeastEntity.class, EntityDataSerializers.BYTE);
     /** Rises as the beast is worn down; drives the aura and how often it throws a Bijudama. */
+    /**
+     * How far through a Bijudama charge the beast is, 0 to 1.
+     *
+     * Synced because the CAST is the part worth watching: the beast rears back, the sphere
+     * forms at its mouth and then it drives its head forward to spit. The bomb used to appear
+     * out of a perfectly still animal, which gave the biggest attack in the mod no tell at all
+     * and no way to know it was coming.
+     */
+    private static final EntityDataAccessor<Float> BIJUDAMA_CHARGE =
+            SynchedEntityData.defineId(TailedBeastEntity.class, EntityDataSerializers.FLOAT);
+
     private static final EntityDataAccessor<Integer> RAGE =
             SynchedEntityData.defineId(TailedBeastEntity.class, EntityDataSerializers.INT);
 
@@ -79,6 +90,7 @@ public class TailedBeastEntity extends PathfinderMob implements Enemy {
         super.defineSynchedData();
         this.entityData.define(VARIANT, (byte) 0);
         this.entityData.define(RAGE, 0);
+        this.entityData.define(BIJUDAMA_CHARGE, 0f);
     }
 
     public TailedBeastVariant getVariant() {
@@ -106,6 +118,15 @@ public class TailedBeastEntity extends PathfinderMob implements Enemy {
         if (instance != null) {
             instance.setBaseValue(value);
         }
+    }
+
+    /** 0 when idle, climbing to 1 as the sphere finishes forming, then released. */
+    public float getBijudamaCharge() {
+        return this.entityData.get(BIJUDAMA_CHARGE);
+    }
+
+    public void setBijudamaCharge(float charge) {
+        this.entityData.set(BIJUDAMA_CHARGE, Math.max(0f, Math.min(1f, charge)));
     }
 
     @Override

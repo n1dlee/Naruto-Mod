@@ -160,10 +160,13 @@ public class TailedBeastBombEntity extends AbstractNonGlowingHurtingProjectile {
                 victim -> victim != owner && victim.isAlive()
                         && !(owner != null && victim.getType() == owner.getType()));
 
-        // Whose bomb this is matters. The beasts sit on a ladder where each tail doubles the
-        // one below (see TailedBeastVariant), and a Bijudama that hit for the same 26 whether
-        // it came from Shukaku or Gyuki was quietly flattening the top two thirds of it.
-        float tier = TailedBeastVariant.statMultiplier(this.getVariant().getTails());
+        // Whose bomb this is matters, and here it matters at FULL strength.
+        //
+        // Elsewhere the doubling-per-tail ladder is split between health and damage so neither
+        // axis runs away; the Bijudama is the exception, because it is the one attack that is
+        // purely an expression of how much chakra the beast has. So it takes the whole ladder:
+        // a One Tail's bomb is a heavy hit, and Kurama's is 256 times that.
+        float tier = TailedBeastVariant.powerMultiplier(this.getVariant().getTails());
 
         for (LivingEntity victim : caught) {
             // Falls off with distance so being at the edge of the blast is survivable and

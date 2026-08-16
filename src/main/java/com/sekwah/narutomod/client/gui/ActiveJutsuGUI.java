@@ -98,10 +98,22 @@ public class ActiveJutsuGUI implements PlayerGUI {
             // however far the scroll wheel has been pushed.
             float perSecond = (SusanooAbility.CHAKRA_COST
                     + data.getTransformPower() * NinjaData.SUSANOO_SURGE_DRAIN) * TICKS_PER_SECOND;
+            // Integrity is the number that decides the fight now, so it leads the line.
+            int integrity = Math.round(data.getSusanooDurability());
+            int max = Math.round(data.getSusanooMaxDurability());
             entries.add(new Entry(
                     Component.literal("Susanoo stage " + data.getSusanooStage()
+                            + "  " + integrity + "/" + max
                             + rate(perSecond, "ch")),
-                    COLOUR_CHAKRA));
+                    integrity * 4 < max ? COLOUR_FATAL : COLOUR_CHAKRA));
+        }
+
+        // Shown while it is DOWN as well: the wait is the consequence of losing the shell and
+        // the wearer needs to know how long they are fighting without it.
+        if (data.getSusanooBrokenTicks() > 0) {
+            entries.add(new Entry(
+                    Component.literal("Susanoo shattered" + timer(data.getSusanooBrokenTicks())),
+                    COLOUR_FATAL));
         }
 
         if (data.isKuramaCloakActive()) {

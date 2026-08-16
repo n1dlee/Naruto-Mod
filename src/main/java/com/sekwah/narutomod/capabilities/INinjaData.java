@@ -261,12 +261,27 @@ public interface INinjaData extends INBTSerializable<Tag> {
 
     // --- Mangekyo Sharingan / Susanoo (Uchiha) ---
     boolean isMangekyoAwakened();
+    /** Remaining integrity of the Susanoo shell; damage is spent here, not on the wearer. */
+    float getSusanooDurability();
+    void setSusanooDurability(float durability);
+    /** What a freshly raised shell starts at, for the current stage. */
+    float getSusanooMaxDurability();
+    /** Ticks until a shattered Susanoo can be raised again. */
+    int getSusanooBrokenTicks();
+    void setSusanooBrokenTicks(int ticks);
+
+    /** True while a Complete-Body-scale form is standing; drives the real hitbox, not just the camera. */
+    boolean isGiantForm();
+
     boolean isSusanooActive();
     void setSusanooActive(boolean active);
     int getSusanooStage();
     void setSusanooStage(int stage);
     float getSusanooMeleeDamageMultiplier();
     void triggerSusanooArmSwipe(Player player, net.minecraft.world.entity.LivingEntity primaryTarget);
+
+    /** Ticks left in the Susanoo sword swing; drives the swing pose. */
+    int getSusanooSwingTicks();
 
     // --- Giant-form camera eye height (Susanoo Complete Body / Kurama Full Avatar) ---
     float getGiantEyeHeight();
