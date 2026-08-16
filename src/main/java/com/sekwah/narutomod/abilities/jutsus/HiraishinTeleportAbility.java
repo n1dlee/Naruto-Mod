@@ -107,6 +107,18 @@ public class HiraishinTeleportAbility extends Ability implements Ability.Cooldow
 
         for (HiraishinKunaiEntity kunai : player.level().getEntitiesOfClass(HiraishinKunaiEntity.class,
                 player.getBoundingBox().inflate(KUNAI_SEARCH_RADIUS))) {
+            // Your own marks only.
+            //
+            // The search took every Hiraishin kunai within 128 blocks regardless of who threw
+            // it, so two users of the technique shared one network: either could jump to the
+            // other's marks, including one planted in the middle of the other's base. The
+            // formula is the wielder's own, and stealing one is a different jutsu entirely.
+            //
+            // AbstractArrow already tracks and persists its shooter, so no new field is
+            // needed - the ownership was there all along and simply was not consulted.
+            if (kunai.getOwner() != player) {
+                continue;
+            }
             double distance = kunai.distanceToSqr(player);
             if (distance < bestDistance) {
                 bestDistance = distance;

@@ -53,7 +53,7 @@ public class KamuiPhaseAbility extends Ability
 
     @Override
     public String requiredEye() {
-        return "sharingan_ems";
+        return "sharingan_ms";
     }
 
     @Override

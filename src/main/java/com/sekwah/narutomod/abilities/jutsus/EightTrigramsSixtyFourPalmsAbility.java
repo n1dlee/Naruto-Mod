@@ -34,7 +34,23 @@ public class EightTrigramsSixtyFourPalmsAbility extends Ability implements Abili
     private static final float CHAKRA_COST = 45f;
     private static final double CAST_RANGE = 3.5;
     private static final double FOLLOW_RANGE = 6.0;
-    private static final int[] WAVE_STRIKES = {2, 4, 8, 16, 32, 64};
+    /**
+     * The count the technique ANNOUNCES at each stage: two palms, four palms, and so on.
+     *
+     * These are cumulative totals, which is the whole shape of the technique - "Sixty-Four
+     * Palms" is the end of one accelerating series, not the last of six separate ones.
+     */
+    private static final int[] WAVE_TOTALS = {2, 4, 8, 16, 32, 64};
+
+    /**
+     * The palms actually landed in each stage: the difference between one announced total and
+     * the last.
+     *
+     * The old code dealt damage for the announced total every wave, so the sequence landed
+     * 2 + 4 + 8 + 16 + 32 + 64 = 126 palms and called itself Sixty-Four. Almost double the
+     * damage the name promises, and the one number in the technique that a player can check.
+     */
+    private static final int[] WAVE_STRIKES = {2, 2, 4, 8, 16, 32};
     private static final int TICKS_BETWEEN_WAVES = 5;
     private static final float DAMAGE_PER_STRIKE = 0.22f;
     private static final int SEAL_TICKS = 8 * 20;
@@ -109,14 +125,15 @@ public class EightTrigramsSixtyFourPalmsAbility extends Ability implements Abili
             return;
         }
         int strikes = WAVE_STRIKES[waveIndex];
+        int announced = WAVE_TOTALS[waveIndex];
 
-        player.displayClientMessage(Component.literal("Eight Trigrams: " + strikes + " Palms!")
+        player.displayClientMessage(Component.literal("Eight Trigrams: " + announced + " Palms!")
                 .withStyle(waveIndex >= WAVE_STRIKES.length - 1 ? ChatFormatting.GOLD : ChatFormatting.WHITE), true);
         target.hurt(player.damageSources().playerAttack(player), strikes * DAMAGE_PER_STRIKE * damageMultiplier);
 
         Vec3 center = target.position().add(0, target.getBbHeight() * 0.5, 0);
         if (player.level() instanceof ServerLevel serverLevel) {
-            NarutoParticles.spawnBurst(serverLevel, center, 4 + strikes / 4, 0.4, NarutoParticles.ROTATION_WHITE);
+            NarutoParticles.spawnBurst(serverLevel, center, 4 + announced / 4, 0.4, NarutoParticles.ROTATION_WHITE);
         }
         player.level().playSound(null, target.getX(), target.getY(), target.getZ(),
                 SoundEvents.PLAYER_ATTACK_STRONG, SoundSource.PLAYERS, 0.7f, 1.0f + waveIndex * 0.1f);

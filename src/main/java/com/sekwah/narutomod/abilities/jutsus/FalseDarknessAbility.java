@@ -116,30 +116,40 @@ public class FalseDarknessAbility extends Ability implements Ability.Cooldown {
         // Find first entity on main ray
         LivingEntity mainTarget = findFirstEntity(player, eye, look, eye.distanceTo(mainEnd));
 
-        Vec3 splitOrigin;
-        if (mainTarget != null) {
-            mainTarget.hurt(source, MAIN_DAMAGE * damageMultiplier);
-            splitOrigin = mainTarget.position().add(0, mainTarget.getBbHeight() * 0.5, 0);
-            // Particle burst on hit
-            spawnHitParticles(player, splitOrigin);
-        } else {
-            splitOrigin = mainEnd;
-        }
-
-        // Split into two side rays at ±45°
-        Vec3 flatLook = new Vec3(look.x, 0, look.z).normalize();
-        Vec3 left = rotateY(flatLook, 45);
-        Vec3 right = rotateY(flatLook, -45);
-
-        for (Vec3 splitDir : new Vec3[]{left, right}) {
-            Vec3 splitEnd = findRayEnd(player, splitOrigin, splitDir, SPLIT_RANGE);
-            spawnRayParticles(player, splitOrigin, splitEnd);
-            LivingEntity splitTarget = findFirstEntityAlongRay(player, splitOrigin, splitDir, SPLIT_RANGE);
-            if (splitTarget != null) {
-                splitTarget.hurt(source, SPLIT_DAMAGE * damageMultiplier);
-                spawnHitParticles(player, splitTarget.position().add(0, splitTarget.getBbHeight() * 0.5, 0));
+        // One lance, and it pierces.
+        //
+        // This used to fork into two side rays at forty-five degrees, which is a different
+        // technique: Gian is a single concentrated spear of lightning, and its whole identity
+        // is that it goes THROUGH what it hits rather than spreading around it. The forking
+        // version also quietly tripled the damage of a "single beam".
+        //
+        // The energy that went into the forks is now spent going further: everything standing
+        // in the line takes the hit, with each body it passes through bleeding some of it.
+        float remaining = MAIN_DAMAGE * damageMultiplier;
+        for (LivingEntity pierced : findEntitiesAlongRay(player, eye, look, eye.distanceTo(mainEnd))) {
+            if (remaining < 1.0f) {
+                break;
             }
+            pierced.hurt(source, remaining);
+            spawnHitParticles(player, pierced.position().add(0, pierced.getBbHeight() * 0.5, 0));
+            remaining *= PIERCE_FALLOFF;
         }
+    }
+
+    /** How much of the lance survives each body it passes through. */
+    private static final float PIERCE_FALLOFF = 0.65f;
+
+    /** Everything standing in the lance's line, nearest first. */
+    private java.util.List<LivingEntity> findEntitiesAlongRay(Player player, Vec3 origin, Vec3 dir,
+                                                              double range) {
+        Vec3 end = origin.add(dir.scale(range));
+        java.util.List<LivingEntity> hit = player.level().getEntitiesOfClass(LivingEntity.class,
+                new net.minecraft.world.phys.AABB(origin, end).inflate(1.0),
+                candidate -> candidate != player && candidate.isAlive()
+                        && candidate.getBoundingBox().inflate(0.3)
+                                .clip(origin, end).isPresent());
+        hit.sort(java.util.Comparator.comparingDouble(e -> e.distanceToSqr(origin)));
+        return hit;
     }
 
     private Vec3 findRayEnd(Player player, Vec3 origin, Vec3 dir, double range) {

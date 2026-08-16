@@ -172,6 +172,10 @@ public class BossJutsuGoal extends Goal {
 
     @Override
     public void tick() {
+        // Checked before the sustained-technique early return: the circle has to be able to
+        // break on a tick where nothing else is happening, which is most of them.
+        tickCurseCircle();
+
         if (this.sustained == null) {
             return;
         }
@@ -1645,7 +1649,27 @@ public class BossJutsuGoal extends Goal {
     }
 
     /** Hidan: his own blood pays for it, so it hurts you regardless of your armour. */
+    /**
+     * Hidan's ritual, in two halves the way it actually works.
+     *
+     * The old version was one instant cast: pick anyone in range, hurt yourself, apply Wither.
+     * No blood, no circle, and no way for the victim to do anything about it - which removed
+     * every piece of counterplay the technique has. Dodging the scythe meant nothing, and
+     * leaving the circle meant nothing, because neither existed.
+     *
+     * Now the scythe has to draw blood first. Until it does, the ritual has no target; once it
+     * has, the link holds only while Hidan stands in his circle, and stepping out of it - his
+     * own or by being knocked out - ends the link for both of them.
+     */
     private void castCurseRitual(LivingEntity target) {
+        if (this.curseVictim == null || !this.curseVictim.equals(target.getUUID())) {
+            // No blood taken from this one yet. He cuts for it instead, which is the
+            // telegraph: a scythe swing the victim can see, and avoid.
+            castScytheReach(target);
+            return;
+        }
+
+        this.curseCircle = this.boss.position();
         target.addEffect(new MobEffectInstance(MobEffects.WITHER, 10 * 20, 1, false, true));
         target.addEffect(new MobEffectInstance(MobEffects.WEAKNESS, 10 * 20, 1, false, true));
         target.hurt(this.boss.damageSources().magic(), 8f);
@@ -1662,9 +1686,41 @@ public class BossJutsuGoal extends Goal {
         }
     }
 
+    /** Whose blood he is carrying, and where he drew the circle to use it. */
+    private java.util.UUID curseVictim;
+    private Vec3 curseCircle;
+
+    /** How far he may stray from his own circle before the link fails. */
+    private static final double CURSE_CIRCLE_RADIUS = 4.0;
+
+    /** The scythe drawing blood is what marks a victim for the ritual. */
+    private void markCurseVictim(LivingEntity target) {
+        this.curseVictim = target.getUUID();
+    }
+
+    /**
+     * Drops the link when he leaves his own circle.
+     *
+     * Called every tick the boss runs, so knocking Hidan out of the ring is a real answer to
+     * the technique rather than a cosmetic detail.
+     */
+    private void tickCurseCircle() {
+        if (this.curseCircle == null) {
+            return;
+        }
+        if (this.boss.position().distanceTo(this.curseCircle) > CURSE_CIRCLE_RADIUS) {
+            this.curseCircle = null;
+            this.curseVictim = null;
+        }
+    }
+
     /** Hidan: the scythe is on a cable — distance is not the escape you thought it was. */
     private void castScytheReach(LivingEntity target) {
         target.hurt(this.boss.damageSources().mobAttack(this.boss), 12f);
+        // The cut is what gives him the blood the ritual needs. Land it and he can curse you;
+        // avoid it and he cannot, which is the whole counterplay the technique is supposed to
+        // have and previously did not.
+        markCurseVictim(target);
         Vec3 pull = this.boss.position().subtract(target.position()).normalize().scale(1.2).add(0, 0.35, 0);
         target.setDeltaMovement(target.getDeltaMovement().add(pull));
         target.hurtMarked = true;

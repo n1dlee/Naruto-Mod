@@ -28,6 +28,9 @@ public class EightTrigramsRotationAbility extends Ability implements Ability.Cha
     private static final float CHAKRA_BASE = 45f;
     private static final float CHAKRA_PER_TICK = 2.0f;
     private static final double RADIUS = 2.5;
+    /** How much of the dome's radius counts as "in contact with the shell". */
+    private static final double CONTACT_FRACTION = 0.6;
+
     private static final float MOB_DAMAGE = 6.0f;
 
     @Override
@@ -105,17 +108,31 @@ public class EightTrigramsRotationAbility extends Ability implements Ability.Cha
         List<Projectile> projectiles = player.level().getEntitiesOfClass(Projectile.class, sphereBox,
                 p -> p.getOwner() != player);
         for (Projectile proj : projectiles) {
-            if (proj.position().distanceTo(center) <= RADIUS) {
-                proj.discard();
+            if (proj.position().distanceTo(center) > RADIUS) {
+                continue;
             }
+            // Deflected, not deleted. The dome turns what hits it away - that is what makes it
+            // a rotation and not a disintegration field, and it is the difference between
+            // spinning at an archer and simply eating their arrows.
+            Vec3 outward = proj.position().subtract(center).normalize();
+            if (outward.lengthSqr() < 1.0E-6) {
+                outward = player.getLookAngle();
+            }
+            double speed = proj.getDeltaMovement().length();
+            proj.setDeltaMovement(outward.scale(Math.max(speed, 0.6)));
+            proj.setOwner(player);
+            proj.hurtMarked = true;
         }
 
-        // Damage mobs every 10 ticks
+        // The dome grinds what is pressed against it - but only what is actually touching it,
+        // not everything standing in the same room. At the full radius this was a silent
+        // area-denial blender attached to a defensive technique, which is why it read as an
+        // offensive one.
         if (ticksActive % 10 == 0) {
             List<LivingEntity> mobs = player.level().getEntitiesOfClass(LivingEntity.class, sphereBox,
                     e -> e != player && e.isAlive());
             for (LivingEntity mob : mobs) {
-                if (mob.position().distanceTo(center) <= RADIUS) {
+                if (mob.position().distanceTo(center) <= RADIUS * CONTACT_FRACTION) {
                     mob.hurt(player.damageSources().playerAttack(player), damage);
                     // Radial knockback outward
                     Vec3 dir = mob.position().subtract(player.position()).normalize();

@@ -1970,6 +1970,36 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
         return this.shadowPossessedTargetUUID != null && this.shadowPossessionTicks > 0;
     }
 
+    /** Beyond this the shadow cannot stretch, whatever the light is doing. */
+    private static final double SHADOW_TETHER_RANGE = 18.0;
+    /** Below this light level there is no shadow to send - a Nara is powerless in the dark. */
+    private static final int SHADOW_MIN_LIGHT = 4;
+
+    /**
+     * Whether the shadow can still reach its target.
+     *
+     * Three ways to break it, all of them things a player can actually do: get far enough
+     * away, put something solid in between, or take the fight somewhere with no light to cast
+     * a shadow. The last one is the technique's real weakness in the source and is why a Nara
+     * is dangerous at noon and helpless underground.
+     */
+    private boolean shadowTetherHolds(Player player, net.minecraft.world.entity.Mob mob) {
+        if (player.distanceTo(mob) > SHADOW_TETHER_RANGE) {
+            return false;
+        }
+        if (player.level().getMaxLocalRawBrightness(player.blockPosition()) < SHADOW_MIN_LIGHT) {
+            return false;
+        }
+        // Traced along the ground rather than eye to eye: the shadow crawls, it does not fly.
+        Vec3 from = player.position().add(0, 0.1, 0);
+        Vec3 to = mob.position().add(0, 0.1, 0);
+        net.minecraft.world.phys.BlockHitResult hit = player.level().clip(
+                new net.minecraft.world.level.ClipContext(from, to,
+                        net.minecraft.world.level.ClipContext.Block.COLLIDER,
+                        net.minecraft.world.level.ClipContext.Fluid.NONE, player));
+        return hit.getType() == net.minecraft.world.phys.HitResult.Type.MISS;
+    }
+
     private void updateShadowPossession(Player player) {
         if (!hasShadowTarget()) {
             this.shadowPossessedTargetUUID = null;
@@ -1994,6 +2024,21 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
             this.shadowPossessionTicks = 0;
             return;
         }
+        // The tether is a shadow on the ground, and it breaks like one.
+        //
+        // Nothing checked it before: once the UUID was stored the mob was puppeted for six
+        // full seconds regardless of distance, walls, or the target simply walking away. The
+        // Nara technique's entire counterplay is breaking the connection - getting out of
+        // range, putting a wall between you, or standing where there is no shadow to reach -
+        // and none of it did anything.
+        if (!this.shadowTetherHolds(player, mob)) {
+            this.shadowPossessedTargetUUID = null;
+            this.shadowPossessionTicks = 0;
+            player.displayClientMessage(Component.literal("The shadow loses its grip.")
+                    .withStyle(ChatFormatting.GRAY), true);
+            return;
+        }
+
         // Mirror player's movement: apply player's delta movement to mob
         Vec3 playerVel = player.getDeltaMovement();
         Vec3 mobVel = mob.getDeltaMovement();

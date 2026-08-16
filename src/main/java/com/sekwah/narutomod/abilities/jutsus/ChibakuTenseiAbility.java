@@ -20,8 +20,13 @@ import net.minecraft.world.phys.Vec3;
  * and the one with the longest wind-down, because what it does is take an area away from the
  * other side rather than deal a number.
  *
- * The core leaves the landscape alone. Every technique in this mod does; these get cast next
- * to whatever someone has built, and a moon made of their house is not a fight anyone wanted.
+ * The core DOES tear up the landscape, and the crater it leaves is permanent. That is
+ * deliberate and it is the one technique in this mod allowed to do it - building the moon out
+ * of the ground is the technique. The shell it gathers is tracked and removed when the core
+ * goes, so nothing is left hanging in the sky, but the hole in the ground stays.
+ *
+ * This javadoc used to promise the opposite, which was the more dangerous half of the problem:
+ * anyone reading the class would not think to look for griefing in it.
  */
 public class ChibakuTenseiAbility extends Ability implements Ability.Cooldown {
 

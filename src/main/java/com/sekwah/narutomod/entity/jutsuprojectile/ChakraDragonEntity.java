@@ -5,6 +5,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
@@ -64,6 +65,7 @@ public class ChakraDragonEntity extends Entity {
     public ChakraDragonEntity(LivingEntity owner, Vec3 from, Vec3 destination, Kind kind) {
         this(NarutoEntities.CHAKRA_DRAGON.get(), owner.level());
         this.owner = owner;
+        this.ownerUUID = owner.getUUID();
         this.destination = destination;
         this.setPos(from.x, from.y, from.z);
         this.entityData.set(KIND, (byte) kind.ordinal());
@@ -132,7 +134,7 @@ public class ChakraDragonEntity extends Entity {
         // A dragon is a body, not a beam: anything it swims through is hit on the way past.
         for (LivingEntity caught : this.level().getEntitiesOfClass(LivingEntity.class,
                 this.getBoundingBox().inflate(1.4),
-                e -> e != this.owner && e.isAlive())) {
+                e -> e != this.resolveOwner() && e.isAlive())) {
             caught.hurt(this.damageSources().magic(), this.damage * 0.5f);
             this.detonate();
             return;
@@ -152,7 +154,7 @@ public class ChakraDragonEntity extends Entity {
     private void detonate() {
         List<LivingEntity> caught = this.level().getEntitiesOfClass(LivingEntity.class,
                 new AABB(this.position(), this.position()).inflate(this.blastRadius),
-                e -> e != this.owner && e.isAlive());
+                e -> e != this.resolveOwner() && e.isAlive());
         for (LivingEntity victim : caught) {
             victim.hurt(this.damageSources().magic(), this.damage);
             if (this.getKind() == Kind.WATER) {
@@ -169,12 +171,55 @@ public class ChakraDragonEntity extends Entity {
     protected void readAdditionalSaveData(CompoundTag tag) {
         this.lifetime = tag.getInt("Lifetime");
         this.entityData.set(KIND, tag.getByte("Kind"));
+        // Everything that decides where this goes and what it does on arrival. Held only in
+        // memory before, so a chunk unload mid-flight left the dragon with a destination of
+        // (0,0,0) and default damage: it turned and flew at the world origin, and whatever it
+        // eventually detonated on took a number unrelated to the technique that fired it.
+        this.destination = new Vec3(
+                tag.getDouble("DestX"), tag.getDouble("DestY"), tag.getDouble("DestZ"));
+        this.speed = tag.contains("Speed") ? tag.getDouble("Speed") : 1.1;
+        this.damage = tag.contains("Damage") ? tag.getFloat("Damage") : 18f;
+        this.blastRadius = tag.contains("Blast") ? tag.getDouble("Blast") : 3.5;
+        this.ownerUUID = tag.hasUUID("Owner") ? tag.getUUID("Owner") : null;
     }
 
     @Override
     protected void addAdditionalSaveData(CompoundTag tag) {
         tag.putInt("Lifetime", this.lifetime);
         tag.putByte("Kind", this.entityData.get(KIND));
+        tag.putDouble("DestX", this.destination.x);
+        tag.putDouble("DestY", this.destination.y);
+        tag.putDouble("DestZ", this.destination.z);
+        tag.putDouble("Speed", this.speed);
+        tag.putFloat("Damage", this.damage);
+        tag.putDouble("Blast", this.blastRadius);
+        if (this.owner != null) {
+            tag.putUUID("Owner", this.owner.getUUID());
+        } else if (this.ownerUUID != null) {
+            tag.putUUID("Owner", this.ownerUUID);
+        }
+    }
+
+    /**
+     * The owner's id, kept separately from the resolved entity.
+     *
+     * A reloaded dragon has no live reference to whoever fired it, so without this it counted
+     * its own summoner as a valid target and could detonate on them.
+     */
+    @Nullable
+    private java.util.UUID ownerUUID;
+
+    /** Resolves the owner lazily, so an unloaded caster does not make the dragon ownerless. */
+    @Nullable
+    private LivingEntity resolveOwner() {
+        if (this.owner != null) {
+            return this.owner;
+        }
+        if (this.ownerUUID != null && this.level() instanceof ServerLevel serverLevel
+                && serverLevel.getEntity(this.ownerUUID) instanceof LivingEntity found) {
+            this.owner = found;
+        }
+        return this.owner;
     }
 
     @Override

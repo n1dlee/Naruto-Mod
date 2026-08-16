@@ -46,7 +46,7 @@ public class KotoamatsukamiAbility extends Ability implements Ability.Cooldown {
 
     @Override
     public String requiredEye() {
-        return "sharingan_ems";
+        return "sharingan_ms";
     }
 
     @Override

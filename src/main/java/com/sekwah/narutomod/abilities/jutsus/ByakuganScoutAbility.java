@@ -11,7 +11,18 @@ import net.minecraft.world.entity.player.Player;
 import org.joml.Vector3f;
 
 /**
- * Byakugan: Scouting Flight - the Hyuga stops looking and goes to see.
+ * Spirit Body Projection - the Hyuga stops looking and goes to see.
+ *
+ * NOT a Byakugan technique, and no longer named as one. The Byakugan grants chakra sight,
+ * near-360 vision and sight through obstacles; it does not make its wielder intangible and it
+ * does not let them fly. Shipping that under the eye's name told players something false
+ * about what the dojutsu does, which is worse than the power being strong.
+ *
+ * The ability itself is unchanged and the registry id is deliberately left as
+ * "byakugan_scout": that string is written into saved learned-jutsu lists, so renaming it
+ * would silently un-teach the technique for anyone who already has it. Only what the player
+ * SEES has changed. It remains gated on a matured Byakugan as the sense that makes the
+ * projection worth having.
  *
  * The eye's radar (ByakuganEntityVisionGUI) already shows every living thing for hundreds
  * of blocks through solid rock, but only from wherever you happen to be standing. This

@@ -112,7 +112,7 @@ public class WaterDragonAbility extends Ability implements Ability.Cooldown {
                         player, eye.add(look.scale(1.5)).add(0, -0.4, 0), coalescePoint,
                         com.sekwah.narutomod.entity.jutsuprojectile.ChakraDragonEntity.Kind.WATER)
                         .speed(1.15)
-                        .damage(16f * ninjaData.getRankDamageMultiplier(), 3.5);
+                        .damage(MAIN_DAMAGE * ninjaData.getRankDamageMultiplier(), SPLASH_RADIUS);
         player.level().addFreshEntity(dragon);
 
         for (int i = 0; i < WINDUP_TICKS; i++) {
@@ -126,8 +126,10 @@ public class WaterDragonAbility extends Ability implements Ability.Cooldown {
             }, i + 1);
         }
 
-        ninjaData.scheduleDelayedTickEvent(
-                p -> strike(p, ninjaData, eye, impactPoint, mainTarget), WINDUP_TICKS + 1);
+        // The dragon IS the attack. There used to be a second, independent strike scheduled
+        // here: the entity flew to a point computed at cast time while this hit whatever the
+        // target had moved to, so one jutsu produced two unsynchronised hits - and the one
+        // that mattered was the invisible one.
     }
 
     private void strike(Player player, INinjaData ninjaData, Vec3 eye, Vec3 impactPoint, LivingEntity mainTarget) {

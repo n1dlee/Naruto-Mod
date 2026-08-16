@@ -19,6 +19,17 @@ import net.minecraft.world.entity.player.Player;
  * Canon's Naraka Path drags a body back from ruin; here it heals the user outright and
  * puts regeneration on every ally standing with them. No resurrection — restoration.
  */
+/**
+ * Displayed as "Rinnegan: Restoration", not as the Naraka Path.
+ *
+ * The King of Hell interrogates, extracts souls and repairs the bodies of the Six Paths. This
+ * ability is an aura that heals the caster and their allies - a reasonable Minecraft
+ * adaptation, but it is not what that name promises, and shipping it under the name told
+ * players the Naraka Path was a party heal.
+ *
+ * The registry id stays "naraka_path" on purpose: it is written into saved learned-jutsu
+ * lists, and renaming it would un-teach the technique for anyone who has it.
+ */
 public class NarakaPathAbility extends Ability implements Ability.Cooldown {
 
     private static final float CHAKRA_COST = 95f;

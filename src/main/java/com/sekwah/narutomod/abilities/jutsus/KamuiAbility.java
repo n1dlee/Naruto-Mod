@@ -61,6 +61,19 @@ public class KamuiAbility extends Ability implements Ability.Cooldown {
         return "sharingan_ms";
     }
 
+    /**
+     * Kamui belongs to Obito's eye and to the one Kakashi carried.
+     *
+     * These are not generic Mangekyo powers. Left with no form requirement at all, every
+     * Mangekyo holder in the world woke up with them - which is the inverted half of the same
+     * bug that locked Itachi, Shisui and Obito out of their own techniques behind an Eternal
+     * Mangekyo none of them ever had.
+     */
+    @Override
+    public String requiredEyeForm() {
+        return "obito,kakashi";
+    }
+
     @Override
     public boolean handleCost(Player player, INinjaData ninjaData, int chargeAmount) {
         if (findPhaseDestination(player) == null) {

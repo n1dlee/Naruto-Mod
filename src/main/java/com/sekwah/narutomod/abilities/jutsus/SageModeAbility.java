@@ -54,6 +54,24 @@ public class SageModeAbility extends Ability implements Ability.Channeled, Abili
      */
     private boolean lastActivationSucceeded = false;
 
+    /** Charge lost per tick spent moving while gathering. */
+    private static final int MOVING_CHARGE_LOSS = 2;
+
+    /**
+     * Whether the gatherer is moving enough to spoil the balance.
+     *
+     * Deliberately generous about small drift - being nudged by a mob or sliding a fraction
+     * off a slab should not undo a gather - but any deliberate travel counts.
+     */
+    private static boolean isMoving(Player player) {
+        if (player.isSprinting() || player.isPassenger()) {
+            return true;
+        }
+        net.minecraft.world.phys.Vec3 motion = player.getDeltaMovement();
+        double horizontal = motion.x * motion.x + motion.z * motion.z;
+        return horizontal > 0.0025;
+    }
+
     /** Only a release that actually activated Sage Mode is a cast worth paying for. */
     @Override
     public boolean channelCommittedAt(int ticksChanneled) {
@@ -121,6 +139,20 @@ public class SageModeAbility extends Ability implements Ability.Channeled, Abili
         int currentCharge = ninjaData.getSageCharge();
 
         if (currentCharge < SAGE_MAX_CHARGE) {
+            // Natural energy only comes to someone who stops moving.
+            //
+            // It gathered at full rate while sprinting, which removed the entire cost of the
+            // technique: Sage Mode is supposed to be the thing you cannot do in the middle of
+            // a fight without a partner or a clone holding still for you. Moving now bleeds
+            // the charge instead of building it, so a gather has to be committed to.
+            if (isMoving(player)) {
+                ninjaData.setSageCharge(Math.max(0, currentCharge - MOVING_CHARGE_LOSS));
+                if (ticksChanneled % 20 == 0) {
+                    player.displayClientMessage(Component.translatable("sage.fail.moving")
+                            .withStyle(ChatFormatting.YELLOW), true);
+                }
+                return;
+            }
             // Gather natural energy: 1 charge per tick
             ninjaData.setSageCharge(currentCharge + 1);
 

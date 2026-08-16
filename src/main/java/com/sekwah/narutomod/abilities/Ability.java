@@ -356,9 +356,25 @@ public abstract class Ability {
         };
     }
 
+    /**
+     * Whether the caster commands one of the eyes this technique belongs to.
+     *
+     * Accepts a comma-separated list, because some named techniques genuinely had more than
+     * one wielder: Amaterasu belongs to Itachi AND Sasuke, Kamui to Obito AND Kakashi. A
+     * single-form field could not express that, which is why both were left with no form
+     * requirement at all - and so every Mangekyo holder in the world got them.
+     */
     private boolean hasEyeForm(INinjaData ninjaData) {
         String form = this.requiredEyeForm();
-        return form == null || ninjaData.hasSignatureForm(form);
+        if (form == null || form.isEmpty()) {
+            return true;
+        }
+        for (String candidate : form.split(",")) {
+            if (ninjaData.hasSignatureForm(candidate.trim())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

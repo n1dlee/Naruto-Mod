@@ -54,7 +54,7 @@ public class KirinAbility extends Ability implements Ability.Cooldown, Ability.C
 
     @Override
     public String requiredEye() {
-        return "sharingan_ems";
+        return "sharingan_ms";
     }
 
     @Override
@@ -162,17 +162,13 @@ public class KirinAbility extends Ability implements Ability.Cooldown, Ability.C
         }
 
         float multiplier = ninjaData.getRankDamageMultiplier();
-        DamageSource source = NarutoDamageTypes.getDamageSource(
-                player.level(), NarutoDamageTypes.CHIDORI, player, player);
-
-        target.hurt(source, DIRECT_DAMAGE * multiplier);
-        target.setSecondsOnFire(3);
-
-        for (LivingEntity splashed : player.level().getEntitiesOfClass(LivingEntity.class,
-                target.getBoundingBox().inflate(SPLASH_RADIUS),
-                e -> e != player && e != target && e.isAlive())) {
-            splashed.hurt(source, SPLASH_DAMAGE * multiplier);
-        }
+        // No damage here. The bolt is what hits, and it hits when it arrives.
+        //
+        // This used to deal the full direct damage the instant the cast resolved, and THEN
+        // send a dragon down which could hit again on contact and once more on detonation.
+        // The target was already dead before the thing that supposedly killed them had left
+        // the cloud, so the wind-up and the descent were decoration - there was no moment to
+        // react to, and on a bad frame the same cast landed twice.
 
         // Kirin is a lightning dragon that comes down out of the cloud. It was a bare
         // vanilla bolt plus damage numbers, which is the one thing this technique is not.
@@ -182,7 +178,7 @@ public class KirinAbility extends Ability implements Ability.Cooldown, Ability.C
                         player, crown, target.position().add(0, target.getBbHeight() * 0.5, 0),
                         com.sekwah.narutomod.entity.jutsuprojectile.ChakraDragonEntity.Kind.LIGHTNING)
                         .speed(2.6)
-                        .damage(DIRECT_DAMAGE * 0.35f * multiplier, SPLASH_RADIUS);
+                        .damage(DIRECT_DAMAGE * multiplier, SPLASH_RADIUS);
         player.level().addFreshEntity(dragon);
 
         if (player.level() instanceof ServerLevel serverLevel) {

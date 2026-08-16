@@ -50,6 +50,19 @@ public class AmaterasuAbility extends Ability implements Ability.Cooldown {
         return "sharingan_ms";
     }
 
+    /**
+     * Amaterasu belongs to Itachi's eyes and to Sasuke's.
+     *
+     * These are not generic Mangekyo powers. Left with no form requirement at all, every
+     * Mangekyo holder in the world woke up with them - which is the inverted half of the same
+     * bug that locked Itachi, Shisui and Obito out of their own techniques behind an Eternal
+     * Mangekyo none of them ever had.
+     */
+    @Override
+    public String requiredEyeForm() {
+        return "itachi,sasuke";
+    }
+
     @Override
     public boolean handleCost(Player player, INinjaData ninjaData, int chargeAmount) {
         if (ninjaData.getChakra() < CHAKRA_COST) {
