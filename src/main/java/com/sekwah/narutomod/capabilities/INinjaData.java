@@ -53,6 +53,10 @@ public interface INinjaData extends INBTSerializable<Tag> {
     void setLastCastAbilityId(ResourceLocation id);
 
     // --- Rasengan: held in hand, toggled on/off, resized with the scroll wheel ---
+    /** The summoning contract this ninja signed, or empty to fall back to clan tradition. */
+    String getSummonContract();
+    void setSummonContract(String contract);
+
     boolean isRasenganHeld();
     void setRasenganHeld(boolean held);
 

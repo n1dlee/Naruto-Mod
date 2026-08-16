@@ -658,6 +658,31 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
         this.lastCastAbilityId = id;
     }
 
+    /**
+     * Which summoning contract this ninja has signed, or empty for none yet.
+     *
+     * A contract is an agreement a ninja makes personally - Jiraiya signed with the toads,
+     * Orochimaru with the snakes, Tsunade with the slugs - and it was being decided by which
+     * clan you picked at character creation. That put Sakura's slug contract on everyone
+     * called Haruno and handed the snakes to every Uchiha, neither of which is how any of it
+     * works.
+     *
+     * Empty falls back to the clan's traditional partner, so nobody who already had a summon
+     * loses it; signing overrides that permanently.
+     */
+    @Sync
+    private String summonContract = "";
+
+    @Override
+    public String getSummonContract() {
+        return this.summonContract;
+    }
+
+    @Override
+    public void setSummonContract(String contract) {
+        this.summonContract = contract != null ? contract : "";
+    }
+
     // --- Rasengan: held in hand, toggled on/off, resized with the scroll wheel ---
     // syncGlobally: read by renderers that run for EVERY player in view, not just the owner.
     // Owner-only sync meant the caster saw their own jutsu and everyone else saw idle hands.
@@ -3295,6 +3320,7 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
         nbt.putInt("sharinganTomoe", this.sharinganTomoe);
         nbt.putBoolean("mangekyoAwakened", this.mangekyoAwakened);
         nbt.putString("mangekyoForm", this.mangekyoForm);
+        nbt.putString("summonContract", this.summonContract);
         nbt.putInt("msUseCounter", this.msUseCounter);
         nbt.putBoolean("eternalMangekyoAwakened", this.eternalMangekyoAwakened);
         nbt.putString("defeatedMsBosses", this.defeatedMsBosses);
@@ -3363,6 +3389,7 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
             this.sharinganTomoe = compoundTag.getInt("sharinganTomoe");
             this.mangekyoAwakened = compoundTag.getBoolean("mangekyoAwakened");
             this.mangekyoForm = compoundTag.getString("mangekyoForm");
+            this.summonContract = compoundTag.getString("summonContract");
             this.msUseCounter = compoundTag.getInt("msUseCounter");
             this.eternalMangekyoAwakened = compoundTag.getBoolean("eternalMangekyoAwakened");
             this.defeatedMsBosses = compoundTag.getString("defeatedMsBosses");

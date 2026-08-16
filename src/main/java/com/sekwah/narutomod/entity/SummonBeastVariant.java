@@ -121,7 +121,26 @@ public enum SummonBeastVariant {
         return this == KATSUYU;
     }
 
-    /** The contract a clan holds. Everyone without one of their own calls the Monkey King. */
+    /**
+     * Which beast this ninja can call.
+     *
+     * A signed contract wins outright. The clan mapping below is only the tradition a ninja
+     * grows up around - the partner they meet first if they never sign anything else - and it
+     * is a starting point, not an identity. It used to be the whole answer, which meant the
+     * choice of clan at character creation silently decided the summon forever.
+     */
+    public static SummonBeastVariant forNinja(String signedContract, String clanId) {
+        if (signedContract != null && !signedContract.isEmpty()) {
+            for (SummonBeastVariant variant : values()) {
+                if (variant.getName().equals(signedContract)) {
+                    return variant;
+                }
+            }
+        }
+        return forClan(clanId);
+    }
+
+    /** The tradition a clan is raised around. Everyone else meets the Monkey King. */
     public static SummonBeastVariant forClan(String clanId) {
         if (clanId == null) {
             return ENMA;

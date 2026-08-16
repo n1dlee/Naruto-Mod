@@ -79,7 +79,8 @@ public class KuchiyoseAbility extends Ability implements Ability.Cooldown {
             return;
         }
 
-        SummonBeastVariant variant = SummonBeastVariant.forClan(ninjaData.getClanId());
+        SummonBeastVariant variant = SummonBeastVariant.forNinja(
+                ninjaData.getSummonContract(), ninjaData.getClanId());
 
         Vec3 look = player.getLookAngle();
         // Far enough out that Gamabunta does not land on top of the ninja who called him.

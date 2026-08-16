@@ -94,6 +94,38 @@ public class NinjaCommand {
                                             }
                                             return mutateTarget(ctx, "clan", data -> data.setClanId(clan));
                                         }))))
+                .then(Commands.literal("contract")
+                        .then(Commands.argument("target", EntityArgument.player())
+                                .then(Commands.argument("contract", StringArgumentType.word())
+                                        .executes(ctx -> {
+                                            // Signing a summoning contract. Until there is an
+                                            // in-world scroll for it this is the only way to
+                                            // hold one that is not simply inherited from a
+                                            // clan, which is the point: a contract should be
+                                            // something a ninja obtains, not something their
+                                            // surname decides.
+                                            String contract = StringArgumentType.getString(ctx, "contract")
+                                                    .toLowerCase(java.util.Locale.ROOT);
+                                            if (contract.equals("none")) {
+                                                return mutateTarget(ctx, "summon contract",
+                                                        data -> data.setSummonContract(""));
+                                            }
+                                            boolean known = false;
+                                            for (com.sekwah.narutomod.entity.SummonBeastVariant variant
+                                                    : com.sekwah.narutomod.entity.SummonBeastVariant.values()) {
+                                                if (variant.getName().equals(contract)) {
+                                                    known = true;
+                                                    break;
+                                                }
+                                            }
+                                            if (!known) {
+                                                sendInvalid(ctx.getSource(), "contract",
+                                                        "gamabunta, manda, katsuyu, enma, none");
+                                                return 0;
+                                            }
+                                            return mutateTarget(ctx, "summon contract",
+                                                    data -> data.setSummonContract(contract));
+                                        }))))
                 .then(Commands.literal("nature")
                         .then(Commands.argument("target", EntityArgument.player())
                                 .then(Commands.argument("nature", StringArgumentType.word())

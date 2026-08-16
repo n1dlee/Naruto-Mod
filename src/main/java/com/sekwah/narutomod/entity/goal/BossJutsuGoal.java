@@ -333,12 +333,12 @@ public class BossJutsuGoal extends Goal {
         int roll = this.boss.getRandom().nextInt(100);
         if (distance > CLOSE_RANGE) {
             if (roll < 55 && pay(35f)) {
-                castKamuiPull(target);
+                castGravityPull(target);
                 offer(NarutoAbilities.BANSHO_TENIN);
                 return 50;
             }
             if (roll < 80 && pay(30f)) {
-                castPhaseStrike(target);
+                castWarpStrike(target);
                 offer(NarutoAbilities.KAMUI);
                 return 32;
             }
@@ -353,7 +353,7 @@ public class BossJutsuGoal extends Goal {
             return 110;
         }
         if (roll < 78 && pay(30f)) {
-            castPhaseStrike(target);
+            castWarpStrike(target);
             offer(NarutoAbilities.KAMUI);
             return 32;
         }
@@ -528,7 +528,7 @@ public class BossJutsuGoal extends Goal {
                 return 90;
             }
             if (roll < 80 && pay(35f)) {
-                castKamuiPull(target); // Bansho Ten'in - the same "come here" vector
+                castGravityPull(target);
                 offer(NarutoAbilities.BANSHO_TENIN);
                 return 45;
             }
@@ -548,7 +548,7 @@ public class BossJutsuGoal extends Goal {
             return 80;
         }
         pay(35f);
-        castKamuiPull(target);
+        castGravityPull(target);
         offer(NarutoAbilities.BANSHO_TENIN);
         return 45;
     }
@@ -568,7 +568,7 @@ public class BossJutsuGoal extends Goal {
                 return 26;
             }
             pay(30f);
-            castPhaseStrike(target); // Kamui, closing the distance through the gap
+            castWarpStrike(target);
             offer(NarutoAbilities.KAMUI);
             return 34;
         }
@@ -578,7 +578,7 @@ public class BossJutsuGoal extends Goal {
             return 32;
         }
         if (roll < 78 && pay(30f)) {
-            castPhaseStrike(target);
+            castWarpStrike(target);
             offer(NarutoAbilities.KAMUI);
             return 34;
         }
@@ -1567,7 +1567,16 @@ public class BossJutsuGoal extends Goal {
     }
 
     /** Obito: the other end of Kamui — you come to him. */
-    private void castKamuiPull(LivingEntity target) {
+    /**
+     * Bansho Ten'in: a gravity vector that drags the target in.
+     *
+     * Named castKamuiPull until now, and called by BOTH Obito and Nagato - so the one method
+     * was simultaneously labelled as Kamui and used as Bansho Ten'in, which is how the
+     * confusion kept being copied into new code. Kamui is a space-time technique that removes
+     * things to another dimension; it does not pull. This is the Rinnegan's attraction and is
+     * named for it.
+     */
+    private void castGravityPull(LivingEntity target) {
         Vec3 pull = this.boss.position().subtract(target.position()).normalize().scale(1.8).add(0, 0.4, 0);
         target.setDeltaMovement(pull);
         target.hurtMarked = true;
@@ -1582,7 +1591,15 @@ public class BossJutsuGoal extends Goal {
     }
 
     /** Obito: phases out and re-emerges behind you, striking as he lands. */
-    private void castPhaseStrike(LivingEntity target) {
+    /**
+     * A short-range warp behind the target followed by a melee blow.
+     *
+     * Was castPhaseStrike and commented as Kamui. It is not Kamui either - Obito's own ability
+     * is phasing his body so attacks pass through him, and Kakashi's is a remote warp that
+     * removes what he looks at. Teleporting behind someone and hitting them is neither, so it
+     * carries a name that describes what it actually does.
+     */
+    private void castWarpStrike(LivingEntity target) {
         if (this.boss.level() instanceof ServerLevel serverLevel) {
             NarutoParticles.spawnBurst(serverLevel, this.boss.position().add(0, 1.0, 0), 20, 0.6,
                     NarutoParticles.SHARINGAN_RED);

@@ -15,7 +15,15 @@ import net.minecraft.world.phys.Vec3;
 public class ChidoriAbility extends Ability implements Ability.Cooldown {
 
     private static final float BASE_COST = 60.0F;
-    private static final int ACTIVE_TICKS = 8 * 20;
+    /**
+     * How long the lightning stays in the hand.
+     *
+     * Eight seconds made this a melee buff you switched on and then fought normally under.
+     * Chidori is a single committed run at someone: you raise it, you go, and if you miss you
+     * have spent it. Three seconds is long enough to close a realistic gap and short enough
+     * that holding it is a decision rather than a state.
+     */
+    private static final int ACTIVE_TICKS = 3 * 20;
 
     @Override
     public ActivationType activationType() {

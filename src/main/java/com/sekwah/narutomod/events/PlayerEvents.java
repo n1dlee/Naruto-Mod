@@ -52,6 +52,15 @@ public class PlayerEvents {
             48.0D, 58.0D, 70.0D,
             90.0D
     };
+    /**
+     * Incoming damage multiplier while running a Chidori with no Sharingan open.
+     *
+     * Canon reason: the speed is the danger to the user, and the eye is what lets them react
+     * at it. Whether Chidori is castable without a Sharingan is a design choice; being free
+     * to do so is not.
+     */
+    private static final float CHIDORI_TUNNEL_VISION = 1.35f;
+
     /** Extra Rasengan launch per Wind Nature level, and the level past which it stops growing. */
     private static final double RASENGAN_WIND_KNOCKBACK = 0.9;
     private static final int RASENGAN_WIND_LEVEL_CAP = 10;
@@ -968,6 +977,15 @@ public class PlayerEvents {
             // Small and additive with the shells above rather than competing with them.
             if (ninjaData.isSharinganActive() && ninjaData.getSharinganTomoe() >= 3) {
                 reduction = Math.max(reduction, SHARINGAN_DANGER_SENSE_REDUCTION);
+            }
+            // Chidori's tunnel vision.
+            //
+            // The reason the technique needs a Sharingan is not the lightning - it is that at
+            // that speed the user cannot see a counterattack coming. Without the eye there was
+            // no cost at all for using it, which made the Sharingan requirement pure flavour.
+            // Holding one now means anything that does connect hits harder.
+            if (ninjaData.isChidoriActive() && !ninjaData.isSharinganActive()) {
+                event.setAmount(event.getAmount() * CHIDORI_TUNNEL_VISION);
             }
             if (reduction > 0f) {
                 event.setAmount(event.getAmount() * (1f - reduction));
