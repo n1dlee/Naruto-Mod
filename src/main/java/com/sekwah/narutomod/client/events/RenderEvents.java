@@ -32,9 +32,58 @@ public class RenderEvents {
     private static final net.minecraft.resources.ResourceLocation BAIKA_ABILITY =
             new net.minecraft.resources.ResourceLocation(NarutoMod.MOD_ID, "baika");
 
+    /**
+     * Stands a clinging ninja on the surface they are actually clinging to.
+     *
+     * Wall walking rendered the player bolt upright with their feet in the air, sliding up the
+     * bricks like a lift, because nothing ever turned the model - the pose handler bent the
+     * limbs into a climb and that was the whole of it. Standing on a ceiling was worse, since
+     * there was no way to draw it at all.
+     *
+     * The rotation goes on before the renderer's own transforms, so the body yaw the renderer
+     * applies afterwards turns the player about their new up axis rather than about the
+     * world's. Turning on a wall then works exactly like turning on the ground.
+     *
+     * Pivoted at the middle of the body rather than at the feet: the hitbox stays upright and
+     * axis-aligned whatever the model does - Minecraft has no rotated hitboxes - so the centre
+     * is the one point that stays put under both.
+     */
+    private static void orientToSurface(RenderPlayerEvent.Pre event,
+                                        com.sekwah.narutomod.capabilities.INinjaData ninjaData) {
+        if (!ninjaData.isWallWalkAttached()) {
+            return;
+        }
+        net.minecraft.core.Direction surface = ninjaData.getWallWalkDirection();
+        if (surface == null) {
+            return;
+        }
+        // Feet are against the surface, so the body's up points back out of it.
+        net.minecraft.world.phys.Vec3 up = net.minecraft.world.phys.Vec3
+                .atLowerCornerOf(surface.getOpposite().getNormal());
+        double dot = up.y;
+        if (dot > 0.999D) {
+            return; // standing on a floor; nothing to turn
+        }
+        // Upside down is the degenerate case: world up and body up are antiparallel, so their
+        // cross product is zero and normalising it would hand back NaN. Any horizontal axis
+        // gives the same half turn, so pick one.
+        net.minecraft.world.phys.Vec3 axis = dot < -0.999D
+                ? new net.minecraft.world.phys.Vec3(1.0D, 0.0D, 0.0D)
+                : new net.minecraft.world.phys.Vec3(0.0D, 1.0D, 0.0D).cross(up).normalize();
+        float angle = (float) Math.acos(net.minecraft.util.Mth.clamp(dot, -1.0D, 1.0D));
+
+        float half = event.getEntity().getBbHeight() * 0.5f;
+        var poseStack = event.getPoseStack();
+        poseStack.translate(0.0D, half, 0.0D);
+        poseStack.mulPose(new org.joml.Quaternionf().rotateAxis(
+                angle, (float) axis.x, (float) axis.y, (float) axis.z));
+        poseStack.translate(0.0D, -half, 0.0D);
+    }
+
     @SubscribeEvent
     public static void playerRenderEvent(RenderPlayerEvent.Pre event) {
         event.getEntity().getCapability(NinjaCapabilityHandler.NINJA_DATA).ifPresent(ninjaData -> {
+            orientToSurface(event, ninjaData);
             // Akimichi Multi-Size: enlarge the whole player render. Scaling here (not in a
             // sub-scope) is intentional — the dispatcher push/pops around the full render,
             // so the scale applies to exactly this entity and nothing else.

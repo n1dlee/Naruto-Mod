@@ -44,6 +44,15 @@ public class ChakraDragonEntity extends Entity {
     /** Synced so the renderer can taper and coil the body by how far along the flight it is. */
     private static final EntityDataAccessor<Float> PROGRESS =
             SynchedEntityData.defineId(ChakraDragonEntity.class, EntityDataSerializers.FLOAT);
+    /**
+     * Body size, as a multiple of the base seven-and-a-half-block serpent.
+     *
+     * Water Dragon and Kirin are not the same animal. One is a bullet you fire down a corridor;
+     * the other is the thing that comes out of a thunderhead and is supposed to be the largest
+     * object on screen. Drawing both at the same length made Kirin read as a blue streak.
+     */
+    private static final EntityDataAccessor<Float> SCALE =
+            SynchedEntityData.defineId(ChakraDragonEntity.class, EntityDataSerializers.FLOAT);
 
     private static final int MAX_LIFETIME = 20 * 6;
     /** How close to the destination counts as arrival. */
@@ -82,6 +91,40 @@ public class ChakraDragonEntity extends Entity {
         return this;
     }
 
+    /**
+     * How large a serpent this is, as a multiple of the base body.
+     *
+     * Also grows the hitbox, and not only so it collides honestly: an entity is culled against
+     * its bounding box, so a thirty-block Kirin hanging off a one-block box vanishes the moment
+     * that box leaves the frustum — which, for something descending from above while you are
+     * looking at the ground, is most of its flight.
+     */
+    public ChakraDragonEntity scale(float scale) {
+        this.entityData.set(SCALE, Math.max(0.2f, scale));
+        this.refreshDimensions();
+        return this;
+    }
+
+    public float getScale() {
+        return this.entityData.get(SCALE);
+    }
+
+    @Override
+    public net.minecraft.world.entity.EntityDimensions getDimensions(net.minecraft.world.entity.Pose pose) {
+        float width = 1.2f * this.getScale();
+        return net.minecraft.world.entity.EntityDimensions.scalable(width, width);
+    }
+
+    @Override
+    public void onSyncedDataUpdated(EntityDataAccessor<?> key) {
+        super.onSyncedDataUpdated(key);
+        // Dimensions are computed per side, so the client has to be told the body grew or it
+        // culls the dragon against a box the size of the one it was registered with.
+        if (SCALE.equals(key)) {
+            this.refreshDimensions();
+        }
+    }
+
     public Kind getKind() {
         return Kind.values()[Math.floorMod(this.entityData.get(KIND), Kind.values().length)];
     }
@@ -95,6 +138,7 @@ public class ChakraDragonEntity extends Entity {
     protected void defineSynchedData() {
         this.entityData.define(KIND, (byte) 0);
         this.entityData.define(PROGRESS, 0f);
+        this.entityData.define(SCALE, 1.0f);
     }
 
     @Override
@@ -133,7 +177,7 @@ public class ChakraDragonEntity extends Entity {
 
         // A dragon is a body, not a beam: anything it swims through is hit on the way past.
         for (LivingEntity caught : this.level().getEntitiesOfClass(LivingEntity.class,
-                this.getBoundingBox().inflate(1.4),
+                this.getBoundingBox().inflate(1.4 * this.getScale()),
                 e -> e != this.resolveOwner() && e.isAlive())) {
             caught.hurt(this.damageSources().magic(), this.damage * 0.5f);
             this.detonate();
@@ -171,6 +215,8 @@ public class ChakraDragonEntity extends Entity {
     protected void readAdditionalSaveData(CompoundTag tag) {
         this.lifetime = tag.getInt("Lifetime");
         this.entityData.set(KIND, tag.getByte("Kind"));
+        this.entityData.set(SCALE, tag.contains("Scale") ? tag.getFloat("Scale") : 1.0f);
+        this.refreshDimensions();
         // Everything that decides where this goes and what it does on arrival. Held only in
         // memory before, so a chunk unload mid-flight left the dragon with a destination of
         // (0,0,0) and default damage: it turned and flew at the world origin, and whatever it
@@ -187,6 +233,7 @@ public class ChakraDragonEntity extends Entity {
     protected void addAdditionalSaveData(CompoundTag tag) {
         tag.putInt("Lifetime", this.lifetime);
         tag.putByte("Kind", this.entityData.get(KIND));
+        tag.putFloat("Scale", this.entityData.get(SCALE));
         tag.putDouble("DestX", this.destination.x);
         tag.putDouble("DestY", this.destination.y);
         tag.putDouble("DestZ", this.destination.z);
@@ -224,6 +271,9 @@ public class ChakraDragonEntity extends Entity {
 
     @Override
     public boolean shouldRenderAtSqrDistance(double distance) {
-        return distance < 64 * 64;
+        // Scaled with the body: a Kirin starts its descent well over sixty blocks away, and
+        // being cut off at a fixed range is the other half of why it was never seen coming.
+        double range = 64 * this.getScale();
+        return distance < range * range;
     }
 }

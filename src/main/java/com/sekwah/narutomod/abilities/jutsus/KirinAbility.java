@@ -35,12 +35,35 @@ public class KirinAbility extends Ability implements Ability.Cooldown, Ability.C
     private static final double RANGE = 24.0;
     private static final float DIRECT_DAMAGE = 34f;
     private static final float SPLASH_DAMAGE = 10f;
-    private static final double SPLASH_RADIUS = 4.0;
+    /**
+     * What the landing actually covers.
+     *
+     * Kirin is not a sniper shot. Four blocks made it a point strike you could stand next to;
+     * the thing in the source flattens an area, and everything caught inside it goes with the
+     * target.
+     */
+    private static final double SPLASH_RADIUS = 6.0;
 
     /** Three seconds, matching the legacy mod's own wind-up exactly. */
     private static final int CHARGE_TICKS = 60;
     /** Where the thunderhead sits. The bolt is drawn down from here. */
     private static final int CLOUD_HEIGHT = 40;
+
+    /**
+     * How far above the target the dragon forms, and how fast it comes down.
+     *
+     * It used to form twenty-six blocks up and descend at 2.6 blocks a tick: ten ticks, half a
+     * second, entirely above the field of view of somebody looking at the target they had just
+     * marked. The technique was invisible in the most literal sense — the dragon existed, flew
+     * and detonated without ever crossing the screen.
+     *
+     * Fifty-five blocks at 1.15 a tick is roughly two and a half seconds of visible descent
+     * out of the cloud layer, which is the part of this technique everybody remembers.
+     */
+    private static final double DESCENT_HEIGHT = 55.0;
+    private static final double DESCENT_SPEED = 1.15;
+    /** Kirin is the largest thing on the field while it is coming down. */
+    private static final float BODY_SCALE = 3.4f;
 
     @Override
     public ActivationType activationType() {
@@ -172,19 +195,27 @@ public class KirinAbility extends Ability implements Ability.Cooldown, Ability.C
 
         // Kirin is a lightning dragon that comes down out of the cloud. It was a bare
         // vanilla bolt plus damage numbers, which is the one thing this technique is not.
-        Vec3 crown = target.position().add(0, 26, 0);
+        // Out of the cloud layer, not out of thin air just overhead. Clamped to the build
+        // height so this still works on a mountain top rather than forming inside the ceiling.
+        double crownY = Math.min(target.getY() + DESCENT_HEIGHT,
+                player.level().getMaxBuildHeight() - 2);
+        Vec3 crown = new Vec3(target.getX(), crownY, target.getZ());
         com.sekwah.narutomod.entity.jutsuprojectile.ChakraDragonEntity dragon =
                 new com.sekwah.narutomod.entity.jutsuprojectile.ChakraDragonEntity(
                         player, crown, target.position().add(0, target.getBbHeight() * 0.5, 0),
                         com.sekwah.narutomod.entity.jutsuprojectile.ChakraDragonEntity.Kind.LIGHTNING)
-                        .speed(2.6)
+                        .speed(DESCENT_SPEED)
+                        .scale(BODY_SCALE)
                         .damage(DIRECT_DAMAGE * multiplier, SPLASH_RADIUS);
         player.level().addFreshEntity(dragon);
 
         if (player.level() instanceof ServerLevel serverLevel) {
-            strike(serverLevel, target.position());
-            serverLevel.playSound(null, targetPos, SoundEvents.LIGHTNING_BOLT_IMPACT,
-                    SoundSource.PLAYERS, 4.0f, 0.8f);
+            // The thunderhead lighting up, drawn where the thunderhead is. This used to fire
+            // at the target's feet on the tick of the cast, which announced the impact
+            // several seconds before anything arrived there.
+            strike(serverLevel, crown);
+            serverLevel.playSound(null, targetPos, SoundEvents.LIGHTNING_BOLT_THUNDER,
+                    SoundSource.PLAYERS, 4.0f, 0.7f);
         }
     }
 

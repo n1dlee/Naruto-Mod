@@ -68,6 +68,12 @@ public class ChidoriNagashiAbility extends Ability implements Ability.Cooldown {
     }
 
 
+    /** The formed Chidori is what gets released — see Ability#builtOn. */
+    @Override
+    public HandsBusy builtOn() {
+        return HandsBusy.CHIDORI;
+    }
+
     @Override
     public boolean handleCost(Player player, INinjaData ninjaData, int chargeAmount) {
         // Phase 15: lightning-nature mastery gates this now (was Uchiha only)

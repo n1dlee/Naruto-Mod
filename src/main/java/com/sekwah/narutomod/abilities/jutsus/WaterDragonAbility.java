@@ -39,7 +39,19 @@ public class WaterDragonAbility extends Ability implements Ability.Cooldown {
     private static final float MAIN_DAMAGE = 18.0f;
     private static final float SPLASH_DAMAGE = 8.0f;
     private static final double KNOCKBACK = 4.0;
-    private static final int WINDUP_TICKS = 9;
+    /**
+     * How long the water gathers before the dragon is on its way.
+     *
+     * Nine ticks of coalescing spiral plus a fourteen-tick cast pose plus a body crossing
+     * twenty-five blocks at barely a block a tick added up to the better part of three
+     * seconds between pressing the combo and anything being hurt. Water Dragon is a bullet
+     * fired down a corridor - it is Kirin that is supposed to take its time.
+     */
+    private static final int WINDUP_TICKS = 4;
+    /** Roughly twice the old 1.15: twenty-five blocks in about half a second. */
+    private static final double DRAGON_SPEED = 2.4;
+    /** Big enough to read as a serpent rather than a blue dart, without rivalling Kirin. */
+    private static final float BODY_SCALE = 1.5f;
 
     @Override
     public ActivationType activationType() {
@@ -49,7 +61,7 @@ public class WaterDragonAbility extends Ability implements Ability.Cooldown {
     /** A long seal chain in canon - the longest of the water techniques here. */
     @Override
     public int castPoseTicks() {
-        return 14;
+        return 8;
     }
 
     @Override
@@ -111,7 +123,8 @@ public class WaterDragonAbility extends Ability implements Ability.Cooldown {
                 new com.sekwah.narutomod.entity.jutsuprojectile.ChakraDragonEntity(
                         player, eye.add(look.scale(1.5)).add(0, -0.4, 0), coalescePoint,
                         com.sekwah.narutomod.entity.jutsuprojectile.ChakraDragonEntity.Kind.WATER)
-                        .speed(1.15)
+                        .speed(DRAGON_SPEED)
+                        .scale(BODY_SCALE)
                         .damage(MAIN_DAMAGE * ninjaData.getRankDamageMultiplier(), SPLASH_RADIUS);
         player.level().addFreshEntity(dragon);
 

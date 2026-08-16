@@ -434,7 +434,10 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
     @Sync(minTicks = 1, syncGlobally = true)
     private int chidoriTicks = 0;
 
-    @Sync(minTicks = 1)
+    // Global, not owner-only: the renderer turns a clinging player onto the face they are
+    // standing on, and it has to do that for everybody else's ninja too. Owner-only sync left
+    // every other player upright and sliding along the wall.
+    @Sync(minTicks = 1, syncGlobally = true)
     private int wallWalkDirection = -1;
 
     @Sync(minTicks = 1)
@@ -1775,6 +1778,10 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
         }
 
         this.updateChidoriState(player);
+        this.updateTransformedMelee(player);
+        // Last, after every reader above: the edge is "swinging now, was not last tick", so
+        // recording this tick's state before they run would make the edge permanently false.
+        this.swingingLastTick = player.swinging;
         this.decayWallWalkState(player);
         this.updateShadowPossession(player);
         this.updateSageMode(player);
@@ -1835,17 +1842,22 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
     }
 
     /**
-     * Whether the user was already mid-swing last tick.
+     * Whether the player was already mid-swing last tick.
      *
-     * The Chidori resolves on the swing, not on a landed vanilla hit, so it needs the rising
-     * edge: {@code player.swinging} stays true for the whole animation and would otherwise
-     * fire the thrust six times per swing.
+     * Techniques with their own reach resolve on the swing rather than on a landed vanilla
+     * hit, so they need the rising edge: {@code player.swinging} stays true for the whole
+     * animation and would otherwise fire them six times per click. One detector shared by all
+     * of them, because two would eventually disagree about which tick the swing started on.
      */
-    private boolean chidoriSwinging = false;
+    private boolean swingingLastTick = false;
+
+    /** True on the single tick a new swing begins. */
+    private boolean swingStarted(Player player) {
+        return player.swinging && !this.swingingLastTick;
+    }
 
     private void updateChidoriState(Player player) {
         if (this.chidoriTicks <= 0) {
-            this.chidoriSwinging = player.swinging;
             return;
         }
         if (this.chakra < CHIDORI_TICK_COST) {
@@ -1859,13 +1871,8 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
         // reach and its own line - and a swing that finds nothing spends it. Vanilla melee
         // still lands it too (PlayerEvents), whichever fires first; both clear the flag, so
         // the second one finds nothing to do.
-        if (player.swinging && !this.chidoriSwinging) {
-            this.chidoriSwinging = true;
+        if (this.swingStarted(player)) {
             com.sekwah.narutomod.util.ChidoriStrike.thrust(player, this);
-            return;
-        }
-        if (!player.swinging) {
-            this.chidoriSwinging = false;
         }
         player.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SPEED, 8, 0, false, false));
         // The arcs are drawn client-side from isChidoriActive (see JutsuVfxHandler), which is
@@ -3104,6 +3111,28 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
         }
     }
 
+    /**
+     * A manifested form swings when the player swings, not when vanilla melee happens to land.
+     *
+     * Both of these used to hang off LivingHurtEvent, which fires only after a normal attack
+     * has already connected — and a normal attack reaches three blocks. So a Complete Body
+     * Susanoo carrying a twenty-two-block sword could only use it on something close enough to
+     * punch, and swinging at anything further away did nothing at all: no damage, no arc, no
+     * sound. The largest thing on the battlefield had the reach of a man with a knife, and the
+     * sword was decoration.
+     *
+     * Driving them from the swing instead gives each form its own reach and, just as
+     * importantly, makes a miss visible. The old calls in PlayerEvents are gone rather than
+     * kept alongside this, so a swing that does connect cannot fire the area attack twice.
+     */
+    private void updateTransformedMelee(Player player) {
+        if (!this.swingStarted(player)) {
+            return;
+        }
+        this.triggerSusanooArmSwipe(player, null);
+        this.triggerKuramaTailLash(player, null);
+    }
+
     public void triggerSusanooArmSwipe(Player player, net.minecraft.world.entity.LivingEntity primaryTarget) {
         if (!this.susanooActive || this.susanooStage < 2) return;
         if (!(player.level() instanceof ServerLevel serverLevel)) return;
@@ -3184,6 +3213,31 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
      * hit by the triggering melee attack), only once the fox exoskeleton has grown enough
      * tails (4+) for them to double as weapons. Called externally from the melee-hit handler.
      */
+    /**
+     * How far away the closest thing worth hitting is, or the search range if there is nothing.
+     *
+     * Returning the range rather than infinity on an empty search means a swing at open air
+     * uses the long form, which is the right guess: you reach for something distant, and a
+     * miss that sweeps is more readable than a miss that jabs.
+     */
+    private double nearestInFront(Player player, double range) {
+        Vec3 eye = player.getEyePosition();
+        Vec3 look = player.getLookAngle();
+        double nearest = range;
+        for (net.minecraft.world.entity.LivingEntity candidate : player.level().getEntitiesOfClass(
+                net.minecraft.world.entity.LivingEntity.class,
+                player.getBoundingBox().expandTowards(look.scale(range)).inflate(range * 0.6),
+                e -> e != player && e.isAlive()
+                        && !com.sekwah.narutomod.util.Faction.sameSide(player, e))) {
+            Vec3 toTarget = candidate.position().add(0, candidate.getBbHeight() * 0.5, 0).subtract(eye);
+            if (toTarget.normalize().dot(look) < 0.0D) {
+                continue; // behind the swing
+            }
+            nearest = Math.min(nearest, toTarget.length());
+        }
+        return nearest;
+    }
+
     public void triggerKuramaTailLash(Player player, net.minecraft.world.entity.LivingEntity primaryTarget) {
         if (!this.kuramaCloakActive || this.kuramaTailCount < 4) return;
         if (!(player.level() instanceof ServerLevel serverLevel)) return;
@@ -3198,9 +3252,25 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
         // one thing a giant must never be. At nine tails it sweeps wide enough to reach a
         // Susanoo standing across from it, and hits like something that size should.
         boolean fullAvatar = this.kuramaTailCount >= 9;
-        double range = fullAvatar ? 26.0 : 4.5;
-        double halfAngleCos = Math.cos(Math.toRadians(fullAvatar ? 85 : 60));
-        float damage = (fullAvatar ? 42.0f : 6.0f) * this.getRankDamageMultiplier();
+
+        // Hand or tail, chosen by where the target actually is.
+        //
+        // A fox this size does not lash a tail at something standing against its chest, and it
+        // does not try to reach across a valley with a paw. Everything used to be a tail
+        // sweep at one fixed range, so the two halves of how the thing fights were collapsed
+        // into whichever number happened to be in the constant.
+        double handRange = fullAvatar ? 9.0 : 3.0;
+        double tailRange = fullAvatar ? 26.0 : 7.0;
+        boolean withinArmsReach = this.nearestInFront(player, tailRange) <= handRange;
+
+        double range = withinArmsReach ? handRange : tailRange;
+        // The paw is a focused blow and the tail is a sweep, so they do not cover the same arc.
+        double halfAngleCos = Math.cos(Math.toRadians(withinArmsReach
+                ? (fullAvatar ? 50 : 45)
+                : (fullAvatar ? 85 : 60)));
+        float damage = (withinArmsReach
+                ? (fullAvatar ? 52.0f : 9.0f)
+                : (fullAvatar ? 42.0f : 6.0f)) * this.getRankDamageMultiplier();
 
         this.processingMeleeAoE = true;
         try {
@@ -3224,7 +3294,20 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
             this.processingMeleeAoE = false;
         }
 
-        if (fullAvatar) {
+        if (withinArmsReach) {
+            // A paw comes down in a line, not an arc: the effect runs out along the blow.
+            for (int i = 0; i <= 12; i++) {
+                double t = i / 12.0;
+                Vec3 point = eye.add(look.scale(range * t)).add(0, fullAvatar ? 2.0 - 4.0 * t : 0.0, 0);
+                serverLevel.sendParticles(
+                        new DustParticleOptions(new Vector3f(1.0f, 0.4f, 0.05f), fullAvatar ? 3.0f : 1.3f),
+                        point.x, point.y, point.z, 3, 0.35, 0.35, 0.35, 0.03);
+            }
+            serverLevel.playSound(null, player.blockPosition(),
+                    net.minecraft.sounds.SoundEvents.PLAYER_ATTACK_CRIT,
+                    net.minecraft.sounds.SoundSource.PLAYERS,
+                    fullAvatar ? 3.0f : 1.0f, fullAvatar ? 0.4f : 0.8f);
+        } else if (fullAvatar) {
             // The sweep is drawn as an arc across the front of the fox rather than a puff at
             // its nose: the attack covers most of a half-circle, and the effect has to show
             // where it actually reached or the range is invisible.

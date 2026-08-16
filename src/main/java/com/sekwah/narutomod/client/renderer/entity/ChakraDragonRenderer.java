@@ -76,6 +76,9 @@ public class ChakraDragonRenderer extends EntityRenderer<ChakraDragonEntity> {
         poseStack.mulPose(com.mojang.math.Axis.YP.rotationDegrees(-entityYaw));
         poseStack.mulPose(com.mojang.math.Axis.XP.rotationDegrees(
                 Mth.lerp(partialTick, dragon.xRotO, dragon.getXRot())));
+        // Kirin and a Water Dragon are not the same animal - see ChakraDragonEntity#scale.
+        float scale = dragon.getScale();
+        poseStack.scale(scale, scale, scale);
 
         VertexConsumer consumer = bufferSource.getBuffer(NarutoRenderTypes.CHAKRA_GLOW);
         Matrix4f matrix = poseStack.last().pose();

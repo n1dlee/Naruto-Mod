@@ -66,6 +66,17 @@ public class ChidoriDashAbility extends Ability implements Ability.Cooldown {
     }
 
 
+    /**
+     * The dash you make WITH a Chidori, so a live one must not refuse it.
+     *
+     * Unlike Nagashi this does not require one — the lunge stands on its own — but casting it
+     * with the lightning already lit is the normal way it happens, and that was blocked.
+     */
+    @Override
+    public HandsBusy builtOn() {
+        return HandsBusy.CHIDORI;
+    }
+
     @Override
     public boolean handleCost(Player player, INinjaData ninjaData, int chargeAmount) {
         // Phase 15: lightning-nature mastery gates this now (was Uchiha + Sharingan only)

@@ -63,6 +63,12 @@ public class RasenshurikenAbility extends Ability implements Ability.Cooldown {
     }
 
 
+    /** The held Rasengan is the ingredient, not an obstacle — see Ability#builtOn. */
+    @Override
+    public HandsBusy builtOn() {
+        return HandsBusy.RASENGAN;
+    }
+
     @Override
     public boolean handleCost(Player player, INinjaData ninjaData, int chargeAmount) {
         if (!ninjaData.isRasenganHeld()) {

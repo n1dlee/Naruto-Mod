@@ -207,12 +207,43 @@ public class WaterWalkAbility extends Ability implements Ability.Toggled {
         if (player.onGround() && player.zza <= 0.0F) {
             return null;
         }
-        for (Direction direction : Direction.Plane.HORIZONTAL) {
+        // Whatever they are actually facing wins, so running at a specific wall in a corner
+        // attaches to that one rather than to whichever of the four the enum happens to list
+        // first. Only then fall back to scanning.
+        Direction faced = Direction.getNearest(
+                player.getLookAngle().x, player.getLookAngle().y, player.getLookAngle().z);
+        if (isClingable(faced) && hasWallBlock(level, base, faced)) {
+            return faced;
+        }
+        for (Direction direction : CLINGABLE) {
             if (hasWallBlock(level, base, direction)) {
                 return direction;
             }
         }
         return player.horizontalCollision ? Direction.fromYRot(player.getYRot()) : null;
+    }
+
+    /**
+     * Faces a ninja can stand on.
+     *
+     * The four walls and the ceiling. DOWN is left out because a surface underneath you is
+     * just the floor, and clinging to it is what walking already does.
+     *
+     * Only the horizontals were ever considered, which is why the technique was a ladder: you
+     * could go up a wall and that was the whole of it. Chakra control in the source is used to
+     * stand on ceilings and under branches at least as often as it is used to climb.
+     */
+    private static final Direction[] CLINGABLE = {
+            Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST, Direction.UP
+    };
+
+    private static boolean isClingable(Direction direction) {
+        for (Direction candidate : CLINGABLE) {
+            if (candidate == direction) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private boolean hasWallBlock(Level level, BlockPos base, Direction direction) {
@@ -228,27 +259,42 @@ public class WaterWalkAbility extends Ability implements Ability.Toggled {
 
     private void applyWallPlaneMovement(Player player, INinjaData ninjaData, Direction wallDirection) {
         Vec3 normal = Vec3.atLowerCornerOf(wallDirection.getNormal());
-        Vec3 wallForward = getWallPlaneForward(normal);
+        Vec3 wallForward = getWallPlaneForward(player, normal);
         Vec3 wallRight = normal.cross(wallForward).normalize();
         double baseSpeed = player.isShiftKeyDown() ? WALL_WALK_SNEAK_SPEED : WALL_WALK_RUN_SPEED;
         double verticalInput = player.zza;
         double horizontalInput = player.xxa;
-        double verticalSpeed = verticalInput < 0.0D ? baseSpeed * WALL_WALK_DESCEND_MULTIPLIER : baseSpeed;
 
-        // Ceiling guard — don't let climbing push the player's head into a solid block above
-        if (verticalInput > 0.0D && hasCeilingAbove(player.level(), player.blockPosition())) {
-            verticalInput = 0.0D;
-        }
-
-        Vec3 wallMovement = wallForward.scale(verticalInput * verticalSpeed)
+        Vec3 wallMovement = wallForward.scale(verticalInput * baseSpeed)
                 .add(wallRight.scale(-horizontalInput * baseSpeed))
                 .add(normal.scale(WALL_GRIP_PUSH));
         if (Math.abs(verticalInput) < 0.01D && Math.abs(horizontalInput) < 0.01D) {
             wallMovement = normal.scale(WALL_GRIP_PUSH);
         }
 
-        // Descending onto solid ground — detach smoothly instead of fighting collision at the base of the wall
-        if (verticalInput < 0.0D && hasSolidGroundBelow(player.level(), player.blockPosition())) {
+        // Running into another face turns the corner onto it, rather than grinding to a halt
+        // against it. This is what makes a wall and the ceiling above it one continuous
+        // surface instead of two unrelated features - go up far enough and you keep going,
+        // upside down, which is the thing the technique is for.
+        Vec3 travel = wallMovement.subtract(normal.scale(WALL_GRIP_PUSH));
+        if (travel.lengthSqr() > 1.0E-6) {
+            Direction ahead = Direction.getNearest(travel.x, travel.y, travel.z);
+            if (ahead != wallDirection && ahead != wallDirection.getOpposite()
+                    && isClingable(ahead)
+                    && hasWallBlock(player.level(), player.blockPosition(), ahead)) {
+                ninjaData.setWallWalkDirection(ahead);
+                applyWallPlaneMovement(player, ninjaData, ahead);
+                return;
+            }
+        }
+
+        // Landing. Only when they are genuinely on top of a floor and heading into it, rather
+        // than any time a solid block existed somewhere below: the old test looked a whole
+        // block down, which at the foot of any wall is the ground, so pressing back detached
+        // instantly and walking DOWN a wall was impossible from the moment you set off.
+        if (travel.y < -0.001D && wallDirection.getAxis().isHorizontal()
+                && isWallBlock(player.level(), net.minecraft.core.BlockPos.containing(
+                        player.getX(), player.getY() - 0.3D, player.getZ()))) {
             ninjaData.setWallWalkAttached(false);
             player.setNoGravity(false);
             player.setDeltaMovement(0.0D, 0.0D, 0.0D);
@@ -271,28 +317,36 @@ public class WaterWalkAbility extends Ability implements Ability.Toggled {
     }
 
     /**
-     * "Up the wall" is always world-up projected onto the wall plane — deliberately NOT derived
-     * from the player's look angle. Using look angle here was the root cause of the wall-walk
-     * launch bug: glancing up/down with the mouse changed the climb direction each tick, so W/S
-     * could spike vertical velocity unpredictably. This keeps climbing direction fixed regardless
-     * of where the camera is pointed, matching literal "walk straight up the wall" chakra control.
+     * Which way "forward" points along the surface: wherever the player is looking.
+     *
+     * This used to be world-up projected onto the wall, fixed, whatever the camera was doing —
+     * so W always climbed and S always descended and there was no such thing as running along
+     * a wall or turning on it. The surface was a ladder with two rungs.
+     *
+     * It was written that way to kill a real bug: deriving forward from the look angle made the
+     * climb direction flip as the mouse moved, and combined with a speed that scaled off the
+     * same vector, W could spike the player's velocity. The direction is not the part that was
+     * dangerous — the magnitude was. Forward is normalised here and the speed is a constant, so
+     * where the camera points changes only where you go, never how fast.
+     *
+     * The fallbacks matter: looking straight into a wall leaves nothing to project, and a zero
+     * vector normalises to NaN, which Math.min and Math.max propagate rather than clamp. World
+     * up on a wall, and the body's own facing on a ceiling, are both always perpendicular to
+     * the surface they are used on.
      */
-    private Vec3 getWallPlaneForward(Vec3 wallNormal) {
-        Vec3 up = projectOntoWallPlane(new Vec3(0.0D, 1.0D, 0.0D), wallNormal);
-        if (up.lengthSqr() < 0.0001D) {
-            return new Vec3(0.0D, 1.0D, 0.0D);
+    private Vec3 getWallPlaneForward(Player player, Vec3 wallNormal) {
+        Vec3 looking = projectOntoWallPlane(player.getLookAngle(), wallNormal);
+        if (looking.lengthSqr() > 0.0025D) {
+            return looking.normalize();
         }
-        return up.normalize();
-    }
-
-    private boolean hasCeilingAbove(Level level, BlockPos base) {
-        BlockState state = level.getBlockState(base.above(2));
-        return !state.isAir() && state.blocksMotion();
-    }
-
-    private boolean hasSolidGroundBelow(Level level, BlockPos base) {
-        BlockState state = level.getBlockState(base.below());
-        return !state.isAir() && state.blocksMotion();
+        Vec3 up = projectOntoWallPlane(new Vec3(0.0D, 1.0D, 0.0D), wallNormal);
+        if (up.lengthSqr() > 0.0001D) {
+            return up.normalize();
+        }
+        // On a ceiling, world up IS the normal, so fall back to which way the body faces.
+        Vec3 facing = Vec3.directionFromRotation(0.0F, player.getYRot());
+        Vec3 flattened = projectOntoWallPlane(facing, wallNormal);
+        return flattened.lengthSqr() > 0.0001D ? flattened.normalize() : new Vec3(0.0D, 0.0D, -1.0D);
     }
 
     private Vec3 projectOntoWallPlane(Vec3 vector, Vec3 wallNormal) {

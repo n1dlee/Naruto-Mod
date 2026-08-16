@@ -179,31 +179,71 @@ public abstract class Ability {
         return true;
     }
 
+    /** What a caster's hands can already be committed to. */
+    public enum HandsBusy {
+        RASENGAN("Rasengan"),
+        CHIDORI("Chidori"),
+        CHANNEL("another technique");
+
+        private final String label;
+
+        HandsBusy(String label) {
+            this.label = label;
+        }
+    }
+
+    /**
+     * A technique this one is built out of, and which therefore must not block it.
+     *
+     * The free-hands rule below was written to stop unrelated techniques being layered on top
+     * of each other, and it did — including the ones that are supposed to be layered. A
+     * Rasenshuriken is a held Rasengan being reshaped and Chidori Nagashi is a formed Chidori
+     * being released through the body; both check for the thing in your hand in their own
+     * handleCost and were then refused for having it. Neither could ever be cast, which is a
+     * gate that fires on exactly the wrong half of the cases it sees.
+     *
+     * Null means the technique is built out of nothing and the ordinary rule applies.
+     */
+    @javax.annotation.Nullable
+    public HandsBusy builtOn() {
+        return null;
+    }
+
     /**
      * Refuses the cast when another technique already occupies the caster.
      *
      * Only three things count as occupying: a formed Rasengan, a live Chidori, and an
-     * in-progress channel. Those are the states where the hands are visibly committed.
+     * in-progress channel. Those are the states where the hands are visibly committed — and
+     * a technique that declares one of them through {@link #builtOn} is allowed through it,
+     * because for that technique the occupied hand is the ingredient rather than the obstacle.
      */
     public boolean checkFreeHands(Player player, INinjaData ninjaData) {
         if (!this.requiresFreeHands()) {
             return true;
         }
-        String blocker = null;
-        if (ninjaData.isRasenganHeld()) {
-            blocker = "Rasengan";
-        } else if (ninjaData.isChidoriActive()) {
-            blocker = "Chidori";
-        } else if (ninjaData.getCurrentlyChanneledAbility() != null) {
-            blocker = "another technique";
-        }
-        if (blocker == null) {
+        HandsBusy blocker = occupiedBy(ninjaData);
+        if (blocker == null || blocker == this.builtOn()) {
             return true;
         }
         player.displayClientMessage(net.minecraft.network.chat.Component.literal(
-                        "Your hands are busy with " + blocker + ".")
+                        "Your hands are busy with " + blocker.label + ".")
                 .withStyle(net.minecraft.ChatFormatting.YELLOW), true);
         return false;
+    }
+
+    /** Whatever the caster's hands are already committed to, or null if they are free. */
+    @javax.annotation.Nullable
+    private static HandsBusy occupiedBy(INinjaData ninjaData) {
+        if (ninjaData.isRasenganHeld()) {
+            return HandsBusy.RASENGAN;
+        }
+        if (ninjaData.isChidoriActive()) {
+            return HandsBusy.CHIDORI;
+        }
+        if (ninjaData.getCurrentlyChanneledAbility() != null) {
+            return HandsBusy.CHANNEL;
+        }
+        return null;
     }
 
     /**

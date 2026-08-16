@@ -708,7 +708,6 @@ public class PlayerEvents {
         applyNatureAffinity(event);
         applyChidoriMeleeHit(event);
         applyRasenganMeleeHit(event);
-        applyTransformationMeleeHit(event);
         applyTransformationDamageSponge(event);
         applyPretaAbsorption(event);
         applyCombatXp(event);
@@ -796,8 +795,7 @@ public class PlayerEvents {
      *
      * Deliberately restricted to the VANILLA player-attack damage type: jutsu use their own
      * damage types and already scale via getRankDamageMultiplier(), so boosting them here
-     * would double-dip. (Kurama Cloak / Susanoo melee multipliers stack separately in
-     * applyTransformationMeleeHit.)
+     * would double-dip. (Kurama Cloak and Susanoo fold into meleeStateMultiplier below.)
      */
     private static final float[] RANK_MELEE_FLAT_BONUS = {0F, 1F, 2F, 4F, 6F};
 
@@ -808,8 +806,8 @@ public class PlayerEvents {
     /**
      * The single place a melee swing gets multiplied.
      *
-     * It used to be three: the mode multiplier here, the Susanoo and Kurama multipliers in
-     * applyTransformationMeleeHit, and Chakra Flow's bonus in between - and all of them
+     * It used to be three: the mode multiplier here, a second Susanoo and Kurama pass on the
+     * same event, and Chakra Flow's bonus in between - and all of them
      * multiplied. Sage Mode times Kurama Chakra Mode times the cloak times the shell reached
      * forty-three, which is why a Six Paths player put Madara down in four swings despite his
      * seven hundred effective health.
@@ -1132,23 +1130,6 @@ public class PlayerEvents {
      * Both multipliers default to 1.0 when their respective transformation is inactive,
      * so this is safe to apply unconditionally on every player melee hit.
      */
-    private static void applyTransformationMeleeHit(LivingHurtEvent event) {
-        if (!(event.getSource().getEntity() instanceof Player attacker)) {
-            return;
-        }
-        LivingEntity target = event.getEntity();
-        attacker.getCapability(NinjaCapabilityHandler.NINJA_DATA).ifPresent(ninjaData -> {
-            if (!ninjaData.isNinjaModeEnabled()) {
-                return;
-            }
-            // No multiplication here any more - the shell's and the cloak's contributions are
-            // folded into meleeStateMultiplier, which caps the total. Applying them a second
-            // time is what turned a swing into two hundred damage. This handler now only does
-            // what it is uniquely for: the area attacks the manifested forms swing alongside.
-            ninjaData.triggerSusanooArmSwipe(attacker, target);
-            ninjaData.triggerKuramaTailLash(attacker, target);
-        });
-    }
 
     /**
      * The canon path to a Mangekyo: it opens through the trauma of killing someone you
