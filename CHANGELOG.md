@@ -1,5 +1,69 @@
 # Changelog
 
+## 2.4-RELEASE (2026-08-16)
+
+Animation, effects and the boss fights. Most of this release exists because the mod looked
+like it had one animation and one effect, and the reasons turned out to be structural.
+
+### Animation
+
+* **Keyframes.** Poses were a single fixed shape fading in and out, so thirteen stances read
+  as twelve still images and one run cycle. Poses can now wind up, strike and recover, and
+  every existing stance was rewritten onto that. Long stances breathe.
+* **First person.** None of it was ever visible to the person casting - the hand renderer
+  calls setupAnim with all-zero arguments and then wipes the arm's rotation before drawing.
+  Both halves are now worked around, so you can see your own seals.
+* **New stances**: Rasengan held out to the side, Amaterasu through the eye, the roar as a
+  gate is forced, landing from a fall, earth palms driven into the ground, medical ninjutsu,
+  the Nara rat seal, Kaiten, Substitution, Kamui, Wood Release, and the Susanoo sword swing.
+* The Kurama Chakra Mode shroud follows the wearer instead of standing to attention inside a
+  sprinting body.
+
+### Effects
+
+* **Rasengan is a sphere** and **Chidori is lightning** - real geometry with a silhouette,
+  not clouds of dust sprites. Chidori's bolts are camera-facing ribbons that reseed every
+  tick, so they flicker rather than writhe.
+* **One shape per technique, not one per element.** A five-petalled rose curve for Phoenix
+  Flower, a helix tightening into the muzzle for Water Bullet, a flat crescent for Air Palm,
+  four corkscrewing streamlines for Great Breakthrough, a hexagonal dendrite for ice, a
+  wandering fissure for earth, a double helix for Wood Release, a forking bolt for False
+  Darkness.
+* The Eight Gates aura is a shell wrapped around the wearer rather than a fog bank they
+  stand inside, and its colour escalates green to blue to a deep red at the eighth gate.
+
+### Combat
+
+* **Susanoo can be broken.** The shell has its own integrity - 220 at the ribcage up to 1800
+  at Complete Body - and absorbs damage instead of discounting it. Breaking it costs the
+  wearer three minutes without one. Bosses play by the same table.
+* **Giants have a real hitbox.** An eighteen-block form was a picture around a 0.6-wide body;
+  it can now be hit where it looks, blocks a corridor, bridges small shafts, and steps over
+  four blocks of terrain.
+* **Dragons exist.** Water Dragon and Kirin summon an actual serpent, head imported from the
+  1.12.2 mod. Kirin comes down out of the sky.
+* **Yasaka Magatama**, so a Complete Body has something to do at range.
+* **The Bijudama takes the full doubling ladder** - Kurama's is 256 times the One Tail's -
+  and the beast rears back to fire it.
+* Kurama's tails and the Susanoo's sword reach as far as bodies that size should.
+* The Ice Mirrors cage the opponent instead of caging empty ground.
+* Chibaku Tensei tears the ground open and smothers whatever it seals inside.
+* Ice spikes carpet the ground and drive vanilla's freeze track; both spike techniques erupt
+  in a disc around the caster, sized by element mastery to twenty blocks.
+
+### Eyes
+
+* Sharingan, Mangekyo, Rinnegan, Byakugan and Sage Mode now show on the face, visible to
+  everyone. A transplanted Sharingan shows in one eye.
+
+### Fixes
+
+* The Rasengan was permanent and did not throw anyone - the toggle re-formed it every tick,
+  and the knockback was never sent to hit players.
+* Holding sprint closed the Eight Gates.
+* Jutsu could be layered: a Rasengan, a Chidori and a charging Fireball at once.
+* Two combo collisions, and six constants left dead by the reworks above.
+
 ## 2.3-RELEASE (2026-08-14)
 
 The content port from the 1.12.2 mod. Entries below are written by hand: everything from
