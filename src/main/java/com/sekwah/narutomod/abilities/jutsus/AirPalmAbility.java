@@ -74,6 +74,12 @@ public class AirPalmAbility extends Ability implements Ability.Cooldown {
 
     @Override
     public void performServer(Player player, INinjaData ninjaData, int ticksActive) {
+        // A flat crescent of compressed air - the Hyuga palm is a blade, not a puff.
+        if (player.level() instanceof net.minecraft.server.level.ServerLevel vfxLevel) {
+            com.sekwah.narutomod.util.ElementalVfx.windCrescent(vfxLevel,
+                    player.getEyePosition().add(0, -0.25, 0), player.getLookAngle(), 0.9);
+        }
+
         boolean byakuganActive = ninjaData.isByakuganActive();
         double range = byakuganActive ? FULL_RANGE : HALF_RANGE;
         float damage = DAMAGE * ninjaData.getRankDamageMultiplier();

@@ -76,6 +76,12 @@ public class EarthWallJutsuAbility extends Ability implements Ability.Cooldown {
 
     @Override
     public void performServer(Player player, INinjaData ninjaData, int ticksActive) {
+        // Dust bursting along the wall's footprint - a seam, not a ring around the caster.
+        if (player.level() instanceof net.minecraft.server.level.ServerLevel vfxLevel) {
+            com.sekwah.narutomod.util.ElementalVfx.stoneFootprint(vfxLevel,
+                    player.position(), player.getLookAngle(), 5.0);
+        }
+
         double yawRad = Math.toRadians(Math.round(player.getYRot() / 90.0) * 90.0);
 
         int forwardX = (int) Math.round(-Math.sin(yawRad));

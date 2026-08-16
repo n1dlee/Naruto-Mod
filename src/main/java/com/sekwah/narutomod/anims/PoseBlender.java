@@ -38,7 +38,11 @@ public final class PoseBlender {
         SAGE,
         KURAMA,
         SUSANOO,
-        GATES
+        GATES,
+        /** The one-off roar as a gate is forced open, distinct from the sustained tremor. */
+        GATES_OPEN,
+        /** Absorbing a drop. Ninja land in a crouch; they do not thump down flat-footed. */
+        LANDING
     }
 
     /**
@@ -47,10 +51,36 @@ public final class PoseBlender {
      */
     public static final float EPSILON = 0.01f;
 
-    /** [0] = current weight, [1] = the ageInTicks at which it was last advanced. */
+    /**
+     * [0] = current weight, [1] = the ageInTicks at which it was last advanced,
+     * [2] = ticks this track has been continuously active, reset the moment it turns off.
+     *
+     * Slot 2 is what lets a pose move rather than merely appear. Weight alone only says how
+     * far a stance has faded in, so a pose driven by weight is one fixed shape that dissolves
+     * in and out - which is exactly why every stance in this mod except the run read as a
+     * still image. Elapsed time gives a pose somewhere to travel: a wind-up, a strike and a
+     * recovery are three points on this clock, not three separate tracks.
+     */
     private static final Map<Entity, EnumMap<Track, float[]>> STATE = new WeakHashMap<>();
 
     private PoseBlender() {
+    }
+
+    /**
+     * How long this track has been continuously active, in ticks, carrying the partial tick.
+     *
+     * Returns 0 for a track that is off or has never run. Poses with a known duration should
+     * normalise this into a 0..1 phase and feed it to a {@link Curve}; endless stances (a
+     * transformation, a channel that runs until released) can use it raw to drive a breath or
+     * an idle sway that never repeats exactly on the frame it started.
+     */
+    public static float elapsed(Entity entity, Track track) {
+        EnumMap<Track, float[]> tracks = STATE.get(entity);
+        if (tracks == null) {
+            return 0f;
+        }
+        float[] state = tracks.get(track);
+        return state == null ? 0f : state[2];
     }
 
     /**
@@ -68,7 +98,7 @@ public final class PoseBlender {
             // Adopt the current state on first sight rather than easing up from zero. A player
             // who is already mid-jutsu when they come into view should be in the stance, not
             // caught playing the entry as if they had just cast it.
-            state = new float[]{active ? 1f : 0f, ageInTicks};
+            state = new float[]{active ? 1f : 0f, ageInTicks, 0f};
             tracks.put(track, state);
         }
 
@@ -76,6 +106,10 @@ public final class PoseBlender {
         // unclamped delta would teleport the weight and undo the whole point of blending.
         float delta = Mth.clamp(ageInTicks - state[1], 0f, 5f);
         state[1] = ageInTicks;
+
+        // Reset on the falling edge, not while off, so a pose reading elapsed() during its
+        // fade-out still sees where it finished rather than snapping back to its first frame.
+        state[2] = active ? state[2] + delta : 0f;
 
         float step = rampTicks <= 0f ? 1f : delta / rampTicks;
         state[0] = approach(state[0], active ? 1f : 0f, step);
@@ -118,5 +152,120 @@ public final class PoseBlender {
         part.xRot += xRot * weight;
         part.yRot += yRot * weight;
         part.zRot += zRot * weight;
+    }
+
+    /**
+     * A keyframed curve for one limb: stops in phase space, each a time plus an x/y/z triple.
+     *
+     * A jutsu is a movement, not a position. Fireball is hands gathering at the chest, a snap
+     * to the mouth, then a drop; a thrown kunai is a cocked arm and a whip forward. Written as
+     * a single target rotation - which is all this file could express before - both of those
+     * collapse to their middle frame and the throw becomes a salute. A curve lets the pose be
+     * authored the way it actually reads.
+     *
+     * Stops are given flat, four floats at a time, in ascending time order:
+     * <pre>
+     *   Curve.of(0.00f, -0.4f, -0.2f, 0f,
+     *            0.35f, -2.1f, -0.35f, 0f,
+     *            1.00f, -0.2f,  0f,    0f)
+     * </pre>
+     * Time is normally 0..1 across the pose, but nothing here requires that: a looping stance
+     * can hand in seconds and let the curve clamp at both ends.
+     */
+    public static final class Curve {
+
+        private static final int STRIDE = 4;
+
+        private final float[] stops;
+
+        private Curve(float[] stops) {
+            this.stops = stops;
+        }
+
+        public static Curve of(float... stops) {
+            if (stops.length < STRIDE || stops.length % STRIDE != 0) {
+                throw new IllegalArgumentException(
+                        "A curve is groups of four (time, x, y, z); got " + stops.length + " floats");
+            }
+            for (int i = STRIDE; i < stops.length; i += STRIDE) {
+                if (stops[i] < stops[i - STRIDE]) {
+                    throw new IllegalArgumentException("Curve stops must ascend in time");
+                }
+            }
+            return new Curve(stops);
+        }
+
+        /** Blends the part's rotation toward this curve's value at the given phase. */
+        public void rotate(ModelPart part, float phase, float weight) {
+            sample(phase);
+            PoseBlender.rotate(part, weight, sx, sy, sz);
+        }
+
+        /** Same, for the part's offset from its default position. */
+        public void position(ModelPart part, float phase, float weight) {
+            sample(phase);
+            PoseBlender.position(part, weight, sx, sy, sz);
+        }
+
+        /** Adds this curve's value on top of whatever the part already has. */
+        public void addRotation(ModelPart part, float phase, float weight) {
+            sample(phase);
+            PoseBlender.addRotation(part, weight, sx, sy, sz);
+        }
+
+        // Single-axis reads, for poses that drive one number - a lean, a sink, a head tilt -
+        // and would otherwise need a whole three-axis curve to carry it.
+
+        public float sampleX(float phase) {
+            sample(phase);
+            return this.sx;
+        }
+
+        public float sampleY(float phase) {
+            sample(phase);
+            return this.sy;
+        }
+
+        public float sampleZ(float phase) {
+            sample(phase);
+            return this.sz;
+        }
+
+        // Sampling writes here rather than allocating a vector per limb per frame. Safe
+        // because every caller is the client render thread, one limb at a time.
+        private float sx;
+        private float sy;
+        private float sz;
+
+        private void sample(float phase) {
+            int last = this.stops.length - STRIDE;
+            if (phase <= this.stops[0]) {
+                this.sx = this.stops[1];
+                this.sy = this.stops[2];
+                this.sz = this.stops[3];
+                return;
+            }
+            if (phase >= this.stops[last]) {
+                this.sx = this.stops[last + 1];
+                this.sy = this.stops[last + 2];
+                this.sz = this.stops[last + 3];
+                return;
+            }
+            for (int i = STRIDE; i <= last; i += STRIDE) {
+                float end = this.stops[i];
+                if (phase > end) {
+                    continue;
+                }
+                float start = this.stops[i - STRIDE];
+                float span = end - start;
+                // Two stops at the same instant are a deliberate hard cut, not a divide by
+                // zero: Java would hand back Infinity here and throw the limb off the model.
+                float t = span <= 0f ? 1f : smoothstep((phase - start) / span);
+                this.sx = Mth.lerp(t, this.stops[i - 3], this.stops[i + 1]);
+                this.sy = Mth.lerp(t, this.stops[i - 2], this.stops[i + 2]);
+                this.sz = Mth.lerp(t, this.stops[i - 1], this.stops[i + 3]);
+                return;
+            }
+        }
     }
 }

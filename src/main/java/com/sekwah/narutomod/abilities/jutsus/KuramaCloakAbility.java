@@ -22,6 +22,12 @@ import net.minecraft.world.entity.player.Player;
  */
 public class KuramaCloakAbility extends Ability implements Ability.Cooldown {
 
+    /** Exempt from the free-hands gate: this is a transformation being worn, not a hand-cast technique. */
+    @Override
+    public boolean requiresFreeHands() {
+        return false;
+    }
+
     private static final float BOND_COST = 40f;
 
     @Override

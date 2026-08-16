@@ -30,6 +30,12 @@ import org.joml.Vector3f;
 public class KamuiPhaseAbility extends Ability
         implements Ability.Toggled, Ability.ToggleStartCheck, Ability.HandleEnded {
 
+    /** Exempt from the free-hands gate: this is a body state, not a hand-cast technique. */
+    @Override
+    public boolean requiresFreeHands() {
+        return false;
+    }
+
     /** Per-tick chakra drain — deliberately steep, this is total damage immunity. */
     private static final float CHAKRA_COST = 12f;
     private static final DustParticleOptions KAMUI_VIOLET =

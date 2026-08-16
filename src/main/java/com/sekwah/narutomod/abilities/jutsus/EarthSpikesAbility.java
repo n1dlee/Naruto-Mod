@@ -2,6 +2,7 @@ package com.sekwah.narutomod.abilities.jutsus;
 
 import com.sekwah.narutomod.abilities.Ability;
 import com.sekwah.narutomod.capabilities.INinjaData;
+import com.sekwah.narutomod.util.SpikeField;
 import com.sekwah.narutomod.entity.ShadowCloneEntity;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
@@ -115,16 +116,26 @@ public class EarthSpikesAbility extends Ability implements Ability.Cooldown {
 
     @Override
     public void performServer(Player player, INinjaData ninjaData, int ticksActive) {
+        // The ground splitting along a wandering line, widening as it runs out.
+        if (player.level() instanceof net.minecraft.server.level.ServerLevel vfxLevel) {
+            com.sekwah.narutomod.util.ElementalVfx.earthFissure(vfxLevel,
+                    player.position(), player.getLookAngle(), 8.0, player.tickCount);
+        }
+
         final float spikeDamage = SPIKE_DAMAGE * ninjaData.getRankDamageMultiplier();
 
-        double yawRad = Math.toRadians(Math.round(player.getYRot() / 45.0) * 45.0);
-        Vec3 forward = new Vec3(-Math.sin(yawRad), 0, Math.cos(yawRad));
-
-        List<BlockPos> spikeRoots = chooseSpikeRoots(player, forward);
+        // A disc around the caster, not a line in front of them - see SpikeField. Reach and
+        // spike count both come off Earth mastery, to a ceiling of twenty blocks.
+        int earthLevel = ninjaData.getElementLevel("earth");
+        double radius = SpikeField.radiusFor(earthLevel);
+        List<BlockPos> spikeRoots = SpikeField.roots(player.level(), player, radius,
+                SpikeField.countFor(earthLevel));
 
         for (int i = 0; i < spikeRoots.size(); i++) {
             final BlockPos root = spikeRoots.get(i);
-            final int delay = 2 + i * 3;
+            // Staggered by distance rather than by list order, so the eruption reads as a
+            // wave travelling outward from the caster instead of popping at random.
+            final int delay = 2 + (int) (Math.sqrt(root.distToCenterSqr(player.position())) * 1.6);
 
             ninjaData.scheduleDelayedTickEvent(caster -> erupt(caster, root, spikeDamage), delay);
             ninjaData.scheduleDelayedTickEvent(caster ->
@@ -133,63 +144,7 @@ public class EarthSpikesAbility extends Ability implements Ability.Cooldown {
         }
     }
 
-    /**
-     * Picks where the spikes come up.
-     *
-     * Living targets in front of the caster come first, closest outward, each led slightly by
-     * its own velocity so a running target still gets speared - the eruption is deliberately
-     * delayed for the wave effect, and without the lead that delay was exactly what let
-     * everything walk out of the way. Any remaining spikes fall back to the old straight line,
-     * which is what makes the technique still usable on empty ground or as a wall.
-     */
-    private List<BlockPos> chooseSpikeRoots(Player player, Vec3 forward) {
-        List<BlockPos> roots = new ArrayList<>();
-        Level level = player.level();
 
-        List<LivingEntity> targets = level.getEntitiesOfClass(LivingEntity.class,
-                player.getBoundingBox().inflate(TARGET_RANGE),
-                entity -> entity != player
-                        && entity.isAlive()
-                        && !entity.isSpectator()
-                        // Your own clones stand right where you are aiming; spearing them is
-                        // never what you meant by casting this.
-                        && !(entity instanceof ShadowCloneEntity));
-        targets.sort(Comparator.comparingDouble(player::distanceToSqr));
-
-        for (LivingEntity target : targets) {
-            if (roots.size() >= SPIKE_COUNT) {
-                break;
-            }
-            Vec3 toward = target.position().subtract(player.position());
-            Vec3 flat = new Vec3(toward.x, 0, toward.z);
-            if (flat.lengthSqr() < 1.0E-4 || flat.normalize().dot(forward) < CONE_DOT) {
-                continue;
-            }
-            int index = roots.size();
-            Vec3 lead = target.getDeltaMovement().scale((2 + index * 3) * 0.5);
-            roots.add(groundUnder(level, target.getX() + lead.x, target.getY() + 1, target.getZ() + lead.z));
-        }
-
-        for (int i = 1; roots.size() < SPIKE_COUNT; i++) {
-            double distance = i * SPIKE_SPACING + 1.0;
-            roots.add(groundUnder(level,
-                    player.getX() + forward.x * distance,
-                    player.getY(),
-                    player.getZ() + forward.z * distance));
-        }
-        return roots;
-    }
-
-    /** First open block above the ground at this column, searched down from startY. */
-    private BlockPos groundUnder(Level level, double x, double startY, double z) {
-        int bx = (int) Math.floor(x);
-        int bz = (int) Math.floor(z);
-        int by = (int) Math.floor(startY) + 1;
-        while (by > level.getMinBuildHeight() && level.getBlockState(new BlockPos(bx, by, bz)).isAir()) {
-            by--;
-        }
-        return new BlockPos(bx, by + 1, bz);
-    }
 
     /** Raises one spike and hits everything it comes up through. */
     private void erupt(Player caster, BlockPos root, float damage) {

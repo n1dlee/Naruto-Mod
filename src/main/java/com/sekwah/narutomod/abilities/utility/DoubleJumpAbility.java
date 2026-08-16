@@ -13,6 +13,12 @@ import net.minecraft.world.phys.Vec3;
 
 public class DoubleJumpAbility extends Ability {
 
+    /** Exempt from the free-hands gate: this is a jump, not a hand-cast technique. */
+    @Override
+    public boolean requiresFreeHands() {
+        return false;
+    }
+
     public static final float CHAKRA_COST = 2f;
     public static final float STAMINA_COST = 5f;
 

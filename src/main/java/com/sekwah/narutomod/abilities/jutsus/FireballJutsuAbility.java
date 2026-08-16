@@ -126,6 +126,12 @@ public class FireballJutsuAbility extends Ability implements Ability.Channeled, 
 
     @Override
     public void performServer(Player player, INinjaData ninjaData, int ticksActive) {
+        // A cone widening away from the mouth, hottest down the middle.
+        if (player.level() instanceof net.minecraft.server.level.ServerLevel vfxLevel) {
+            com.sekwah.narutomod.util.ElementalVfx.fireCone(vfxLevel,
+                    player.getEyePosition(), player.getLookAngle(), 3.0, 1.1);
+        }
+
         final int charge = Math.min(ticksActive, MAX_CHARGE);
         final boolean isUchiha = "uchiha".equals(ninjaData.getClanId());
 

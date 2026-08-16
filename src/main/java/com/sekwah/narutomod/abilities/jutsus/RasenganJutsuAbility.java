@@ -31,6 +31,27 @@ public class RasenganJutsuAbility extends Ability implements Ability.Toggled, Ab
         return 212;
     }
 
+    /**
+     * Rasengan is Wind Nature - it is the technique the Rasenshuriken is built out of, and
+     * Naruto's whole wind affinity runs through it. The level requirement is deliberately
+     * zero: he learned it long before he had any nature training at all, so it belongs to the
+     * element for scaling purposes without being gated behind it.
+     */
+    @Override
+    public String element() {
+        return "wind";
+    }
+
+    @Override
+    public int elementLevelRequired() {
+        return 0;
+    }
+
+    @Override
+    public float elementXpReward() {
+        return 8f;
+    }
+
     @Override
     public boolean canStartToggle(Player player, INinjaData ninjaData) {
         return validateChakra(player, ninjaData, ACTIVATE_COST);
@@ -38,6 +59,11 @@ public class RasenganJutsuAbility extends Ability implements Ability.Toggled, Ab
 
     @Override
     public boolean handleCost(Player player, INinjaData ninjaData, int chargeAmount) {
+        // Refusing here is how a toggle ends itself: the tick loop drops the ability the
+        // moment handleCost says no, which then runs handleAbilityEnded below.
+        if (ninjaData.isRasenganConsumed()) {
+            return false;
+        }
         return validateChakra(player, ninjaData, CHAKRA_PER_TICK);
     }
 
@@ -56,6 +82,9 @@ public class RasenganJutsuAbility extends Ability implements Ability.Toggled, Ab
     @Override
     public void handleAbilityEnded(Player player, INinjaData ninjaData, int ticksActive) {
         ninjaData.setRasenganHeld(false);
+        // Cleared only here, so the refusal above survives exactly one tick - long enough to
+        // drop the toggle, not long enough to stop the next deliberate cast.
+        ninjaData.setRasenganConsumed(false);
     }
 
     @Override
@@ -64,34 +93,16 @@ public class RasenganJutsuAbility extends Ability implements Ability.Toggled, Ab
     }
 
     /**
-     * Spiral + compressing ring in the player's hand, scaled by the current held charge
-     * (20-60, adjustable with the scroll wheel).
+     * The sphere itself is drawn by JutsuVfxHandler, not here.
+     *
+     * This used to orbit two particles and an eight-point ring around the PLAYER's centre at
+     * eye height, which put a flat halo through the chest rather than a ball in the hand - and
+     * it only ran for the local player, so nobody ever saw anyone else's Rasengan. The
+     * replacement is a real spinning point cloud positioned at the hand, drawn for every
+     * player in view from one client-side place.
      */
     @Override
     public void performToggleClient(Player player, INinjaData ninjaData) {
-        int charge = ninjaData.getRasenganCharge();
-        float t = Math.max(0, Math.min(charge - 20, 40)) / 40.0f;
-        double radius = 0.2 + t * 0.25;
-        double angle = player.tickCount * (0.7 + t);
-
-        for (int i = 0; i < 2; i++) {
-            double a = angle + Math.PI * i;
-            double px = player.getX() + Math.cos(a) * radius;
-            double py = player.getEyeY() - 0.35 + Math.sin(player.tickCount * 0.3) * 0.1;
-            double pz = player.getZ() + Math.sin(a) * radius;
-            player.level().addParticle(NarutoParticles.RASENGAN_BLUE, px, py, pz, 0, 0, 0);
-        }
-
-        if (player.tickCount % 4 == 0) {
-            double ringRadius = radius + 0.15;
-            double py = player.getEyeY() - 0.35;
-            for (int i = 0; i < 8; i++) {
-                double a = (Math.PI * 2 * i) / 8 - player.tickCount * 0.15;
-                double px = player.getX() + Math.cos(a) * ringRadius;
-                double pz = player.getZ() + Math.sin(a) * ringRadius;
-                player.level().addParticle(NarutoParticles.RASENGAN_BLUE, px, py, pz, 0, 0, 0);
-            }
-        }
     }
 
     private boolean validateChakra(Player player, INinjaData ninjaData, float cost) {

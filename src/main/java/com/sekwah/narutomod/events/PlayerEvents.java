@@ -52,6 +52,10 @@ public class PlayerEvents {
             48.0D, 58.0D, 70.0D,
             90.0D
     };
+    /** Extra Rasengan launch per Wind Nature level, and the level past which it stops growing. */
+    private static final double RASENGAN_WIND_KNOCKBACK = 0.9;
+    private static final int RASENGAN_WIND_LEVEL_CAP = 10;
+
     private static final float[] MOB_DAMAGE_MULTIPLIERS = new float[] {
             1.0F,
             0.90F, 0.88F, 0.85F,
@@ -980,6 +984,9 @@ public class PlayerEvents {
             // LivingHurtEvent synchronously, which re-enters this method; leaving the flag
             // true here caused unbounded recursion (StackOverflowError / game crash).
             ninjaData.setRasenganHeld(false);
+            // ...and the toggle has to be told, or it forms a new sphere on the very next
+            // tick and the Rasengan is never actually spent. See RasenganJutsuAbility.
+            ninjaData.setRasenganConsumed(true);
 
             if (target instanceof Player targetPlayer) {
                 float damage = 14.0F * damageMultiplier;
@@ -996,10 +1003,19 @@ public class PlayerEvents {
             Vec3 diff = target.position().subtract(attacker.position());
             double horizLen = diff.horizontalDistance();
             if (horizLen > 0.001) {
-                double kbStrength = 4.0 + t * 6.0;
+                // Wind Nature is what makes a Rasengan throw people; the sphere is a wind
+                // technique, so mastery of the element is what the launch scales on.
+                int windLevel = Math.max(0, ninjaData.getElementLevel("wind"));
+                double windBonus = Math.min(windLevel, RASENGAN_WIND_LEVEL_CAP) * RASENGAN_WIND_KNOCKBACK;
+                double kbStrength = 4.0 + t * 6.0 + windBonus;
+
                 target.knockback(kbStrength, -diff.x / horizLen, -diff.z / horizLen);
                 Vec3 motion = target.getDeltaMovement();
-                target.setDeltaMovement(motion.x, Math.min(motion.y + 0.6, 1.2), motion.z);
+                target.setDeltaMovement(motion.x, Math.min(motion.y + 0.6 + windBonus * 0.08, 1.6), motion.z);
+                // Without this the server never sends the velocity change, so a hit PLAYER
+                // simply does not move - which is most of why the Rasengan read as having no
+                // knockback at all. Mobs are pushed by the server tick either way.
+                target.hurtMarked = true;
             }
 
             attacker.level().playSound(null, attacker, NarutoSounds.WATER_BULLET_SPLASH.get(), SoundSource.PLAYERS, 1.5F, 1.4F);

@@ -91,6 +91,13 @@ public class ServerAbilityChannelPacket {
                     // Just check if its
                     if (ability.activationType() == Ability.ActivationType.CHANNELED) {
                         if (msg.status == ChannelStatus.START) {
+                            // Only on START. Putting this in the shared prelude above also
+                            // blocked STOP, which meant a channel could be begun but never
+                            // released - the gate would report the ability as busy with
+                            // itself and swallow the packet that ends it.
+                            if (!ability.checkFreeHands(player, ninjaData)) {
+                                return;
+                            }
                             // Cooldowns used to be checked only on the INSTANT path, so a
                             // channeled ability that declared one silently never had it.
                             // Gate the START here, where refusing costs the player nothing.
@@ -127,6 +134,9 @@ public class ServerAbilityChannelPacket {
                                 }
                             });
                         } else if(msg.status == ChannelStatus.MIN_ACTIVATE) {
+                            if (!ability.checkFreeHands(player, ninjaData)) {
+                                return;
+                            }
                             if (ability instanceof Ability.Channeled channeled && channeled.canActivateBelowMinCharge()) {
                                 /*
                                  * The tap-to-cast path had no cooldown at either end: it never

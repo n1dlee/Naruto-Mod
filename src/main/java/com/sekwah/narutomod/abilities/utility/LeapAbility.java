@@ -13,6 +13,12 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.Vec3;
 
 public class LeapAbility extends Ability {
+
+    /** Exempt from the free-hands gate: this is a jump, not a hand-cast technique. */
+    @Override
+    public boolean requiresFreeHands() {
+        return false;
+    }
     @Override
     public ActivationType activationType() {
         return ActivationType.INSTANT;

@@ -2,6 +2,12 @@ package com.sekwah.narutomod.abilities.jutsus;
 
 import com.sekwah.narutomod.abilities.Ability;
 import com.sekwah.narutomod.capabilities.INinjaData;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.properties.DripstoneThickness;
+import net.minecraft.world.level.block.state.BlockState;
+import com.sekwah.narutomod.util.SpikeField;
+import com.sekwah.narutomod.block.NarutoBlocks;
+import com.sekwah.narutomod.block.IceSpikeBlock;
 import com.sekwah.narutomod.entity.NarutoEntities;
 import com.sekwah.narutomod.entity.jutsuprojectile.EarthWallEntity;
 import com.sekwah.narutomod.util.NarutoParticles;
@@ -36,7 +42,11 @@ public class IceSpikesAbility extends Ability implements Ability.Cooldown {
     private static final float SPIKE_DAMAGE = 8f;
     private static final int SPIKE_COUNT = 5;
     private static final double SPIKE_SPACING = 2.2;
-    private static final int SPIKE_HEIGHT = 3;
+    /**
+     * Four, not three. spikeSegment() tapers BASE -> FRUSTUM -> MIDDLE -> TIP, so a
+     * three-block column stopped at MIDDLE and the spear never actually came to a point.
+     */
+    private static final int SPIKE_HEIGHT = 4;
     private static final int LIFESPAN = 140;
 
     @Override
@@ -98,53 +108,85 @@ public class IceSpikesAbility extends Ability implements Ability.Cooldown {
 
     @Override
     public void performServer(Player player, INinjaData ninjaData, int ticksActive) {
-        Vec3 look = player.getLookAngle();
-        Vec3 forward = new Vec3(look.x, 0, look.z).normalize();
+        // A hexagonal dendrite: six arms with sixty-degree side branches, like a real flake.
+        if (player.level() instanceof net.minecraft.server.level.ServerLevel vfxLevel) {
+            com.sekwah.narutomod.util.ElementalVfx.frostDendrite(vfxLevel, player.position(), 2.2);
+        }
+
         float damage = SPIKE_DAMAGE * ninjaData.getRankDamageMultiplier();
 
-        EarthWallEntity ice = new EarthWallEntity(NarutoEntities.EARTH_WALL.get(), player.level());
-        ice.setPos(player.position());
-        ice.setLifespan(LIFESPAN);
-        player.level().addFreshEntity(ice);
+        // A disc around the caster rather than a line ahead of them, sized by Ice mastery to
+        // a ceiling of twenty blocks - see SpikeField. This is the technique you use when you
+        // are surrounded, and a line was exactly the wrong shape for that.
+        // There is no "ice" nature to read: Hyoton is Water and Wind held together, which is
+        // what the element gate above already requires. Mastery is therefore the weaker of the
+        // two - the technique is only as good as whichever half you have neglected.
+        int iceLevel = Math.min(ninjaData.getElementLevel("water"), ninjaData.getElementLevel("wind"));
+        double radius = SpikeField.radiusFor(iceLevel);
+        List<BlockPos> roots = SpikeField.roots(player.level(), player, radius,
+                SpikeField.countFor(iceLevel));
 
-        for (int i = 1; i <= SPIKE_COUNT; i++) {
-            double distance = i * SPIKE_SPACING;
-            BlockPos root = groundBelow(player, player.getX() + forward.x * distance,
-                    player.getZ() + forward.z * distance);
-            final int step = i;
-            ninjaData.scheduleDelayedTickEvent(p -> eruptSpike(p, ice, root, damage, step), i * 2);
+        for (BlockPos root : roots) {
+            // The wave travels outward, so the delay follows distance rather than list order.
+            int delay = 2 + (int) (Math.sqrt(root.distToCenterSqr(player.position())) * 1.6);
+            ninjaData.scheduleDelayedTickEvent(p -> eruptSpike(p, root, damage), delay);
+            ninjaData.scheduleDelayedTickEvent(p -> retract(p, root), delay + LIFESPAN);
         }
     }
 
-    private void eruptSpike(Player player, EarthWallEntity ice, BlockPos root, float damage, int step) {
+    private void eruptSpike(Player player, BlockPos root, float damage) {
         if (!(player.level() instanceof ServerLevel serverLevel)) {
             return;
         }
-        List<BlockPos> column = new ArrayList<>();
-        for (int h = 0; h < SPIKE_HEIGHT; h++) {
-            column.add(root.above(h));
+        for (int height = 0; height < SPIKE_HEIGHT; height++) {
+            BlockPos pos = root.above(height);
+            if (!serverLevel.getBlockState(pos).isAir()) {
+                break; // ran into terrain or a build - stop rather than carve through it
+            }
+            // UPDATE_CLIENTS only, same reason the earth version does it: a full block update
+            // would let neighbour physics disturb the tapered column as it is being built.
+            serverLevel.setBlock(pos, spikeSegment(height), Block.UPDATE_CLIENTS);
         }
-        ice.placeWall(column, Blocks.PACKED_ICE);
 
         for (LivingEntity caught : serverLevel.getEntitiesOfClass(LivingEntity.class,
                 new AABB(root).inflate(1.0, SPIKE_HEIGHT, 1.0), e -> e != player && e.isAlive())) {
             caught.hurt(player.damageSources().playerAttack(player), damage);
-            // Ice chills rather than launches: the field is meant to hold a line.
+            // Ice chills rather than launches: the field is meant to hold ground.
             caught.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 100, 2, false, true));
         }
 
-        NarutoParticles.spawnBurst(serverLevel, Vec3.atCenterOf(root.above(1)), 20, 0.5,
+        NarutoParticles.spawnBurst(serverLevel, Vec3.atCenterOf(root.above(1)), 12, 0.4,
                 NarutoParticles.ICE_PALE);
         serverLevel.playSound(null, root, SoundEvents.GLASS_BREAK, SoundSource.PLAYERS,
-                0.9f, 1.2f + step * 0.05f);
+                0.7f, 1.2f + (float) Math.random() * 0.2f);
     }
 
-    private BlockPos groundBelow(Player player, double x, double z) {
-        BlockPos pos = BlockPos.containing(x, player.getY() + 1, z);
-        int min = player.level().getMinBuildHeight();
-        while (pos.getY() > min && player.level().getBlockState(pos.below()).isAir()) {
-            pos = pos.below();
+    /**
+     * The spear's silhouette, bottom to top: the same four-stage taper vanilla dripstone uses,
+     * in the mod's own ice block. Stacking cubes of packed ice - which is what this did - is a
+     * pillar, not a spear, and read as the player building a wall out of the ground.
+     */
+    private BlockState spikeSegment(int height) {
+        DripstoneThickness thickness = switch (height) {
+            case 0 -> DripstoneThickness.BASE;
+            case 1 -> DripstoneThickness.FRUSTUM;
+            case 2 -> DripstoneThickness.MIDDLE;
+            default -> DripstoneThickness.TIP;
+        };
+        return NarutoBlocks.ICE_SPIKE.get().defaultBlockState()
+                .setValue(IceSpikeBlock.THICKNESS, thickness);
+    }
+
+    /** Melts the column away again, and only ever removes this mod's own spikes. */
+    private void retract(Player player, BlockPos root) {
+        if (!(player.level() instanceof ServerLevel serverLevel)) {
+            return;
         }
-        return pos;
+        for (int height = SPIKE_HEIGHT - 1; height >= 0; height--) {
+            BlockPos pos = root.above(height);
+            if (serverLevel.getBlockState(pos).is(NarutoBlocks.ICE_SPIKE.get())) {
+                serverLevel.setBlock(pos, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+            }
+        }
     }
 }

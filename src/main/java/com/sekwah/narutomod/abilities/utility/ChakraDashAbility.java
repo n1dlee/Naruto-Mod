@@ -10,6 +10,12 @@ import net.minecraft.world.phys.Vec3;
 
 public class ChakraDashAbility extends Ability implements Ability.Toggled {
 
+    /** Exempt from the free-hands gate: this is a movement mode, not a hand-cast technique. */
+    @Override
+    public boolean requiresFreeHands() {
+        return false;
+    }
+
     private static final int CHAKRA_COOLDOWN = 15;
     private static final float STAMINA_COST = 0.5F;
 

@@ -90,6 +90,12 @@ public class GreatFireAnnihilationAbility extends Ability implements Ability.Coo
 
     @Override
     public void performServer(Player player, INinjaData ninjaData, int ticksActive) {
+        // A wall of fire is flat: a wide vertical sheet, tallest at the centre.
+        if (player.level() instanceof net.minecraft.server.level.ServerLevel vfxLevel) {
+            com.sekwah.narutomod.util.ElementalVfx.fireWall(vfxLevel,
+                    player.getEyePosition().add(0, -0.6, 0), player.getLookAngle(), 7.0, 3.2);
+        }
+
         float waveDamage = DAMAGE_PER_WAVE * ninjaData.getRankDamageMultiplier()
                 * ("uchiha".equals(ninjaData.getClanId()) ? 1.25f : 1.0f);
 

@@ -39,8 +39,15 @@ public enum MangekyoBossVariant {
     // --- Legends of the other great bloodlines. Appended, never inserted: the variant is
     // stored in NBT as an ordinal, so reordering this enum would turn every saved boss in
     // every existing world into somebody else.
-    /** First Hokage. The strongest shinobi who ever lived, and the wood proves it. */
-    HASHIRAMA("hashirama", 420f, 13f, 0.29f, 0.25f, 0.75f, 0.35f, 2),
+    /**
+     * First Hokage. The strongest shinobi who ever lived, and the wood proves it.
+     *
+     * Weight 2 made him the rarest thing on the whole roster at 1.4% - rarer than Nagato,
+     * who drops the Rinnegan - and rare enough that he could go an entire playthrough
+     * without ever turning up. 4 puts him level with the mid tier: still well below the
+     * Uchiha, but he actually shows up now.
+     */
+    HASHIRAMA("hashirama", 420f, 13f, 0.29f, 0.25f, 0.75f, 0.35f, 4),
     /** Pain, in Yahiko's body. Rinnegan, and gravity does what he says. */
     NAGATO("nagato", 340f, 12f, 0.28f, 0.55f, 0.40f, 0.75f, 3),
     /** Copy Ninja. A transplanted Sharingan, a Kamui, and a thousand stolen techniques. */

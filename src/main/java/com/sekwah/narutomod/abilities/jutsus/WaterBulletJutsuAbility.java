@@ -50,6 +50,13 @@ public class WaterBulletJutsuAbility extends Ability implements Ability.Cooldown
 
     @Override
     public void performServer(Player player, INinjaData ninjaData, int ticksActive) {
+        // Water visibly compressing into the shot rather than a splash at the mouth.
+        if (player.level() instanceof net.minecraft.server.level.ServerLevel serverLevel) {
+            com.sekwah.narutomod.util.ElementalVfx.waterLance(serverLevel,
+                    player.getEyePosition().add(player.getLookAngle().scale(0.4)),
+                    player.getLookAngle(), 1.8);
+        }
+
         for (int i = 0; i < 3; i++) {
             ninjaData.scheduleDelayedTickEvent((delayedPlayer) -> {
                 Vec3 shootSpeed = player.getLookAngle();

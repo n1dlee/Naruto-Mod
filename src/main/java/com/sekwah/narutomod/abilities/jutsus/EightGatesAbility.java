@@ -19,6 +19,12 @@ import net.minecraft.world.entity.player.Player;
  */
 public class EightGatesAbility extends Ability {
 
+    /** Exempt from the free-hands gate: this is a body state, not a hand seal, not a hand-cast technique. */
+    @Override
+    public boolean requiresFreeHands() {
+        return false;
+    }
+
     private static final float CHAKRA_PER_GATE = 20f;
     private static final String[] GATE_NAMES = {
         "Gate of Opening", "Gate of Healing", "Gate of Life", "Gate of Pain",
@@ -38,9 +44,23 @@ public class EightGatesAbility extends Ability {
     @Override
     public boolean handleCost(Player player, INinjaData ninjaData, int chargeAmount) {
         int currentGates = ninjaData.getGatesOpen();
+
+        // Sneak + the combo stands down, releasing every gate at once. Without this the only
+        // way out of an open gate was to wait out the timer, so a fight that ended early left
+        // you bleeding stamina with nothing to spend it on. The eighth is excluded on purpose.
+        if (player.isShiftKeyDown() && currentGates > 0 && currentGates < 8) {
+            ninjaData.setGatesOpen(0);
+            ninjaData.setGatesTicks(0);
+            player.displayClientMessage(Component.literal("Gates closed.")
+                    .withStyle(ChatFormatting.GREEN), true);
+            return false;
+        }
+
         if (currentGates >= 8) {
-            player.displayClientMessage(Component.literal("All gates already open!")
-                    .withStyle(ChatFormatting.RED), true);
+            // No toggle, no take-backs. Once the eighth is open the only way out is the
+            // timer, and the timer ends in a corpse.
+            player.displayClientMessage(Component.literal("The Gate of Death cannot be closed.")
+                    .withStyle(ChatFormatting.DARK_RED), true);
             return false;
         }
 

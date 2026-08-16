@@ -32,6 +32,7 @@ public class NarutoInGameGUI {
     private final SusanooOverlayGUI susanooOverlay;
     private final KuramaChakraModeOverlayGUI kcmOverlay;
     private final JutsuHudGUI jutsuHudOverlay;
+    private final ActiveJutsuGUI activeJutsuOverlay;
     private final Minecraft minecraft;
 
     private final PlayerGUI[] overlays;
@@ -61,8 +62,9 @@ public class NarutoInGameGUI {
         this.susanooOverlay = new SusanooOverlayGUI(this.minecraft);
         this.kcmOverlay = new KuramaChakraModeOverlayGUI(this.minecraft);
         this.jutsuHudOverlay = new JutsuHudGUI(this.minecraft);
+        this.activeJutsuOverlay = new ActiveJutsuGUI(this.minecraft);
 
-        this.overlays = new PlayerGUI[]{this.byakuganEntityVisionOverlay, this.byakuganOverlay, this.sharinganOverlay, this.rinneganOverlay, this.sageModeOverlay, this.kuramaCloakOverlay, this.susanooOverlay, this.kcmOverlay, this.worldMarkerOverlay, this.substitutionOverlay, this.charkaOverlay, this.jutsuHudOverlay};
+        this.overlays = new PlayerGUI[]{this.byakuganEntityVisionOverlay, this.byakuganOverlay, this.sharinganOverlay, this.rinneganOverlay, this.sageModeOverlay, this.kuramaCloakOverlay, this.susanooOverlay, this.kcmOverlay, this.worldMarkerOverlay, this.substitutionOverlay, this.charkaOverlay, this.jutsuHudOverlay, this.activeJutsuOverlay};
 
         MinecraftForge.EVENT_BUS.addListener(this::renderGameOverlay);
         MinecraftForge.EVENT_BUS.addListener(this::clientTickEvent);

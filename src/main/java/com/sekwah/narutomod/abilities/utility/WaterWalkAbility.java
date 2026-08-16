@@ -23,6 +23,12 @@ import org.joml.Vector3f;
 
 public class WaterWalkAbility extends Ability implements Ability.Toggled {
 
+    /** Exempt from the free-hands gate: this is a movement mode, not a hand-cast technique. */
+    @Override
+    public boolean requiresFreeHands() {
+        return false;
+    }
+
     @Override
     public ActivationType activationType() {
         return ActivationType.TOGGLE;

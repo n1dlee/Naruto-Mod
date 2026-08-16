@@ -3,7 +3,7 @@
   "biomes": "#minecraft:is_overworld",
   "spawners": {
     "type": "narutomod:rogue_ninja",
-    "weight": 180,
+    "weight": 135,
     "minCount": 1,
     "maxCount": 3
   }

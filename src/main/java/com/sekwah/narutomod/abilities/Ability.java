@@ -163,6 +163,50 @@ public abstract class Ability {
     }
 
     /**
+     * Whether casting this needs hands that are not already shaping something else.
+     *
+     * A ninja moulding a Rasengan cannot also be running through seals for a Fireball, and
+     * cannot be holding a Chidori in the same hand. Nothing enforced that: every technique
+     * could be layered on top of every other, so a player could stand there with a Rasengan,
+     * a Chidori and a charging Fireball at once, which is neither how any of them work nor
+     * survivable balance.
+     *
+     * Defaults to true because most jutsu are hand-cast. The exceptions are states rather
+     * than casts - a dojutsu that is simply open, a transformation being worn, walking on
+     * water - and they say so by overriding this. See {@link #checkFreeHands}.
+     */
+    public boolean requiresFreeHands() {
+        return true;
+    }
+
+    /**
+     * Refuses the cast when another technique already occupies the caster.
+     *
+     * Only three things count as occupying: a formed Rasengan, a live Chidori, and an
+     * in-progress channel. Those are the states where the hands are visibly committed.
+     */
+    public boolean checkFreeHands(Player player, INinjaData ninjaData) {
+        if (!this.requiresFreeHands()) {
+            return true;
+        }
+        String blocker = null;
+        if (ninjaData.isRasenganHeld()) {
+            blocker = "Rasengan";
+        } else if (ninjaData.isChidoriActive()) {
+            blocker = "Chidori";
+        } else if (ninjaData.getCurrentlyChanneledAbility() != null) {
+            blocker = "another technique";
+        }
+        if (blocker == null) {
+            return true;
+        }
+        player.displayClientMessage(net.minecraft.network.chat.Component.literal(
+                        "Your hands are busy with " + blocker + ".")
+                .withStyle(net.minecraft.ChatFormatting.YELLOW), true);
+        return false;
+    }
+
+    /**
      * Central elemental gate: the caster must have this jutsu's element unlocked and
      * trained to the required mastery level. Non-elemental jutsu always pass.
      */

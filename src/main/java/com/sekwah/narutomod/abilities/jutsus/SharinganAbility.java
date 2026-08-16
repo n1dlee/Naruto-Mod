@@ -13,6 +13,12 @@ import net.minecraft.world.entity.player.Player;
 
 public class SharinganAbility extends Ability implements Ability.Toggled, Ability.ToggleStartCheck {
 
+    /** Exempt from the free-hands gate: this is an eye being opened, not a hand-cast technique. */
+    @Override
+    public boolean requiresFreeHands() {
+        return false;
+    }
+
     /**
      * Billed every tick the toggle is on, so this is 12 chakra/second, not a one-off.
      * Cut 40% from the original 1.0 - an eye you cannot afford to leave open is an eye

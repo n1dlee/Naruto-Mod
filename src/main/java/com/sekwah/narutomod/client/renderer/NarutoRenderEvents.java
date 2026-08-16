@@ -184,6 +184,24 @@ public class NarutoRenderEvents {
                         .bakeLayer(com.sekwah.narutomod.client.model.entity.SusanooClothedModel.LAYER_LOCATION)),
                 new com.sekwah.narutomod.client.model.entity.SusanooWingedModel(event.getEntityModels()
                         .bakeLayer(com.sekwah.narutomod.client.model.entity.SusanooWingedModel.LAYER_LOCATION)));
+
+        addEyeLayerToPlayers(event);
+    }
+
+    /**
+     * Hangs the dojutsu eye layer on every player renderer.
+     *
+     * There is one renderer per skin type ("default" and "slim"), and a player using the other
+     * one would simply never show eyes if only the first were patched - which is the usual way
+     * this particular registration goes wrong.
+     */
+    private static void addEyeLayerToPlayers(EntityRenderersEvent.AddLayers event) {
+        for (String skin : event.getSkins()) {
+            net.minecraft.client.renderer.entity.player.PlayerRenderer renderer = event.getSkin(skin);
+            if (renderer != null) {
+                renderer.addLayer(new com.sekwah.narutomod.client.renderer.entity.PlayerEyeLayer(renderer));
+            }
+        }
     }
 
 }

@@ -83,6 +83,13 @@ public class PhoenixFlowerAbility extends Ability implements Ability.Cooldown {
 
     @Override
     public void performServer(Player player, INinjaData ninjaData, int ticksActive) {
+        // A five-petalled rose in flame, in the plane the volley fans across.
+        if (player.level() instanceof net.minecraft.server.level.ServerLevel serverLevel) {
+            com.sekwah.narutomod.util.ElementalVfx.fireBloom(serverLevel,
+                    player.getEyePosition().add(player.getLookAngle().scale(0.9)),
+                    player.getLookAngle(), 0.75);
+        }
+
         boolean uchiha = "uchiha".equals(ninjaData.getClanId());
         float rankMultiplier = ninjaData.getRankDamageMultiplier();
 

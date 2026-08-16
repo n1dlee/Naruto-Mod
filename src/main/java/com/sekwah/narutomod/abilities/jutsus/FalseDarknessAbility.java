@@ -95,6 +95,13 @@ public class FalseDarknessAbility extends Ability implements Ability.Cooldown {
 
     @Override
     public void performServer(Player player, INinjaData ninjaData, int ticksActive) {
+        // A bolt that wanders but is pulled back to the aim line, and forks as it goes.
+        if (player.level() instanceof net.minecraft.server.level.ServerLevel vfxLevel) {
+            com.sekwah.narutomod.util.ElementalVfx.lightningBeam(vfxLevel,
+                    player.getEyePosition(), player.getLookAngle(), 14.0, player.tickCount,
+                    com.sekwah.narutomod.util.NarutoParticles.CHIDORI_CYAN);
+        }
+
         Vec3 eye = player.getEyePosition();
         Vec3 look = player.getLookAngle().normalize();
         DamageSource source = NarutoDamageTypes.getDamageSource(player.level(), NarutoDamageTypes.CHIDORI, player, player);

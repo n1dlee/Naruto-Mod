@@ -1,0 +1,8 @@
+{
+  "parent": "minecraft:block/cross",
+  "render_type": "minecraft:cutout",
+  "textures": {
+    "cross": "narutomod:block/ice_spike_base",
+    "particle": "narutomod:block/ice_spike_base"
+  }
+}

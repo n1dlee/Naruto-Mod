@@ -87,6 +87,12 @@ public class GreatBreakthroughAbility extends Ability implements Ability.Cooldow
 
     @Override
     public void performServer(Player player, INinjaData ninjaData, int ticksActive) {
+        // Four streamlines corkscrewing out and flaring, so the gale has a direction.
+        if (player.level() instanceof net.minecraft.server.level.ServerLevel vfxLevel) {
+            com.sekwah.narutomod.util.ElementalVfx.windTunnel(vfxLevel,
+                    player.getEyePosition(), player.getLookAngle(), 9.0);
+        }
+
         Vec3 eye = player.getEyePosition();
         Vec3 look = player.getLookAngle().normalize();
         double knockback = KNOCKBACK * ninjaData.getRankDamageMultiplier();

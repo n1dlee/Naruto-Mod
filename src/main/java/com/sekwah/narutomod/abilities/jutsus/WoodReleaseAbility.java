@@ -109,6 +109,11 @@ public class WoodReleaseAbility extends Ability implements Ability.Cooldown {
 
     @Override
     public void performServer(Player player, INinjaData ninjaData, int ticksActive) {
+        // A double helix climbing out of the ground, shedding leaves as it rises.
+        if (player.level() instanceof net.minecraft.server.level.ServerLevel vfxLevel) {
+            com.sekwah.narutomod.util.ElementalVfx.woodGrowth(vfxLevel, player.position(), 3.5, 1.1);
+        }
+
         LivingEntity target = EyeTargeting.raycastLiving(player, RANGE);
         if (target == null) {
             player.displayClientMessage(Component.translatable("jutsu.fail.notarget",

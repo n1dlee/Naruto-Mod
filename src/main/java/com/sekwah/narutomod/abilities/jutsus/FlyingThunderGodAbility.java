@@ -35,6 +35,12 @@ import net.minecraft.world.phys.Vec3;
  */
 public class FlyingThunderGodAbility extends Ability implements Ability.Cooldown {
 
+    /** Exempt from the free-hands gate: this is a movement burst, not a hand-cast technique. */
+    @Override
+    public boolean requiresFreeHands() {
+        return false;
+    }
+
     private static final float SEAL_COST = 50f;
     private static final double BRAND_RANGE = 6.0D;
 

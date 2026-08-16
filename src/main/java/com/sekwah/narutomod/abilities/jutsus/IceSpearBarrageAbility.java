@@ -87,6 +87,12 @@ public class IceSpearBarrageAbility extends Ability implements Ability.Cooldown 
 
     @Override
     public void performServer(Player player, INinjaData ninjaData, int ticksActive) {
+        // Parallel needles, all aligned - cold and mechanical, unlike the flake above.
+        if (player.level() instanceof net.minecraft.server.level.ServerLevel vfxLevel) {
+            com.sekwah.narutomod.util.ElementalVfx.iceNeedles(vfxLevel,
+                    player.getEyePosition(), player.getLookAngle(), 7);
+        }
+
         Vec3 look = player.getLookAngle().normalize();
         float power = SHARD_POWER * ninjaData.getRankDamageMultiplier();
 

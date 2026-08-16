@@ -9,6 +9,12 @@ import net.minecraft.world.entity.player.Player;
  */
 public class ChakraChargeAbility extends Ability implements Ability.Channeled {
 
+    /** Exempt from the free-hands gate: this is gathering chakra, not shaping a technique. */
+    @Override
+    public boolean requiresFreeHands() {
+        return false;
+    }
+
     @Override
     public ActivationType activationType() {
         return ActivationType.CHANNELED;

@@ -1,0 +1,19 @@
+{
+  "variants": {
+    "thickness=base": {
+      "model": "narutomod:block/ice_spike_base"
+    },
+    "thickness=frustum": {
+      "model": "narutomod:block/ice_spike_frustum"
+    },
+    "thickness=middle": {
+      "model": "narutomod:block/ice_spike_middle"
+    },
+    "thickness=tip": {
+      "model": "narutomod:block/ice_spike_tip"
+    },
+    "thickness=tip_merge": {
+      "model": "narutomod:block/ice_spike_tip"
+    }
+  }
+}

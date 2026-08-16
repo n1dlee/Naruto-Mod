@@ -25,6 +25,12 @@ import org.joml.Vector3f;
  */
 public class SageModeAbility extends Ability implements Ability.Channeled, Ability.Cooldown {
 
+    /** Exempt from the free-hands gate: this is a transformation being worn, not a hand-cast technique. */
+    @Override
+    public boolean requiresFreeHands() {
+        return false;
+    }
+
     private static final float CHAKRA_PER_TICK = 1.0f;
     private static final float ACTIVATION_COST = 80f;
     private static final int MIN_CHARGE_FOR_ACTIVATION = 50;

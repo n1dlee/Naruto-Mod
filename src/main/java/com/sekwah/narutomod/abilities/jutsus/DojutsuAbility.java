@@ -12,6 +12,12 @@ import net.minecraft.world.entity.player.Player;
 
 public class DojutsuAbility extends Ability {
 
+    /** Exempt from the free-hands gate: this is an eye being opened, not a hand-cast technique. */
+    @Override
+    public boolean requiresFreeHands() {
+        return false;
+    }
+
     @Override
     public ActivationType activationType() {
         return ActivationType.INSTANT;

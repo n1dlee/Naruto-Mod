@@ -96,6 +96,10 @@ public class BijuCloakRenderer {
             // Kurama Chakra Mode is the refined form - the marked cloak and nothing else.
             // Everything else shows exactly as many tails as the wielder has drawn out.
             model.setVisibleTails(kcm ? 0 : tails);
+            // Inherit the wearer's pose. Without this the shroud renders in its rest stance
+            // while the player underneath runs, sneaks and casts - the KCM form standing to
+            // attention inside a sprinting body.
+            model.animateFrom(event.getRenderer().getModel());
 
             ResourceLocation texture;
             if (kcm) {

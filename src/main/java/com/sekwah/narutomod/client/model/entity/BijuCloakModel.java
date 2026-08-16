@@ -882,6 +882,36 @@ public class BijuCloakModel extends Model {
         return LayerDefinition.create(mesh, 128, 64);
     }
 
+    /**
+     * Copies the wearer's current limb pose onto the shroud.
+     *
+     * The shroud was drawn in its authored rest pose every frame, so a sprinting player ran
+     * out from underneath a cloak standing perfectly upright - body swinging, gold shell
+     * frozen. Rather than re-deriving a walk cycle here, this lifts the rotations straight off
+     * the PlayerModel the renderer has ALREADY finished posing for this frame. That means the
+     * shroud inherits everything for free: the run, the sneak, and every jutsu stance in
+     * PlayerAnimHandler, with no second copy of the animation logic to drift out of step.
+     *
+     * The extra wear layers are children of their limbs and follow automatically; only the six
+     * roots need driving.
+     */
+    public void animateFrom(net.minecraft.client.model.PlayerModel<?> source) {
+        copy(source.head, this.head);
+        copy(source.head, this.field_178720_f);
+        copy(source.body, this.body);
+        copy(source.body, this.bipedBodyWear);
+        copy(source.rightArm, this.right_arm);
+        copy(source.leftArm, this.left_arm);
+        copy(source.rightLeg, this.right_leg);
+        copy(source.leftLeg, this.left_leg);
+    }
+
+    private static void copy(ModelPart from, ModelPart to) {
+        to.xRot = from.xRot;
+        to.yRot = from.yRot;
+        to.zRot = from.zRot;
+    }
+
     @Override
     public void renderToBuffer(PoseStack poseStack, VertexConsumer consumer, int packedLight,
                                int packedOverlay, float red, float green, float blue, float alpha) {

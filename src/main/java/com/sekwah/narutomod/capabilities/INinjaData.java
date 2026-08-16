@@ -55,6 +55,10 @@ public interface INinjaData extends INBTSerializable<Tag> {
     // --- Rasengan: held in hand, toggled on/off, resized with the scroll wheel ---
     boolean isRasenganHeld();
     void setRasenganHeld(boolean held);
+
+    /** True once the sphere has been spent; makes the toggle refuse to re-form it. */
+    boolean isRasenganConsumed();
+    void setRasenganConsumed(boolean consumed);
     int getRasenganCharge();
     void adjustRasenganCharge(int delta);
 

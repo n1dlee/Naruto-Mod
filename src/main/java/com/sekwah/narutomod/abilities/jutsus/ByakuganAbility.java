@@ -15,6 +15,12 @@ import org.joml.Vector3f;
 
 public class ByakuganAbility extends Ability implements Ability.Toggled, Ability.ToggleStartCheck {
 
+    /** Exempt from the free-hands gate: this is an eye being opened, not a hand-cast technique. */
+    @Override
+    public boolean requiresFreeHands() {
+        return false;
+    }
+
     private static final float CHAKRA_COST = 0.5F;
     private static final int CHAKRA_COOLDOWN = 15;
     /** Sight range itself lives on NinjaData (getByakuganRange) — this is the level cap. */

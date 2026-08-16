@@ -109,6 +109,16 @@ public class ServerAbilityActivatePacket {
                         return;
                     }
                     if (ability.activationType() == Ability.ActivationType.INSTANT) {
+                        // Gated here rather than in the prelude above: the prelude also runs
+                        // for the toggle branch, where it would refuse the packet that turns
+                        // a Rasengan OFF, since a held Rasengan is exactly what it reports as
+                        // blocking. That left no way to put the sphere away.
+                        if (!ability.checkFreeHands(player, ninjaData)) {
+                            if (ability.castingFailSound() != null) {
+                                player.playNotifySound(ability.castingFailSound(), SoundSource.PLAYERS, 0.5f, 1.0f);
+                            }
+                            return;
+                        }
 
                         boolean canTriggerJutsu = true;
                         if (ability  instanceof Ability.Cooldown) {
@@ -154,6 +164,14 @@ public class ServerAbilityActivatePacket {
                                 // Toggle ability off
                                 abilityTracker.removeAbilityEnded(player, ninjaData, ability);
                             } else {
+                                // Turning one ON is a cast; turning one off, handled above,
+                                // never is.
+                                if (!ability.checkFreeHands(player, ninjaData)) {
+                                    if (ability.castingFailSound() != null) {
+                                        player.playNotifySound(ability.castingFailSound(), SoundSource.PLAYERS, 0.5f, 1.0f);
+                                    }
+                                    return;
+                                }
                                 if (ability instanceof Ability.ToggleStartCheck startCheck && !startCheck.canStartToggle(player, ninjaData)) {
                                     if (ability.castingFailSound() != null) {
                                         player.playNotifySound(ability.castingFailSound(), SoundSource.PLAYERS, 0.5f, 1.0f);

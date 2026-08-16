@@ -21,7 +21,13 @@ import org.joml.Vector3f;
  */
 public class SusanooAbility extends Ability implements Ability.Toggled, Ability.ToggleStartCheck, Ability.HandleEnded {
 
-    private static final float CHAKRA_COST = 8f;
+    /** Exempt from the free-hands gate: this is a transformation being worn, not a hand-cast technique. */
+    @Override
+    public boolean requiresFreeHands() {
+        return false;
+    }
+
+    public static final float CHAKRA_COST = 8f;
 
     @Override
     public ActivationType activationType() {

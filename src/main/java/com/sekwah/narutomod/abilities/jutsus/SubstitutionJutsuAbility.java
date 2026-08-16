@@ -20,6 +20,12 @@ import net.minecraft.world.phys.Vec3;
 
 public class SubstitutionJutsuAbility extends Ability implements Ability.Channeled {
 
+    /** Exempt from the free-hands gate: this is a reflex that must never be refused, not a hand-cast technique. */
+    @Override
+    public boolean requiresFreeHands() {
+        return false;
+    }
+
     public static int MAX_MARKER_DISTANCE = 70;
 
     @Override

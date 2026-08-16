@@ -309,7 +309,7 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
      */
     private transient boolean applyingEyeStrain = false;
 
-    private static final float TRANSPLANT_IDLE_DRAIN = 0.6f;   // per second, always on
+    public static final float TRANSPLANT_IDLE_DRAIN = 0.6f;   // per second, always on
     private static final int SHARINGAN_DODGE_COOLDOWN = 30;    // 1.5s between dodges
     private static final float SHARINGAN_DODGE_COST = 6.0f;
 
@@ -422,7 +422,7 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
      * a number in a tooltip rather than extra vision.
      */
     private static final int[] BYAKUGAN_RANGE = {20, 100, 300, 500, 600};
-    private static final float CHIDORI_TICK_COST = 0.75F;
+    public static final float CHIDORI_TICK_COST = 0.75F;
     private static final DustParticleOptions CHIDORI_PARTICLE = new DustParticleOptions(new Vector3f(0.45F, 0.85F, 1.0F), 1.0F);
 
     /** syncGlobally: drives the Chidori thrust stance, which onlookers need to see. */
@@ -650,6 +650,27 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
 
     @Sync(minTicks = 1)
     private int rasenganCharge = 20;
+
+    /**
+     * Set when the sphere is spent, cleared when the toggle actually ends.
+     *
+     * Clearing {@link #rasenganHeld} on impact was not enough to put the Rasengan away: it is
+     * a TOGGLE, and the toggle loop calls handleCost and then performServer every single tick,
+     * so the frame after a hit the ability simply formed a new sphere. The technique was
+     * effectively permanent once switched on. This flag is what handleCost reads to refuse the
+     * next tick, which is how a toggle is ended from the inside.
+     */
+    private boolean rasenganConsumed = false;
+
+    @Override
+    public boolean isRasenganConsumed() {
+        return this.rasenganConsumed;
+    }
+
+    @Override
+    public void setRasenganConsumed(boolean consumed) {
+        this.rasenganConsumed = consumed;
+    }
 
     @Override
     public boolean isRasenganHeld() {
@@ -1775,17 +1796,20 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
         this.useChakra(CHIDORI_TICK_COST, 5);
         this.chidoriTicks--;
         player.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SPEED, 8, 0, false, false));
-        if (player.level() instanceof ServerLevel serverLevel) {
-            Vec3 look = player.getLookAngle();
-            Vec3 right = look.cross(new Vec3(0.0D, 1.0D, 0.0D)).normalize().scale(0.35D);
-            Vec3 hand = player.position().add(0.0D, player.getBbHeight() * 0.65D, 0.0D).add(right);
-            serverLevel.sendParticles(CHIDORI_PARTICLE, hand.x, hand.y, hand.z, 2, 0.08D, 0.08D, 0.08D, 0.02D);
-            serverLevel.sendParticles(ParticleTypes.ELECTRIC_SPARK, hand.x, hand.y, hand.z, 2, 0.12D, 0.12D, 0.12D, 0.04D);
-        }
+        // The arcs are drawn client-side from isChidoriActive (see JutsuVfxHandler), which is
+        // both denser and free. Two sendParticles a tick per chidori user bought a faint
+        // sparkle at real bandwidth cost, and drew it a hand's width from where the arcs are.
     }
 
     private void updateNinjaSprintStamina(Player player) {
         if (!player.isSprinting()) {
+            return;
+        }
+        // Sprinting is free while the Gates are open, and this is not a courtesy: the gates
+        // already bill up to four stamina a tick, so adding the sprint drain on top emptied
+        // the bar within a second or two and tripped the exhaustion close above. Holding the
+        // sprint key was effectively a cancel button for a technique that should have none.
+        if (this.gatesOpen > 0) {
             return;
         }
         if (this.stamina < 0.1F) {
@@ -1943,7 +1967,7 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
     @Sync(minTicks = 1)
     private int sageCharge = 0; // 0-100, accumulated while standing still
 
-    private static final float SAGE_CHAKRA_PER_TICK = 2.0f;
+    public static final float SAGE_CHAKRA_PER_TICK = 2.0f;
     private static final int SAGE_MAX_DURATION = 30 * 20; // 30 seconds
     private static final int SAGE_MAX_CHARGE = 100;
     // Overcharge/petrification now handled in SageModeAbility.handleChannelling()
@@ -2035,9 +2059,15 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
     }
 
     // --- Eight Gates ---
+    public static final int MAX_GATES = 8;
+    /** Stamina per tick, per open gate. Read by the active-jutsu HUD as well. */
+    public static final float GATE_STAMINA_PER_TICK_PER_GATE = 0.5F;
+
     /** syncGlobally: drives the Eight Gates tremor, which onlookers need to see. */
     @Sync(minTicks = 1, syncGlobally = true)
     private int gatesOpen = 0;
+    /** Synced so the HUD can count the gates down; the client cannot derive this. */
+    @Sync(minTicks = 1)
     private int gatesTicks = 0; // ticks remaining before gates auto-close
 
     @Override
@@ -2064,15 +2094,18 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
         if (this.gatesOpen <= 0) return;
 
         this.gatesTicks--;
-        float staminaCost = this.gatesOpen * 0.5F;
-        if (this.stamina < staminaCost) {
+        float staminaCost = this.gatesOpen * GATE_STAMINA_PER_TICK_PER_GATE;
+        // The Gate of Death is a decision, not a stance. Every other gate still snaps shut
+        // when the body gives out, but the eighth runs to its timer no matter what is left
+        // in the tank - opening it is supposed to be the last thing you ever choose to do.
+        if (this.stamina < staminaCost && this.gatesOpen < MAX_GATES) {
             this.gatesOpen = 0;
             this.gatesTicks = 0;
             player.displayClientMessage(Component.literal("Eight Gates closed: stamina exhausted.")
                     .withStyle(ChatFormatting.RED), true);
             return;
         }
-        this.useStamina(this.gatesOpen * 0.5F, 5);
+        this.useStamina(staminaCost, 5);
 
         // Apply effects based on gates open
         if (this.gatesTicks % 20 == 0) {
@@ -2094,16 +2127,10 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
             player.hurt(player.damageSources().magic(), 2.0f);
         }
 
-        // Green aura particles
-        if (this.gatesTicks % 4 == 0 && player.level() instanceof ServerLevel serverLevel) {
-            double angle = Math.toRadians((player.tickCount * 20) % 360);
-            serverLevel.sendParticles(
-                    new DustParticleOptions(new Vector3f(0.1f, 0.9f, 0.2f), 1.2f),
-                    player.getX() + 0.5 * Math.cos(angle),
-                    player.getY() + 0.3 + Math.random() * 1.5,
-                    player.getZ() + 0.5 * Math.sin(angle),
-                    1, 0.05, 0.1, 0.05, 0.01);
-        }
+        // The aura itself is drawn client-side from gatesOpen (see JutsuVfxHandler), where it
+        // costs no bandwidth and can be dense enough to read as a shell of chakra rather than
+        // one green speck a tick. The colour escalates with the gate count there too - this
+        // used to be the same flat green at gate 1 and at the Gate of Death.
 
         // Auto-close
         if (this.gatesTicks <= 0) {
@@ -2135,9 +2162,9 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
     // 100/tick base drain + 67/tick donated into the player's own chakra = 167/tick,
     // 1_000_000 / 167 ≈ 5988 ticks ≈ 299s ≈ 5 minutes. Higher tail tiers (transformPower)
     // add extra drain on top, so pushing to Full Avatar burns through it faster than 5 min.
-    private static final float KURAMA_CHAKRA_PER_TICK = 100.0f;
-    private static final float KURAMA_CHAKRA_DONATION_PER_TICK = 67.0f;
-    private static final float KURAMA_SURGE_DRAIN = 100.0f;
+    public static final float KURAMA_CHAKRA_PER_TICK = 100.0f;
+    public static final float KURAMA_CHAKRA_DONATION_PER_TICK = 67.0f;
+    public static final float KURAMA_SURGE_DRAIN = 100.0f;
 
     @Override
     public boolean isKuramaCloakActive() {
@@ -2697,7 +2724,7 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
         }
     }
 
-    private static final float SUSANOO_SURGE_DRAIN = 4.0f;
+    public static final float SUSANOO_SURGE_DRAIN = 4.0f;
 
     private void updateSusanoo(Player player) {
         // Activation/deactivation and base chakra drain are driven by SusanooAbility's

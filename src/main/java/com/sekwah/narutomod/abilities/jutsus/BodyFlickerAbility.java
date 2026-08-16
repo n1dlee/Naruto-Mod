@@ -21,6 +21,12 @@ import net.minecraft.world.phys.Vec3;
  */
 public class BodyFlickerAbility extends Ability implements Ability.Cooldown {
 
+    /** Exempt from the free-hands gate: this is a movement burst, not a hand-cast technique. */
+    @Override
+    public boolean requiresFreeHands() {
+        return false;
+    }
+
     private static final float CHAKRA_COST = 15f;
     private static final float STAMINA_COST = 30f;
     private static final double[] RANK_RANGES = {8.0D, 12.0D, 15.0D, 25.0D, 40.0D};

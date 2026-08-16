@@ -71,6 +71,19 @@ public class NarutoBlocks {
                     .noLootTable()
                     .isValidSpawn((state, level, pos, type) -> false)));
 
+    /**
+     * The spear raised by Ice Release. Breakable but slippery-hard, faintly lit so a field of
+     * them reads at night, and it drops nothing - these are conjured, not mined.
+     */
+    public static final RegistryObject<Block> ICE_SPIKE = BLOCKS.register("ice_spike",
+            () -> new IceSpikeBlock(BlockBehaviour.Properties.of()
+                    .strength(0.8F)
+                    .sound(SoundType.GLASS)
+                    .lightLevel(state -> 2)
+                    .noOcclusion()
+                    .noLootTable()
+                    .isValidSpawn((state, level, pos, type) -> false)));
+
     public static void register(IEventBus eventBus) {
         BLOCKS.register(eventBus);
         BLOCK_ITEMS.register(eventBus);
