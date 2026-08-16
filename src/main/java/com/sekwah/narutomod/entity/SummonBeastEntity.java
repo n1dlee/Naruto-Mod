@@ -149,6 +149,15 @@ public class SummonBeastEntity extends PathfinderMob {
         this.goalSelector.addGoal(6, new LookAtPlayerGoal(this, Player.class, 10.0F));
 
         this.targetSelector.addGoal(1, new HurtByTargetGoal(this));
+        // Shared sight. Summons called out together see through each other: when one of the
+        // summoner's beasts finds something, the rest know without having to spot it
+        // themselves.
+        //
+        // This is the Animal Path's actual hallmark - its summons share vision through the
+        // Rinnegan - and it was the piece the mod's version was missing. It applies to every
+        // summon rather than only that ability because a pack that ignores what its packmate
+        // is fighting looks broken whoever called it.
+        this.targetSelector.addGoal(0, new com.sekwah.narutomod.entity.goal.SharedSummonSightGoal(this));
         // Enemy rather than Monster: the Mangekyo bosses are PathfinderMobs that implement
         // Enemy, so a Monster-only filter would have summons stand and watch a boss fight.
         this.targetSelector.addGoal(2, new NearestAttackableTargetGoal<>(this, LivingEntity.class,
