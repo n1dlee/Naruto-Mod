@@ -68,9 +68,7 @@ public class MangekyoBossRenderer extends HumanoidMobRenderer<MangekyoBossEntity
     public void render(MangekyoBossEntity entity, float entityYaw, float partialTick,
                        com.mojang.blaze3d.vertex.PoseStack poseStack,
                        net.minecraft.client.renderer.MultiBufferSource bufferSource, int packedLight) {
-        this.getModel().rightArmPose = entity.getMainHandItem().isEmpty()
-                ? HumanoidModel.ArmPose.EMPTY
-                : HumanoidModel.ArmPose.ITEM;
+        this.getModel().rightArmPose = castArmPose(entity);
 
         // The player disappears inside their own final form; the boss did not, so a
         // full-height Naruto stood at the foot of an eighteen-block fox and the whole thing
@@ -80,6 +78,28 @@ public class MangekyoBossRenderer extends HumanoidMobRenderer<MangekyoBossEntity
         // screen, so whatever the last one left here is what the next one would inherit.
         this.getModel().setAllVisible(!entity.isGiant());
         super.render(entity, entityYaw, partialTick, poseStack, bufferSource, packedLight);
+    }
+
+    /**
+     * The pose a boss holds while it is gathering a technique.
+     *
+     * The wind-up exists so a player can read the attack coming and answer it, and particles
+     * alone do not read as intent — the mod is full of particles. A silhouette does: hand at
+     * the eye means a genjutsu is being held on you and you should break line of sight; arm
+     * cocked overhead means something heavy is about to land where you are standing.
+     *
+     * Reusing the vanilla arm poses rather than writing new ones keeps it working with the
+     * armour and held-item layers, which already know how to follow these three.
+     */
+    private static HumanoidModel.ArmPose castArmPose(MangekyoBossEntity entity) {
+        return switch (entity.getCastPose()) {
+            case STARE -> HumanoidModel.ArmPose.SPYGLASS;       // hand up to the eye
+            case REACH -> HumanoidModel.ArmPose.BOW_AND_ARROW;  // both arms out, fixed on you
+            case GATHER -> HumanoidModel.ArmPose.THROW_SPEAR;   // cocked overhead
+            case NONE -> entity.getMainHandItem().isEmpty()
+                    ? HumanoidModel.ArmPose.EMPTY
+                    : HumanoidModel.ArmPose.ITEM;
+        };
     }
 
     @Override

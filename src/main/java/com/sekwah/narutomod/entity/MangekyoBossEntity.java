@@ -44,6 +44,19 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
             SynchedEntityData.defineId(MangekyoBossEntity.class, EntityDataSerializers.BYTE);
     private static final EntityDataAccessor<Byte> SUSANOO_STAGE =
             SynchedEntityData.defineId(MangekyoBossEntity.class, EntityDataSerializers.BYTE);
+    /**
+     * Whether the boss is currently gathering a technique, and how heavy that technique is.
+     *
+     * Synced because the whole point of a wind-up is that somebody else can see it. The
+     * particles the goal spawns already travel, but particles alone read as weather - a boss
+     * that plants its feet and raises its hands is the part a player recognises in the second
+     * before the jutsu lands.
+     *
+     * Held as a {@link CastPose} ordinal rather than as the wind-up itself, so the renderer can
+     * tell a held stare from a gathered strike without knowing what a boss Telegraph is.
+     */
+    private static final EntityDataAccessor<Byte> CAST_POSE =
+            SynchedEntityData.defineId(MangekyoBossEntity.class, EntityDataSerializers.BYTE);
 
     private static final float MAX_CHAKRA = 400f;
     /**
@@ -207,6 +220,36 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
         super.defineSynchedData();
         this.entityData.define(VARIANT, (byte) 0);
         this.entityData.define(SUSANOO_STAGE, (byte) 0);
+        this.entityData.define(CAST_POSE, (byte) 0);
+    }
+
+    /**
+     * Which wind-up the boss is holding, or {@link CastPose#NONE} between techniques.
+     *
+     * Deliberately not persisted: a boss that unloads mid-charge has lost the cast anyway, and
+     * loading one back in already braced for a technique it will never throw would leave it
+     * stuck in the pose.
+     */
+    public CastPose getCastPose() {
+        byte raw = this.entityData.get(CAST_POSE);
+        CastPose[] poses = CastPose.values();
+        return raw > 0 && raw < poses.length ? poses[raw] : CastPose.NONE;
+    }
+
+    public void setCastPose(CastPose pose) {
+        this.entityData.set(CAST_POSE, (byte) pose.ordinal());
+    }
+
+    /** The shapes a gathering technique makes, as far as the renderer needs to care. */
+    public enum CastPose {
+        /** Nothing gathering; the boss animates normally. */
+        NONE,
+        /** Held eye contact - one hand up, the stare doing the work. */
+        STARE,
+        /** Fixed on someone - both hands out, reaching. */
+        REACH,
+        /** Gathered overhead, about to come down. */
+        GATHER
     }
 
     /**

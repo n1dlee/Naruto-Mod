@@ -73,7 +73,6 @@ public class PlayerEvents {
             0.50F, 0.45F, 0.40F,
             0.32F
     };
-    private static final DustParticleOptions CHIDORI_PARTICLE = new DustParticleOptions(new Vector3f(0.45F, 0.85F, 1.0F), 1.0F);
 
     @SubscribeEvent
     public static void onEntityUpdate(LivingEvent.LivingTickEvent event) {
@@ -993,6 +992,13 @@ public class PlayerEvents {
         });
     }
 
+    /**
+     * Landing a Chidori the ordinary way, by hitting somebody while it is lit.
+     *
+     * The hit itself lives in {@link com.sekwah.narutomod.util.ChidoriStrike} now, because the
+     * technique also resolves on its own reach when the user thrusts — and two copies of
+     * "what a Chidori does" would drift apart the first time either was tuned.
+     */
     private static void applyChidoriMeleeHit(LivingHurtEvent event) {
         if (!(event.getSource().getEntity() instanceof Player attacker)) {
             return;
@@ -1002,26 +1008,7 @@ public class PlayerEvents {
             if (!ninjaData.isNinjaModeEnabled() || !ninjaData.isChidoriActive()) {
                 return;
             }
-            DamageSource source = NarutoDamageTypes.getDamageSource(attacker.level(), NarutoDamageTypes.CHIDORI, attacker, attacker);
-            ninjaData.setChidoriTicks(0);
-            float damageMultiplier = ninjaData.getRankDamageMultiplier() * ninjaData.getClanLightningDamageMultiplier();
-            if (target instanceof Player targetPlayer) {
-                float damage = 16.0F * damageMultiplier;
-                if (ninjaData.getNinjaRank() < 4) {
-                    damage = Math.min(damage, targetPlayer.getHealth() - 1.0F);
-                }
-                if (damage > 0.0F) {
-                    target.hurt(source, damage);
-                }
-            } else {
-                target.hurt(source, 20.0F * damageMultiplier);
-            }
-            attacker.level().playSound(null, attacker, NarutoSounds.CHIDORI.get(), SoundSource.PLAYERS, 1.0F, 1.15F);
-            if (attacker.level() instanceof ServerLevel serverLevel) {
-                Vec3 pos = target.position().add(0.0D, target.getBbHeight() * 0.55D, 0.0D);
-                serverLevel.sendParticles(CHIDORI_PARTICLE, pos.x, pos.y, pos.z, 14, 0.3D, 0.35D, 0.3D, 0.04D);
-                serverLevel.sendParticles(ParticleTypes.ELECTRIC_SPARK, pos.x, pos.y, pos.z, 18, 0.35D, 0.4D, 0.35D, 0.08D);
-            }
+            com.sekwah.narutomod.util.ChidoriStrike.land(attacker, ninjaData, target);
         });
     }
 

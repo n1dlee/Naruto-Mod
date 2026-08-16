@@ -1834,8 +1834,18 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
         }
     }
 
+    /**
+     * Whether the user was already mid-swing last tick.
+     *
+     * The Chidori resolves on the swing, not on a landed vanilla hit, so it needs the rising
+     * edge: {@code player.swinging} stays true for the whole animation and would otherwise
+     * fire the thrust six times per swing.
+     */
+    private boolean chidoriSwinging = false;
+
     private void updateChidoriState(Player player) {
         if (this.chidoriTicks <= 0) {
+            this.chidoriSwinging = player.swinging;
             return;
         }
         if (this.chakra < CHIDORI_TICK_COST) {
@@ -1844,6 +1854,19 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
         }
         this.useChakra(CHIDORI_TICK_COST, 5);
         this.chidoriTicks--;
+
+        // The arm is the weapon while it is lit, so a swing resolves the technique on its own
+        // reach and its own line - and a swing that finds nothing spends it. Vanilla melee
+        // still lands it too (PlayerEvents), whichever fires first; both clear the flag, so
+        // the second one finds nothing to do.
+        if (player.swinging && !this.chidoriSwinging) {
+            this.chidoriSwinging = true;
+            com.sekwah.narutomod.util.ChidoriStrike.thrust(player, this);
+            return;
+        }
+        if (!player.swinging) {
+            this.chidoriSwinging = false;
+        }
         player.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SPEED, 8, 0, false, false));
         // The arcs are drawn client-side from isChidoriActive (see JutsuVfxHandler), which is
         // both denser and free. Two sendParticles a tick per chidori user bought a faint

@@ -91,6 +91,60 @@ public class BossJutsuGoal extends Goal {
         WOOD_DRAGON
     }
 
+    /**
+     * How a technique announces itself before it lands.
+     *
+     * Every boss technique used to resolve inside {@link #start()}: the damage, the effects and
+     * the particles all happened on the tick the goal was picked. Over a network that is a
+     * single frame — the state is already applied by the time the other client draws anything,
+     * so there was no window in which to read the attack and nothing to read even if there had
+     * been. Losing eight seconds to Tsukuyomi with no warning is not difficulty, it is a coin
+     * flip, and the bosses were full of coin flips.
+     *
+     * So a technique that takes control away or lands a heavy blow is now announced first and
+     * resolved a beat later. The gap is filled with a ring closing on the caster and a note
+     * climbing under it, and — for the techniques that need to fix on someone — a thread drawn
+     * between the two sets of eyes, which is the thing the player is being invited to break.
+     *
+     * Techniques that are genuinely instant keep resolving instantly. A thrown shuriken has no
+     * wind-up to show and does not need one.
+     */
+    private enum Telegraph {
+        /**
+         * Eye contact, held. The longest window in the game, guarding the effects that end
+         * your participation in the fight — and answered by getting behind something.
+         */
+        GENJUTSU(26, true, NarutoParticles.GENJUTSU_RED, SoundEvents.ENDERMAN_STARE,
+                MangekyoBossEntity.CastPose.STARE),
+        /**
+         * Fixed on one person: a bind, a pull, a black flame. Shorter than a genjutsu, still
+         * broken by cover.
+         */
+        FOCUS(16, true, NarutoParticles.SHARINGAN_RED, SoundEvents.BEACON_POWER_SELECT,
+                MangekyoBossEntity.CastPose.REACH),
+        /**
+         * Gathered rather than aimed. It arrives where you were standing, so it is answered by
+         * moving instead of by hiding, and cover will not save you.
+         */
+        HEAVY(28, false, NarutoParticles.CHAIN_GOLD, SoundEvents.BEACON_ACTIVATE,
+                MangekyoBossEntity.CastPose.GATHER);
+
+        private final int windupTicks;
+        private final boolean needsSight;
+        private final DustParticleOptions gather;
+        private final SoundEvent charge;
+        private final MangekyoBossEntity.CastPose pose;
+
+        Telegraph(int windupTicks, boolean needsSight, DustParticleOptions gather, SoundEvent charge,
+                  MangekyoBossEntity.CastPose pose) {
+            this.windupTicks = windupTicks;
+            this.needsSight = needsSight;
+            this.gather = gather;
+            this.charge = charge;
+            this.pose = pose;
+        }
+    }
+
     private final MangekyoBossEntity boss;
     private int cooldown;
 
@@ -98,9 +152,24 @@ public class BossJutsuGoal extends Goal {
     private int sustainedStep;
     private int sustainedTicks;
 
+    /** The announced technique, waiting on its wind-up. Null whenever nothing is charging. */
+    private Runnable pendingCast;
+    private Telegraph pendingTelegraph;
+    private int pendingTicks;
+    /**
+     * True only while {@link #resolvePendingCast} is running the stored technique, which is how
+     * {@link #windup} tells "announce this" from "this is the announcement coming due".
+     */
+    private boolean resolving;
+
     public BossJutsuGoal(MangekyoBossEntity boss) {
         this.boss = boss;
-        this.setFlags(EnumSet.of(Flag.LOOK));
+        // MOVE as well as LOOK, so a boss that is charging plants its feet. This goal only
+        // holds the flags for the length of a cast, and a technique you can read but cannot
+        // out-walk is not really telegraphed - the boss would simply charge you down while it
+        // charged the jutsu. MeleeAttackGoal sits below this one and picks the chase back up
+        // the moment the cast ends.
+        this.setFlags(EnumSet.of(Flag.LOOK, Flag.MOVE));
     }
 
     @Override
@@ -124,7 +193,13 @@ public class BossJutsuGoal extends Goal {
     @Override
     public boolean canContinueToUse() {
         LivingEntity target = this.boss.getTarget();
-        return this.sustained != null && target != null && target.isAlive();
+        if (target == null || !target.isAlive()) {
+            return false;
+        }
+        // A charging technique keeps the goal alive exactly like a sustained one does. Without
+        // this the goal ends on the tick it started, tick() never runs, and every announced
+        // technique is silently dropped instead of landing.
+        return this.sustained != null || this.pendingCast != null;
     }
 
     @Override
@@ -137,6 +212,13 @@ public class BossJutsuGoal extends Goal {
         this.sustained = null;
         this.sustainedStep = 0;
         this.sustainedTicks = 0;
+        this.pendingCast = null;
+        this.pendingTelegraph = null;
+        this.pendingTicks = 0;
+        // Belt and braces on the synced byte: every path that sets a pose also clears it, but a
+        // pose that ever did stick would leave the boss frozen mid-gather for the rest of its
+        // life, and this is one assignment.
+        this.boss.setCastPose(MangekyoBossEntity.CastPose.NONE);
 
         double distance = this.boss.distanceTo(target);
         this.cooldown = switch (this.boss.getVariant()) {
@@ -176,6 +258,18 @@ public class BossJutsuGoal extends Goal {
         // break on a tick where nothing else is happening, which is most of them.
         tickCurseCircle();
 
+        if (this.pendingCast != null) {
+            LivingEntity charging = this.boss.getTarget();
+            if (charging == null) {
+                cancelPendingCast();
+            } else {
+                tickPendingCast(charging);
+            }
+            // A technique that resolved into a sustained sequence starts stepping next tick,
+            // not on the same one - the wind-up and the first hit must not share a frame.
+            return;
+        }
+
         if (this.sustained == null) {
             return;
         }
@@ -201,6 +295,130 @@ public class BossJutsuGoal extends Goal {
     @Override
     public void stop() {
         this.sustained = null;
+        // An interrupted wind-up does not land. If the boss loses its target, gets stunned out
+        // of the goal or dies mid-charge, the technique it was gathering dies with it - which
+        // is the other half of giving the player a window, because interrupting the cast has
+        // to be worth something.
+        cancelPendingCast();
+    }
+
+    // ---------------------------------------------------------------- telegraphing
+
+    /**
+     * Announces a technique instead of resolving it, and reports whether the caller should stop.
+     *
+     * Each telegraphed technique opens with three lines of its own rather than being wrapped at
+     * the call site, because the wind-up belongs to the technique, not to whichever rotation
+     * happens to pick it — and because the twenty-odd rotations above stay readable as menus of
+     * jutsu names instead of turning into a wall of scheduling.
+     *
+     * <pre>
+     * if (windup(Telegraph.GENJUTSU, target, () -&gt; castTsukuyomi(target))) {
+     *     return;
+     * }
+     * </pre>
+     *
+     * The first call arms the technique and returns true. When the wind-up completes the stored
+     * runnable calls the same method again, this time with {@link #resolving} set, so it falls
+     * straight through to the body it skipped.
+     */
+    private boolean windup(Telegraph telegraph, LivingEntity target, Runnable resolution) {
+        if (this.resolving) {
+            return false; // this call IS the resolution - let the technique run
+        }
+        if (this.sustained != null || this.pendingCast != null) {
+            // Reached from inside a running sequence (the shark volley casts a water dragon per
+            // shark) or from a technique that somehow announced twice. Either way the goal is
+            // already busy being read, so resolve here and now rather than queueing behind
+            // itself and never landing at all.
+            return false;
+        }
+        this.pendingCast = resolution;
+        this.pendingTelegraph = telegraph;
+        this.pendingTicks = telegraph.windupTicks;
+        if (target != null) {
+            this.boss.getLookControl().setLookAt(target, 30f, 30f);
+        }
+        this.boss.setCastPose(telegraph.pose);
+        playCastSound(telegraph.charge, 0.6f);
+        return true;
+    }
+
+    /** Draws the charge, counts it down, and lands the technique when it runs out. */
+    private void tickPendingCast(LivingEntity target) {
+        Telegraph telegraph = this.pendingTelegraph;
+        this.boss.getLookControl().setLookAt(target, 30f, 30f);
+        // Planted. The MOVE flag stops the pathfinder, but momentum already in the boss would
+        // still carry it several blocks through a long wind-up.
+        this.boss.setDeltaMovement(0, this.boss.getDeltaMovement().y, 0);
+
+        float progress = 1f - (float) this.pendingTicks / telegraph.windupTicks;
+        if (this.boss.level() instanceof ServerLevel serverLevel) {
+            // A ring closing on the caster: wide and faint at the announcement, tight and dense
+            // as it comes due, so the player can see how long they have left rather than only
+            // that something is happening.
+            double radius = 2.6 - 2.1 * progress;
+            int density = 10 + (int) (18 * progress);
+            NarutoParticles.spawnRing(serverLevel,
+                    this.boss.position().add(0, this.boss.getBbHeight() * 0.55, 0),
+                    radius, density, telegraph.gather);
+            if (telegraph.needsSight && this.boss.tickCount % 3 == 0) {
+                // The eye contact, drawn. This is the line the player is being told to break.
+                NarutoParticles.spawnBolt(serverLevel, this.boss.getEyePosition(),
+                        target.getEyePosition(), 2, 0.12, telegraph.gather);
+            }
+        }
+        if (this.pendingTicks % 6 == 0) {
+            playCastSound(telegraph.charge, 0.6f + 0.8f * progress);
+        }
+
+        if (--this.pendingTicks > 0) {
+            return;
+        }
+        resolvePendingCast(target, telegraph);
+    }
+
+    /** The wind-up is over: the technique either lands or is answered. */
+    private void resolvePendingCast(LivingEntity target, Telegraph telegraph) {
+        Runnable resolution = this.pendingCast;
+        this.pendingCast = null;
+        this.pendingTelegraph = null;
+        this.boss.setCastPose(MangekyoBossEntity.CastPose.NONE);
+
+        if (telegraph.needsSight && !this.boss.getSensing().hasLineOfSight(target)) {
+            // They got behind something. The chakra and the cooldown are spent either way -
+            // that is what makes reading the cast worth doing.
+            fizzle();
+            return;
+        }
+        this.resolving = true;
+        try {
+            resolution.run();
+        } finally {
+            this.resolving = false;
+        }
+    }
+
+    /** Drops a charging technique without resolving it. */
+    private void cancelPendingCast() {
+        if (this.pendingCast == null) {
+            return;
+        }
+        this.pendingCast = null;
+        this.pendingTelegraph = null;
+        this.pendingTicks = 0;
+        this.boss.setCastPose(MangekyoBossEntity.CastPose.NONE);
+        fizzle();
+    }
+
+    /** A gathered technique coming apart, so a broken cast is as legible as a completed one. */
+    private void fizzle() {
+        if (this.boss.level() instanceof ServerLevel serverLevel) {
+            NarutoParticles.spawnBurst(serverLevel,
+                    this.boss.position().add(0, this.boss.getBbHeight() * 0.55, 0),
+                    18, 0.9, NarutoParticles.METAL_GRAY);
+        }
+        playCastSound(SoundEvents.FIRE_EXTINGUISH, 1.2f);
     }
 
     // ------------------------------------------------------------------ wielders
@@ -945,6 +1163,9 @@ public class BossJutsuGoal extends Goal {
      * fights: pinned in place, unable to move, taking damage the whole time.
      */
     private void castSandBindingCoffin(LivingEntity target) {
+        if (windup(Telegraph.FOCUS, target, () -> castSandBindingCoffin(target))) {
+            return;
+        }
         target.hurt(this.boss.damageSources().mobAttack(this.boss), 16f);
         target.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 100, 4));
         target.addEffect(new MobEffectInstance(MobEffects.WEAKNESS, 100, 1));
@@ -965,6 +1186,9 @@ public class BossJutsuGoal extends Goal {
 
     /** Sand Tsunami: a wave rolled out from the gourd, wide and unaimed. */
     private void castSandTsunami(LivingEntity target) {
+        if (windup(Telegraph.HEAVY, target, () -> castSandTsunami(target))) {
+            return;
+        }
         Vec3 origin = this.boss.position();
         Vec3 direction = target.position().subtract(origin).normalize();
         for (double step = 2.0; step <= 16.0; step += 2.0) {
@@ -1136,6 +1360,9 @@ public class BossJutsuGoal extends Goal {
 
     /** The threads. His arm comes off and reaches across the room. */
     private void castThreadStrike(LivingEntity target) {
+        if (windup(Telegraph.FOCUS, target, () -> castThreadStrike(target))) {
+            return;
+        }
         Vec3 origin = this.boss.position().add(0, this.boss.getBbHeight() * 0.6, 0);
         Vec3 impact = target.position().add(0, target.getBbHeight() * 0.5, 0);
         if (target.hurt(this.boss.damageSources().mobAttack(this.boss),
@@ -1157,6 +1384,9 @@ public class BossJutsuGoal extends Goal {
      * needles arrive from wherever he is not.
      */
     private void castIceMirrors(LivingEntity target) {
+        if (windup(Telegraph.HEAVY, target, () -> castIceMirrors(target))) {
+            return;
+        }
         if (!(this.boss.level() instanceof ServerLevel serverLevel)) {
             return;
         }
@@ -1251,6 +1481,9 @@ public class BossJutsuGoal extends Goal {
 
     /** Morning Peacock: so many punches the air catches fire. */
     private void castMorningPeacock(LivingEntity target) {
+        if (windup(Telegraph.HEAVY, target, () -> castMorningPeacock(target))) {
+            return;
+        }
         for (int i = 0; i < 6; i++) {
             target.invulnerableTime = 0;
             target.hurt(this.boss.damageSources().mobAttack(this.boss),
@@ -1267,6 +1500,9 @@ public class BossJutsuGoal extends Goal {
 
     /** Evening Elephant: one hit, and everything behind it goes too. */
     private void castEveningElephant(LivingEntity target) {
+        if (windup(Telegraph.HEAVY, target, () -> castEveningElephant(target))) {
+            return;
+        }
         Vec3 direction = target.position().subtract(this.boss.position()).normalize();
         Vec3 centre = this.boss.position().add(direction.scale(3.0));
         for (LivingEntity victim : victimsNear(centre, 5.0)) {
@@ -1391,6 +1627,9 @@ public class BossJutsuGoal extends Goal {
 
     /** Itachi: Amaterasu — the flame entity spreads on its own from where it lands. */
     private void castBlackFlame(LivingEntity target) {
+        if (windup(Telegraph.FOCUS, target, () -> castBlackFlame(target))) {
+            return;
+        }
         AmaterasuFireEntity fire = new AmaterasuFireEntity(this.boss.level(), this.boss,
                 target.getX(), target.getY(), target.getZ());
         fire.setDamageMultiplier(1.2f);
@@ -1400,6 +1639,9 @@ public class BossJutsuGoal extends Goal {
 
     /** Itachi: Tsukuyomi — no damage worth speaking of, but you stop being a participant. */
     private void castTsukuyomi(LivingEntity target) {
+        if (windup(Telegraph.GENJUTSU, target, () -> castTsukuyomi(target))) {
+            return;
+        }
         target.addEffect(new MobEffectInstance(MobEffects.BLINDNESS, 8 * 20, 0, false, false));
         target.addEffect(new MobEffectInstance(MobEffects.CONFUSION, 12 * 20, 0, false, false));
         target.addEffect(new MobEffectInstance(MobEffects.WEAKNESS, 12 * 20, 2, false, true));
@@ -1436,6 +1678,9 @@ public class BossJutsuGoal extends Goal {
 
     /** Sasuke: Kirin — a branching bolt out of the sky, using the shared fractal helper. */
     private void castKirin(LivingEntity target) {
+        if (windup(Telegraph.HEAVY, target, () -> castKirin(target))) {
+            return;
+        }
         Vec3 impact = target.position();
         if (this.boss.level() instanceof ServerLevel serverLevel) {
             Vec3 sky = impact.add(0, 40, 0);
@@ -1522,6 +1767,9 @@ public class BossJutsuGoal extends Goal {
 
     /** Madara: once the shell is up, the shell is the weapon. */
     private void castSusanooSweep() {
+        if (windup(Telegraph.HEAVY, this.boss.getTarget(), () -> castSusanooSweep())) {
+            return;
+        }
         for (LivingEntity caught : nearby(this.boss.position(), 7.0)) {
             caught.hurt(this.boss.damageSources().mobAttack(this.boss), 18f);
             Vec3 push = caught.position().subtract(this.boss.position()).normalize().scale(1.4).add(0, 0.5, 0);
@@ -1538,6 +1786,9 @@ public class BossJutsuGoal extends Goal {
 
     /** Shisui: Kotoamatsukami — everything that makes you dangerous, switched off. */
     private void castKotoamatsukami(LivingEntity target) {
+        if (windup(Telegraph.GENJUTSU, target, () -> castKotoamatsukami(target))) {
+            return;
+        }
         target.addEffect(new MobEffectInstance(MobEffects.BLINDNESS, 10 * 20, 0, false, false));
         target.addEffect(new MobEffectInstance(MobEffects.CONFUSION, 15 * 20, 0, false, false));
         target.addEffect(new MobEffectInstance(MobEffects.WEAKNESS, 15 * 20, 2, false, true));
@@ -1577,6 +1828,9 @@ public class BossJutsuGoal extends Goal {
      * named for it.
      */
     private void castGravityPull(LivingEntity target) {
+        if (windup(Telegraph.FOCUS, target, () -> castGravityPull(target))) {
+            return;
+        }
         Vec3 pull = this.boss.position().subtract(target.position()).normalize().scale(1.8).add(0, 0.4, 0);
         target.setDeltaMovement(pull);
         target.hurtMarked = true;
@@ -1612,6 +1866,9 @@ public class BossJutsuGoal extends Goal {
 
     /** Kisame: a bubble of water that holds you still and drowns you in it. */
     private void castWaterPrison(LivingEntity target) {
+        if (windup(Telegraph.FOCUS, target, () -> castWaterPrison(target))) {
+            return;
+        }
         target.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 6 * 20, 4, false, true));
         target.addEffect(new MobEffectInstance(MobEffects.DIG_SLOWDOWN, 6 * 20, 2, false, true));
         target.hurt(this.boss.damageSources().drown(), 9f);
@@ -1679,6 +1936,9 @@ public class BossJutsuGoal extends Goal {
      * own or by being knocked out - ends the link for both of them.
      */
     private void castCurseRitual(LivingEntity target) {
+        if (windup(Telegraph.FOCUS, target, () -> castCurseRitual(target))) {
+            return;
+        }
         if (this.curseVictim == null || !this.curseVictim.equals(target.getUUID())) {
             // No blood taken from this one yet. He cuts for it instead, which is the
             // telegraph: a scythe swing the victim can see, and avoid.
@@ -1813,6 +2073,9 @@ public class BossJutsuGoal extends Goal {
 
     /** Wood closes around them: pinned in place, and it does not let go quickly. */
     private void castWoodGrasp(LivingEntity target) {
+        if (windup(Telegraph.FOCUS, target, () -> castWoodGrasp(target))) {
+            return;
+        }
         target.hurt(this.boss.damageSources().mobAttack(this.boss), 10f);
         target.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 8 * 20, 5, false, true));
         target.addEffect(new MobEffectInstance(MobEffects.JUMP, 8 * 20, 128, false, false));
@@ -1829,6 +2092,9 @@ public class BossJutsuGoal extends Goal {
 
     /** Shinra Tensei: everything near him stops being near him. */
     private void castShinraTensei() {
+        if (windup(Telegraph.HEAVY, this.boss.getTarget(), () -> castShinraTensei())) {
+            return;
+        }
         for (LivingEntity caught : nearby(this.boss.position(), 9.0)) {
             caught.hurt(this.boss.damageSources().mobAttack(this.boss), 16f);
             Vec3 push = caught.position().subtract(this.boss.position()).normalize().scale(3.0).add(0, 0.8, 0);
@@ -1865,6 +2131,9 @@ public class BossJutsuGoal extends Goal {
 
     /** Chibaku Tensei: a core drops and everything is dragged into it. */
     private void castChibakuTensei(LivingEntity target) {
+        if (windup(Telegraph.HEAVY, target, () -> castChibakuTensei(target))) {
+            return;
+        }
         // A real core now, rather than one frame of pull and a puff of particles: it rises,
         // hangs for eight seconds dragging everything toward it, and then comes down. The
         // entity owns all of that, so the player's version and Nagato's are the same thing.
@@ -1904,6 +2173,9 @@ public class BossJutsuGoal extends Goal {
 
     /** A thrown Rasenshuriken: wide, shredding, and it does not care about armour. */
     private void castRasenshuriken(LivingEntity target) {
+        if (windup(Telegraph.HEAVY, target, () -> castRasenshuriken(target))) {
+            return;
+        }
         Vec3 impact = target.position().add(0, 1.0, 0);
         for (LivingEntity caught : nearby(impact, 5.0)) {
             caught.hurt(this.boss.damageSources().indirectMagic(this.boss, this.boss), 20f);
@@ -2006,6 +2278,9 @@ public class BossJutsuGoal extends Goal {
 
     /** Shadow Possession: you are still alive, you simply do not get to move. */
     private void castShadowBind(LivingEntity target) {
+        if (windup(Telegraph.FOCUS, target, () -> castShadowBind(target))) {
+            return;
+        }
         target.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 6 * 20, 6, false, true));
         target.addEffect(new MobEffectInstance(MobEffects.JUMP, 6 * 20, 128, false, false));
         target.addEffect(new MobEffectInstance(MobEffects.WEAKNESS, 6 * 20, 2, false, true));
@@ -2031,6 +2306,9 @@ public class BossJutsuGoal extends Goal {
 
     /** Shadow Strangle: it reaches the throat and stays there. */
     private void castShadowStrangle(LivingEntity target) {
+        if (windup(Telegraph.FOCUS, target, () -> castShadowStrangle(target))) {
+            return;
+        }
         target.addEffect(new MobEffectInstance(MobEffects.WITHER, 8 * 20, 2, false, true));
         target.addEffect(new MobEffectInstance(MobEffects.BLINDNESS, 5 * 20, 0, false, false));
         target.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 8 * 20, 3, false, true));
