@@ -13,7 +13,8 @@ import java.util.function.Supplier;
  */
 public class ServerSelectClanPacket {
 
-    private static final Set<String> VALID_CLANS = Set.of("uzumaki", "uchiha", "hyuga", "nara", "haruno", "senju");
+    /** Derived from the one clan list, so the screen and the server cannot disagree. */
+    private static final Set<String> VALID_CLANS = com.sekwah.narutomod.clan.NinjaClan.VALID_IDS;
 
     private final String clanId;
 

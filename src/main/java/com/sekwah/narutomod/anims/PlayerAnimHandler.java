@@ -42,6 +42,9 @@ public class PlayerAnimHandler {
     private static final float RAMP_GATES = 4f;
     private static final float RAMP_LANDING = 1.5f;
 
+    /** Movement below this along the wall is standing still, not running. */
+    private static final double WALL_RUN_DEAD_ZONE = 0.02;
+
     /** Below this a drop is a step, not a landing worth animating. */
     private static final float LANDING_MIN_FALL = 2.5f;
     private static final float LANDING_TICKS_MIN = 5f;
@@ -77,22 +80,6 @@ public class PlayerAnimHandler {
             boolean channelActive = channeledAbility != null;
             boolean castActive = !channelActive && !chidoriActive && ninjaData.getCastPoseTicks() > 0;
 
-            float channelWeight = PoseBlender.weight(entity, Track.CHANNEL, channelActive, RAMP_CHANNEL, ageInTicks);
-            float chidoriWeight = PoseBlender.weight(entity, Track.CHIDORI, chidoriActive, RAMP_CHIDORI, ageInTicks);
-            float castWeight = PoseBlender.weight(entity, Track.CAST, castActive, RAMP_CAST, ageInTicks);
-
-            if (channelWeight > PoseBlender.EPSILON) {
-                applyChanneledPose(playerModel, channelWeight, channeledAbility,
-                        PoseBlender.elapsed(entity, Track.CHANNEL));
-            }
-            if (chidoriWeight > PoseBlender.EPSILON) {
-                applyChidoriThrustPose(playerModel, chidoriWeight,
-                        PoseBlender.elapsed(entity, Track.CHIDORI));
-            }
-            if (castWeight > PoseBlender.EPSILON) {
-                applyCastPose(playerModel, castWeight, castPhase(ninjaData),
-                        ninjaData.getLastCastAbilityId(), ninjaData.isCrossSealPose());
-            }
 
             boolean wallClimbing = ninjaData.isWallWalkAttached();
             boolean sprinting = !wallClimbing && entity.isSprinting()
@@ -122,6 +109,33 @@ public class PlayerAnimHandler {
             float susanooWeight = PoseBlender.weight(entity, Track.SUSANOO, susanooStance, RAMP_SUSANOO, ageInTicks);
             if (susanooWeight > PoseBlender.EPSILON) {
                 applySusanooPose(playerModel, susanooWeight, PoseBlender.elapsed(entity, Track.SUSANOO));
+            }
+
+            // ---- Actions, applied LAST ----
+            //
+            // Order here IS priority. PoseBlender.rotate drives a limb toward an absolute
+            // angle, so whichever pose runs last owns that limb - and these used to run
+            // first, which meant a transformation stance silently erased them. Holding a
+            // Chidori inside a Susanoo showed the Susanoo's idle arms; the lightning was in
+            // the hand and the body was standing at rest.
+            //
+            // Stances describe what you ARE and are applied above; actions describe what you
+            // are DOING and win, because doing beats being.
+            float channelWeight = PoseBlender.weight(entity, Track.CHANNEL, channelActive, RAMP_CHANNEL, ageInTicks);
+            float chidoriWeight = PoseBlender.weight(entity, Track.CHIDORI, chidoriActive, RAMP_CHIDORI, ageInTicks);
+            float castWeight = PoseBlender.weight(entity, Track.CAST, castActive, RAMP_CAST, ageInTicks);
+
+            if (channelWeight > PoseBlender.EPSILON) {
+                applyChanneledPose(playerModel, channelWeight, channeledAbility,
+                        PoseBlender.elapsed(entity, Track.CHANNEL));
+            }
+            if (chidoriWeight > PoseBlender.EPSILON) {
+                applyChidoriThrustPose(playerModel, chidoriWeight,
+                        PoseBlender.elapsed(entity, Track.CHIDORI));
+            }
+            if (castWeight > PoseBlender.EPSILON) {
+                applyCastPose(playerModel, castWeight, castPhase(ninjaData),
+                        ninjaData.getLastCastAbilityId(), ninjaData.isCrossSealPose());
             }
 
             // The sword swing overrides the standing stance for as long as it runs - it is the
@@ -385,15 +399,35 @@ public class PlayerAnimHandler {
      *
      * The leg cycle is driven by deltaMovement rather than limbSwing on purpose: limbSwing
      * tracks horizontal travel, so going straight up a wall - the most common thing anyone
-     * does with this - left the legs frozen mid-stride. deltaMovement includes the vertical
-     * component, so the run keeps its rhythm going up, down or sideways, and falls to zero
-     * when the player stops, which stops the legs on its own.
+     * does with this - left the legs frozen mid-stride.
+     *
+     * But raw deltaMovement.length() is not the travel either. Wall Walk applies a constant
+     * push INTO the wall every tick to keep the player attached, so a player standing
+     * perfectly still on a wall still reports motion - and the legs kept cycling at a brisk
+     * jog while nobody was going anywhere. That is the "fast crawl" this technique was
+     * accused of: not the posture, the cadence.
+     *
+     * The grip component is therefore removed by projecting the movement onto the wall plane
+     * and only measuring what is left, and a dead zone keeps sensor noise from twitching the
+     * legs. The stride frequency now scales with that speed too, instead of running at a
+     * fixed 4.6 cycles a second regardless of how fast the player was actually travelling.
      */
     private static void applyWallRunPose(PlayerModel playerModel, Entity player,
                                          float weight, float ageInTicks) {
-        float speed = (float) net.minecraft.util.Mth.clamp(
-                player.getDeltaMovement().length() * 7.0D, 0.0D, 1.0D);
-        float stride = net.minecraft.util.Mth.cos(ageInTicks * 1.45F) * 0.95F * speed;
+        net.minecraft.world.phys.Vec3 motion = player.getDeltaMovement();
+        // Everything except the component along the wall normal. The normal is not known
+        // here, but the grip is the only thing pushing horizontally into a surface the player
+        // is clinging to, so subtracting the collided axes leaves the travel along the wall.
+        double tangential = Math.sqrt(
+                (player.horizontalCollision ? 0.0 : motion.x * motion.x)
+                        + motion.y * motion.y
+                        + (player.horizontalCollision ? 0.0 : motion.z * motion.z));
+        if (tangential < WALL_RUN_DEAD_ZONE) {
+            tangential = 0.0;
+        }
+        float speed = (float) net.minecraft.util.Mth.clamp(tangential * 7.0D, 0.0D, 1.0D);
+        // Cadence follows pace: a walk is not a sprint played at the same tempo.
+        float stride = net.minecraft.util.Mth.cos(ageInTicks * (0.45F + 1.15F * speed)) * 0.95F * speed;
 
         // A lean toward the wall, not a lie-down on it.
         PoseBlender.rotate(playerModel.body, weight, 0.24F, 0F, 0F);

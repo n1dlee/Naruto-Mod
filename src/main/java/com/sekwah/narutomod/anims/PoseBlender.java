@@ -109,9 +109,18 @@ public final class PoseBlender {
         float delta = Mth.clamp(ageInTicks - state[1], 0f, 5f);
         state[1] = ageInTicks;
 
-        // Reset on the falling edge, not while off, so a pose reading elapsed() during its
-        // fade-out still sees where it finished rather than snapping back to its first frame.
-        state[2] = active ? state[2] + delta : 0f;
+        // Elapsed time FREEZES while the pose fades out, and is only cleared once the blend
+        // has actually reached zero.
+        //
+        // The comment here used to promise exactly this and the code did the opposite: it
+        // zeroed on the first inactive frame, so releasing Fireball or Chidori snapped the
+        // limbs back to frame one of the pose and dissolved from there. The recovery half of
+        // every keyframed stance was never visible.
+        if (active) {
+            state[2] += delta;
+        } else if (state[0] <= 0f) {
+            state[2] = 0f;
+        }
 
         float step = rampTicks <= 0f ? 1f : delta / rampTicks;
         state[0] = approach(state[0], active ? 1f : 0f, step);

@@ -95,11 +95,34 @@ public final class JutsuVfxHandler {
 
     /** Arcs reseeded each tick, plus vanilla sparks for the bright flecks between them. */
     private static void renderChidori(Player player) {
+        // Distance LOD. Forty particles a tick per user is eight hundred a second, and in a
+        // fight with several Chidori up at once that alone can outweigh everything else on
+        // screen - for arcs that are a few pixels wide at range and were never readable
+        // anyway. Close up nothing changes; past twelve blocks it halves, past twenty-four it
+        // is only the bright core spark.
+        double distance = Minecraft.getInstance().player == null
+                ? 0 : Minecraft.getInstance().player.distanceTo(player);
+        boolean self = player == Minecraft.getInstance().player;
+
+        if (!self && distance > CHIDORI_HALF_RATE_RANGE && player.tickCount % 2 != 0) {
+            return;
+        }
+
         Vec3 hand = JutsuVfx.handPosition(player, 1.0, 1.0f);
+        if (!self && distance > CHIDORI_SPARK_ONLY_RANGE) {
+            player.level().addParticle(ParticleTypes.ELECTRIC_SPARK, hand.x, hand.y, hand.z, 0, 0, 0);
+            return;
+        }
         Vec3 facing = player.getViewVector(1.0f);
 
-        JutsuVfx.chidoriArcs(player.level(), hand, facing, player.tickCount,
-                NarutoParticles.CHIDORI_CYAN);
+        // The seed carries the player's id as well as the tick, so two people holding a
+        // Chidori side by side do not produce the same bolt shape in lockstep.
+        JutsuVfx.chidoriArcs(player.level(), hand, facing,
+                player.tickCount * 31 + player.getId(), NarutoParticles.CHIDORI_CYAN);
         player.level().addParticle(ParticleTypes.ELECTRIC_SPARK, hand.x, hand.y, hand.z, 0, 0, 0);
     }
+
+    /** Past this only the core spark is drawn; past the half-rate range, every other tick. */
+    private static final double CHIDORI_SPARK_ONLY_RANGE = 24.0;
+    private static final double CHIDORI_HALF_RATE_RANGE = 12.0;
 }

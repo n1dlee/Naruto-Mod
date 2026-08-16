@@ -78,7 +78,13 @@ public class ShadowCloneEntity extends PathfinderMob {
         this.goalSelector.addGoal(2, new MeleeAttackGoal(this, 1.0D, false));
         this.goalSelector.addGoal(5, new WaterAvoidingRandomStrollGoal(this, 0.6D));
         this.goalSelector.addGoal(6, new LookAtPlayerGoal(this, Player.class, 6.0F));
-        this.targetSelector.addGoal(1, new NearestAttackableTargetGoal<>(this, Monster.class, true));
+        this.targetSelector.addGoal(1, new NearestAttackableTargetGoal<>(this, net.minecraft.world.entity.LivingEntity.class, 10, true, false,
+                        // Enemy, not Monster. Every custom boss and tailed beast in this mod
+                        // is a PathfinderMob implementing Enemy rather than a vanilla Monster,
+                        // so a clone or golem sent in against Madara or Kurama simply stood
+                        // there and picked a zombie three hundred blocks away instead.
+                        target -> target instanceof net.minecraft.world.entity.monster.Enemy
+                                && !com.sekwah.narutomod.util.Faction.sameSide(this, target)));
     }
 
     public static AttributeSupplier.Builder createAttributes() {
@@ -135,6 +141,28 @@ public class ShadowCloneEntity extends PathfinderMob {
      *  owner-kill check above to close the summon-and-instantly-harvest loop. */
     private static final int MIN_TICKS_FOR_REFUND = 100;
 
+    /**
+     * What this clone hands back when it dispels, set by whoever made it.
+     *
+     * It used to be a flat eight per clone regardless of what the technique cost, which made
+     * both clone jutsu chakra PRINTERS: the basic one paid twenty for three clones and gave
+     * twenty-four back, and Multiple Shadow Clone paid eighty for twenty and returned a
+     * hundred and sixty. Standing in a field spawning and waiting was strictly better than
+     * meditating.
+     */
+    private float refundValue = 0f;
+
+    /** Splits the technique's cost across its clones and keeps a share for the caster. */
+    public void setRefundShare(float paidCost, int cloneCount) {
+        this.refundValue = cloneCount <= 0 ? 0f : (paidCost / cloneCount) * REFUND_FRACTION;
+    }
+
+    /**
+     * How much of a clone's share comes back. Below one on purpose - the technique has to
+     * cost something even when every clone survives, or it is free.
+     */
+    private static final float REFUND_FRACTION = 0.6f;
+
     @Override
     public boolean hurt(DamageSource source, float amount) {
         if (!level().isClientSide && source.getEntity() != null
@@ -168,7 +196,7 @@ public class ShadowCloneEntity extends PathfinderMob {
             this.getOwnerUUID().ifPresent(ownerId -> {
                 if (serverLevel.getEntity(ownerId) instanceof Player owner && owner.isAlive()) {
                     owner.getCapability(NinjaCapabilityHandler.NINJA_DATA)
-                            .ifPresent(ownerData -> ownerData.addChakra(8f));
+                            .ifPresent(ownerData -> ownerData.addChakra(this.refundValue));
                 }
             });
         }
@@ -180,6 +208,7 @@ public class ShadowCloneEntity extends PathfinderMob {
         tag.putInt("AliveTicks", aliveTicks);
         tag.putByte("BossVariant", this.getBossVariant());
         this.getOwnerUUID().ifPresent(uuid -> tag.putUUID("OwnerUUID", uuid));
+        tag.putFloat("RefundValue", this.refundValue);
     }
 
     @Override

@@ -14,25 +14,9 @@ import net.minecraft.resources.ResourceLocation;
  */
 public class ClanSelectionScreen extends Screen {
 
-    private static final String[] CLAN_IDS = {"uzumaki", "uchiha", "hyuga", "nara", "haruno", "senju"};
-    private static final String[] CLAN_NAMES = {"Uzumaki", "Uchiha", "Hyuga", "Nara", "Haruno", "Senju"};
-    private static final String[] CLAN_DESCRIPTIONS = {
-            "Chakra x1.5, Regen x2",
-            "Fire jutsu +30% damage",
-            "Melee attack +30%",
-            "Movement speed +20%",
-            "HP regen 0.5/sec",
-            "Wood Release, +20% HP"
-    };
-
-    private static final ResourceLocation[] CLAN_ICONS = {
-            new ResourceLocation("narutomod", "textures/gui/clans/uzumaki.png"),
-            new ResourceLocation("narutomod", "textures/gui/clans/uchiha.png"),
-            new ResourceLocation("narutomod", "textures/gui/clans/hyuga.png"),
-            new ResourceLocation("narutomod", "textures/gui/clans/nara.png"),
-            new ResourceLocation("narutomod", "textures/gui/clans/haruno.png"),
-            new ResourceLocation("narutomod", "textures/gui/clans/senju.png"),
-    };
+    // The clan list lives in NinjaClan. Four parallel arrays here plus a fifth hard-coded
+    // set in ServerSelectClanPacket is exactly how four implemented clans ended up
+    // unreachable: adding one meant editing five places and nothing failed if you missed one.
 
     public ClanSelectionScreen() {
         super(Component.literal("Choose Your Clan"));
@@ -43,16 +27,20 @@ public class ClanSelectionScreen extends Screen {
         int centerX = this.width / 2;
         int startY = this.height / 4;
 
-        for (int i = 0; i < CLAN_IDS.length; i++) {
-            final String clanId = CLAN_IDS[i];
+        com.sekwah.narutomod.clan.NinjaClan[] clans = com.sekwah.narutomod.clan.NinjaClan.values();
+        // Ten clans no longer fit at the old 28px pitch on a short window, so the rows tighten
+        // up when there are enough of them to run off the bottom.
+        int pitch = this.height < 300 ? 20 : 24;
+        for (int i = 0; i < clans.length; i++) {
+            final com.sekwah.narutomod.clan.NinjaClan clan = clans[i];
             // ASCII hyphen, not an em-dash. With Embeddium/Oculus installed a non-ASCII glyph
-        // switches the font to another page mid-string and everything after it renders as
-        // garbage - which is exactly what the clan buttons were showing.
-        String label = CLAN_NAMES[i] + " - " + CLAN_DESCRIPTIONS[i];
+            // switches the font to another page mid-string and everything after it renders as
+            // garbage - which is exactly what the clan buttons were showing.
+            String label = clan.displayName() + " - " + clan.description();
             this.addRenderableWidget(Button.builder(Component.literal(label), (btn) -> {
-                PacketHandler.sendToServer(new ServerSelectClanPacket(clanId));
+                PacketHandler.sendToServer(new ServerSelectClanPacket(clan.id()));
                 this.minecraft.setScreen(null);
-            }).pos(centerX - 150, startY + i * 28).size(300, 24).build());
+            }).pos(centerX - 150, startY + i * pitch).size(300, pitch - 4).build());
         }
     }
 

@@ -272,27 +272,41 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
         return this.entityData.get(SUSANOO_STAGE);
     }
 
-    public void setSusanooStage(int stage) {
+    /**
+     * @return true only when the stage actually changed. Callers must not run stage-entry
+     *         effects on a false: during the shatter lockout this refuses every request, and
+     *         a caller that fired its effects anyway did so twenty times a second for three
+     *         minutes - summons replenished, healing reapplied, particles poured out.
+     */
+    public boolean setSusanooStage(int stage) {
         int clamped = Math.min(Math.max(stage, 0), 4);
         // A shattered shell stays down for its full lockout; the boss cannot simply put
         // another one up on the next phase transition.
         if (clamped > 0 && this.susanooBrokenTicks > 0) {
-            return;
+            return false;
         }
-        if (clamped == this.getSusanooStage()) {
-            return;
+        int previousStage = this.getSusanooStage();
+        if (clamped == previousStage) {
+            return false;
         }
-        this.entityData.set(SUSANOO_STAGE, (byte) clamped);
-        // A newly raised shell is whole; carry damage across a stage change as a fraction so
-        // climbing the ladder does not repair it and dropping down does not shatter it.
-        float previousMax = SUSANOO_DURABILITY[Math.min(Math.max(this.getSusanooStage(), 0),
+
+        // Both of these are read BEFORE the new stage is written. Reading them afterwards
+        // made "previous" mean "current", so raising the first shell computed a fraction of
+        // 0/220 and every boss manifested a Susanoo with zero integrity - the defensive phase
+        // existed on screen and absorbed nothing.
+        float previousMax = SUSANOO_DURABILITY[Math.min(Math.max(previousStage, 0),
                 SUSANOO_DURABILITY.length - 1)];
-        float fraction = previousMax <= 0f ? 1f : this.susanooDurability / previousMax;
+        float fraction = previousStage <= 0 || previousMax <= 0f
+                ? 1f                                    // raising a shell: it starts whole
+                : this.susanooDurability / previousMax; // between shells: carry the damage
+
+        this.entityData.set(SUSANOO_STAGE, (byte) clamped);
         this.susanooDurability = this.getSusanooMaxDurability()
                 * net.minecraft.util.Mth.clamp(fraction, 0f, 1f);
         // Stage 4 is the only one that changes the entity's actual size, but refreshing
         // unconditionally keeps the box correct when a boss is restored from NBT mid-fight.
         this.refreshDimensions();
+        return true;
     }
 
     /**
@@ -430,8 +444,12 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
                 && !hasRoomForCompleteBody()) {
             stage = 3;
         }
-        if (stage != current) {
-            this.setSusanooStage(stage);
+        // Gated on the transition ACTUALLY happening. A wanted stage the setter refuses -
+        // which is every tick of a three-minute shatter lockout - used to run the entry
+        // effects anyway, twenty times a second: Naruto and the puppeteers replenished their
+        // summons, Kakuzu healed, and thirty particles a tick poured out of a boss that had
+        // just lost its shell. It made losing the Susanoo a reward.
+        if (stage != current && this.setSusanooStage(stage)) {
             if (stage > 0 && this.level() instanceof ServerLevel serverLevel) {
                 serverLevel.sendParticles(ParticleTypes.SOUL_FIRE_FLAME,
                         this.getX(), this.getY() + this.getBbHeight() * 0.6, this.getZ(),
@@ -933,11 +951,24 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
     }
 
     /** Phases are for a real fight, not for falling in lava or being /killed. */
+    /**
+     * A phase is something a FIGHT takes off a boss, not something the terrain does.
+     *
+     * Only bypass damage was excluded, so lava, a fall, drowning, or Hidan's own ritual
+     * self-harm each refilled a health bar. A boss could be healed by standing in fire, and
+     * Hidan could stall indefinitely by stabbing himself. The transition now requires a living
+     * attacker who is not the boss itself.
+     */
     private boolean canAdvancePhase(DamageSource source) {
-        return this.phase < PHASE_MAX_HEALTH.length - 1
-                && this.getVariant().transforms()
-                && !source.is(net.minecraft.tags.DamageTypeTags.BYPASSES_INVULNERABILITY)
-                && !this.level().isClientSide;
+        // Bounded by this wielder's own phase count, not by the length of the shared table.
+        if (this.phase >= Math.min(this.getVariant().phaseCount(), PHASE_MAX_HEALTH.length) - 1
+                || !this.getVariant().transforms()
+                || source.is(net.minecraft.tags.DamageTypeTags.BYPASSES_INVULNERABILITY)
+                || this.level().isClientSide) {
+            return false;
+        }
+        net.minecraft.world.entity.Entity attacker = source.getEntity();
+        return attacker instanceof net.minecraft.world.entity.LivingEntity && attacker != this;
     }
 
     /**
@@ -1034,6 +1065,13 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
         tag.putInt("SenjuHealsUsed", this.senjuHealsUsed);
         tag.putBoolean("KamuiUnlocked", this.kamuiUnlocked);
         tag.putBoolean("EngagedByPlayer", this.engagedByPlayer);
+        // The shell's own state. Without these a relog handed the boss a fresh Susanoo, or
+        // cancelled a shatter lockout that had thirty seconds left - either way the fight the
+        // player had been winning was quietly reset by a chunk boundary.
+        tag.putFloat("SusanooDurability", this.susanooDurability);
+        tag.putInt("SusanooBrokenTicks", this.susanooBrokenTicks);
+        tag.putInt("PhaseCooldown", this.phaseCooldown);
+        tag.putInt("PhaseTicks", this.phaseTicks);
     }
 
     @Override
@@ -1049,6 +1087,14 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
         this.senjuHealsUsed = tag.getInt("SenjuHealsUsed");
         this.kamuiUnlocked = tag.getBoolean("KamuiUnlocked");
         this.engagedByPlayer = tag.getBoolean("EngagedByPlayer");
+        this.susanooBrokenTicks = tag.getInt("SusanooBrokenTicks");
+        this.phaseCooldown = tag.getInt("PhaseCooldown");
+        this.phaseTicks = tag.getInt("PhaseTicks");
+        // Read AFTER setSusanooStage above, which recomputes durability from the stage change
+        // and would otherwise overwrite the saved value with a full shell.
+        this.susanooDurability = tag.contains("SusanooDurability")
+                ? tag.getFloat("SusanooDurability")
+                : this.getSusanooMaxDurability();
     }
 
     @Override

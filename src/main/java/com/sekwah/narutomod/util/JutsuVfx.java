@@ -221,21 +221,31 @@ public final class JutsuVfx {
      * @param side -1 for the left hand, +1 for the right
      */
     public static Vec3 handPosition(Player player, double side, float partialTick) {
-        Vec3 look = player.getViewVector(partialTick);
-        Vec3 flatLook = new Vec3(look.x, 0, look.z);
-        if (flatLook.lengthSqr() < 1.0E-6) {
-            flatLook = new Vec3(0, 0, 1);
-        }
-        flatLook = flatLook.normalize();
-        Vec3 right = flatLook.cross(new Vec3(0, 1, 0)).normalize();
+        // Built from the BODY's yaw, not from the view vector.
+        //
+        // The old version flattened the look direction and normalised it. Looking straight up
+        // or down leaves that flattened vector at zero length, so it fell back to a fixed
+        // world-Z heading - and the Rasengan jumped to whatever direction south happened to
+        // be, regardless of where the player was facing. Body yaw has no such singularity: it
+        // is an angle, and an angle pointing at the sky is still a well-defined angle.
+        float bodyYaw = net.minecraft.util.Mth.rotLerp(partialTick, player.yBodyRotO, player.yBodyRot);
+        double radians = Math.toRadians(bodyYaw);
+        Vec3 forward = new Vec3(-Math.sin(radians), 0, Math.cos(radians));
+        Vec3 right = new Vec3(Math.cos(radians), 0, Math.sin(radians));
+
+        // Pitch still tilts the arm, but only as a lift on the hand rather than by rotating
+        // the whole frame - the shoulder does not move when you look up.
+        double pitch = Math.toRadians(net.minecraft.util.Mth.rotLerp(
+                partialTick, player.xRotO, player.getXRot()));
+        double lift = -Math.sin(pitch) * 0.35;
 
         return new Vec3(
                 Mth_lerp(partialTick, player.xo, player.getX()),
                 Mth_lerp(partialTick, player.yo, player.getY()),
                 Mth_lerp(partialTick, player.zo, player.getZ()))
-                .add(0, player.getBbHeight() * 0.72, 0)
+                .add(0, player.getBbHeight() * 0.72 + lift, 0)
                 .add(right.scale(0.42 * side))
-                .add(flatLook.scale(0.34));
+                .add(forward.scale(0.34));
     }
 
     private static double Mth_lerp(float t, double from, double to) {

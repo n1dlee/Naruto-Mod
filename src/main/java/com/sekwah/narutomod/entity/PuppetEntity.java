@@ -127,20 +127,16 @@ public class PuppetEntity extends PathfinderMob implements Enemy {
         this.targetSelector.addGoal(2, new NearestAttackableTargetGoal<>(this, Player.class,
                 10, true, false, target -> !this.isPuppeteerOwned(target)));
         this.targetSelector.addGoal(3, new NearestAttackableTargetGoal<>(this, Monster.class,
-                10, true, false, target -> !(target instanceof PuppetEntity)));
+                10, true, false, target -> !this.isPuppeteerOwned(target)));
     }
 
-    /** The summoner and their other puppets. A collection does not fight itself. */
+    /**
+     * The puppeteer and everything else they have on the field. A collection does not fight
+     * itself - and neither does it fight its owner's summons, clones or golems, which the
+     * old puppet-only test allowed.
+     */
     private boolean isPuppeteerOwned(LivingEntity candidate) {
-        UUID owner = this.getOwnerUUID().orElse(null);
-        if (owner == null) {
-            return false;
-        }
-        if (owner.equals(candidate.getUUID())) {
-            return true;
-        }
-        return candidate instanceof PuppetEntity other
-                && owner.equals(other.getOwnerUUID().orElse(null));
+        return com.sekwah.narutomod.util.Faction.sameSide(this, candidate);
     }
 
     public static AttributeSupplier.Builder createAttributes() {

@@ -98,6 +98,14 @@ public class ServerAbilityChannelPacket {
                             if (!ability.checkFreeHands(player, ninjaData)) {
                                 return;
                             }
+                            // A channel already running is never silently replaced, even by a
+                            // technique the free-hands gate exempts. Chakra Charge, Sage Mode
+                            // and Substitution all skip that gate, and starting one of them
+                            // mid-Fireball overwrote the session: the old channel's ticks were
+                            // reset to zero and its release then produced nothing at all.
+                            if (ninjaData.getCurrentlyChanneledAbility() != null) {
+                                return;
+                            }
                             // Cooldowns used to be checked only on the INSTANT path, so a
                             // channeled ability that declared one silently never had it.
                             // Gate the START here, where refusing costs the player nothing.
@@ -116,21 +124,16 @@ public class ServerAbilityChannelPacket {
                                 return;
                             }
                             NarutoRegistries.ABILITIES.getResourceKey(ability).ifPresent(resourceKey -> {
-                                if(channelled.equals(resourceKey.location())) {
-                                    int channelledTicks = ninjaData.getCurrentlyChanneledTicks();
-                                    ability.performServer(player, ninjaData, channelledTicks);
-                                    ability.grantCastXp(ninjaData);
-                                    // Channeled techniques were invisible to the copy wheel:
-                                    // only the instant-cast path ever offered itself up, so
-                                    // a watching Sharingan could never read one.
-                                    com.sekwah.narutomod.util.SharinganCopy.onJutsuPerformed(
-                                            player, ability, resourceKey.location().getPath());
-                                    if (ability instanceof Ability.Cooldown cooldownAbility
-                                            && ability.channelCommittedAt(channelledTicks)) {
-                                        cooldownAbility.registerCooldown(ninjaData,
-                                                ability.getTranslationKey(ninjaData));
-                                    }
-                                    ninjaData.setCurrentlyChanneledAbility(player, null);
+                                if (channelled.equals(resourceKey.location())) {
+                                    // Everything a finished channel is owed - the cast, XP,
+                                    // the Sharingan offer, the copy slot and the cooldown -
+                                    // now lives in one place shared with the resource-exhaustion
+                                    // path, and none of it happens for a channel the server
+                                    // never ticked. A STOP is intent, not proof of a cast.
+                                    com.sekwah.narutomod.abilities.ChannelCompletion.finish(
+                                            player, ninjaData, ability,
+                                            ninjaData.getCurrentlyChanneledTicks(),
+                                            com.sekwah.narutomod.abilities.ChannelCompletion.Reason.RELEASED);
                                 }
                             });
                         } else if(msg.status == ChannelStatus.MIN_ACTIVATE) {

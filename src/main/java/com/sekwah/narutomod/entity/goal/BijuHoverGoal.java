@@ -40,6 +40,13 @@ public class BijuHoverGoal extends Goal {
         if (!this.beast.getVariant().isFlyer()) {
             return false;
         }
+        // Planted while charging a Bijudama. The jutsu goal stops navigation, but hover is a
+        // separate goal writing movement of its own, so Chomei kept circling and drifting
+        // through the whole wind-up - the one moment the technique is supposed to be a
+        // stationary tell that everyone can see and react to.
+        if (this.beast.getBijudamaCharge() > 0f) {
+            return false;
+        }
         LivingEntity target = this.beast.getTarget();
         return target != null && target.isAlive();
     }

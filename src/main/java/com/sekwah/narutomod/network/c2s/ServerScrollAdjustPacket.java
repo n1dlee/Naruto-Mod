@@ -23,8 +23,21 @@ public class ServerScrollAdjustPacket {
         outBuffer.writeFloat(msg.direction);
     }
 
+    /**
+     * Normalises the wire value to exactly -1 or +1.
+     *
+     * The field is only ever meant to carry the sign of one scroll notch, but it was read as
+     * a raw float and passed straight into the transformation economy. A client sending NaN
+     * poisoned transformPower, and from there the chakra and Kurama-bond arithmetic: every
+     * {@code chakra < cost} comparison against a NaN silently becomes false, so drains stop
+     * working and the corrupted value is then written to the player's save.
+     *
+     * Signum rather than a clamp on purpose - a clamp still lets 0.999 through, and there is
+     * no legitimate scroll input that is not one whole notch in one direction.
+     */
     public static ServerScrollAdjustPacket decode(FriendlyByteBuf inBuffer) {
-        return new ServerScrollAdjustPacket(inBuffer.readFloat());
+        float raw = inBuffer.readFloat();
+        return new ServerScrollAdjustPacket(Float.isFinite(raw) ? Math.signum(raw) : 0f);
     }
 
     public static class Handler {

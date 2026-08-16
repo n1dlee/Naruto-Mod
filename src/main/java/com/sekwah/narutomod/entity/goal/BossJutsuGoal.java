@@ -992,11 +992,44 @@ public class BossJutsuGoal extends Goal {
     private static final DustParticleOptions THREAD_BLACK =
             new DustParticleOptions(new Vector3f(0.12F, 0.12F, 0.14F), 1.0F);
 
-    /** Everything worth hitting near a point. The boss never catches itself. */
+    /**
+     * Everything worth hitting near a point.
+     *
+     * Three things this did not do, and eleven attacks went through it:
+     *
+     *  - it excluded only the boss itself, so the poison, wind and elemental kits happily
+     *    gassed the caster's own clones and puppets. The newer {@link #nearby} helper already
+     *    filtered allies; this one never got the same treatment.
+     *  - it selected on an axis-aligned BOX, so the corners reached about 1.7x the stated
+     *    radius - an attack advertised as five blocks hit at eight, but only diagonally.
+     *  - it ignored walls entirely. Reading the wind-up and ducking behind cover still got
+     *    you hit, which makes the telegraph pointless.
+     */
     private java.util.List<LivingEntity> victimsNear(Vec3 centre, double radius) {
+        double radiusSqr = radius * radius;
         return this.boss.level().getEntitiesOfClass(LivingEntity.class,
                 new net.minecraft.world.phys.AABB(centre, centre).inflate(radius),
-                candidate -> candidate != this.boss && candidate.isAlive());
+                candidate -> candidate != this.boss
+                        && candidate.isAlive()
+                        && !isOwnSide(candidate)
+                        && candidate.distanceToSqr(centre) <= radiusSqr
+                        && hasClearPath(centre, candidate));
+    }
+
+    /**
+     * Whether a blow originating at this point can actually reach the victim.
+     *
+     * Traced to the victim's eyes rather than their feet: a target standing behind a
+     * half-slab or in a doorway is exposed from the chest up, and tracing to the floor would
+     * call that cover.
+     */
+    private boolean hasClearPath(Vec3 origin, LivingEntity victim) {
+        Vec3 eyes = victim.getEyePosition();
+        net.minecraft.world.phys.BlockHitResult hit = this.boss.level().clip(
+                new net.minecraft.world.level.ClipContext(origin, eyes,
+                        net.minecraft.world.level.ClipContext.Block.COLLIDER,
+                        net.minecraft.world.level.ClipContext.Fluid.NONE, this.boss));
+        return hit.getType() == net.minecraft.world.phys.HitResult.Type.MISS;
     }
 
     /** Kankuro's puppets breathe poison as much as they stab with it. */
@@ -1551,7 +1584,7 @@ public class BossJutsuGoal extends Goal {
                     NarutoParticles.SHARINGAN_RED);
         }
         Vec3 behind = target.position().subtract(target.getLookAngle().scale(1.5));
-        this.boss.teleportTo(behind.x, target.getY(), behind.z);
+        teleportSafely(behind.x, target.getY(), behind.z);
         target.hurt(this.boss.damageSources().mobAttack(this.boss), 11f);
         playCastSound(SoundEvents.SHULKER_TELEPORT, 1.0f);
     }
@@ -1738,12 +1771,43 @@ public class BossJutsuGoal extends Goal {
         }
     }
 
+    /**
+     * Moves the boss only if it fits where it is going.
+     *
+     * Raw teleportTo does not care what is at the destination, so a body flicker behind a
+     * player standing against a cliff put the boss inside the cliff - suffocating, stuck, and
+     * usually unreachable. Refusing the move leaves the boss where it was, which is a missed
+     * technique rather than a broken fight.
+     */
+    private void teleportSafely(double x, double y, double z) {
+        net.minecraft.world.phys.AABB destination = this.boss.getBoundingBox().move(
+                x - this.boss.getX(), y - this.boss.getY(), z - this.boss.getZ());
+        if (this.boss.level().noCollision(this.boss, destination)) {
+            this.boss.teleportTo(x, y, z);
+        }
+    }
+
+    /** How far around the caster counts as "there is already a core here". */
+    private static final double CHIBAKU_EXCLUSION = 160.0;
+
     /** Chibaku Tensei: a core drops and everything is dragged into it. */
     private void castChibakuTensei(LivingEntity target) {
         // A real core now, rather than one frame of pull and a puff of particles: it rises,
         // hangs for eight seconds dragging everything toward it, and then comes down. The
         // entity owns all of that, so the player's version and Nagato's are the same thing.
         Vec3 origin = target.position().add(0, 3.0, 0);
+
+        // One core at a time. Nothing stopped Nagato casting again while the last one was
+        // still hanging, and each core scans a 128-block radius every few ticks and tears up
+        // ground - so a long fight stacked several of them and the region got both unplayable
+        // and expensive. A technique that reshapes the landscape may not be spammed.
+        if (!this.boss.level().getEntitiesOfClass(
+                com.sekwah.narutomod.entity.jutsuprojectile.ChibakuTenseiEntity.class,
+                this.boss.getBoundingBox().inflate(CHIBAKU_EXCLUSION),
+                core -> core.isAlive()).isEmpty()) {
+            return;
+        }
+
         this.boss.level().addFreshEntity(
                 new com.sekwah.narutomod.entity.jutsuprojectile.ChibakuTenseiEntity(this.boss, origin));
         playCastSound(SoundEvents.END_PORTAL_SPAWN, 1.3f);
@@ -1941,7 +2005,7 @@ public class BossJutsuGoal extends Goal {
             NarutoParticles.spawnBurst(serverLevel, this.boss.position().add(0, 1.0, 0), 12, 0.5,
                     NarutoParticles.ROTATION_WHITE);
         }
-        this.boss.teleportTo(spot.x, target.getY(), spot.z);
+        teleportSafely(spot.x, target.getY(), spot.z);
         target.hurt(this.boss.damageSources().mobAttack(this.boss), 7f);
         playCastSound(SoundEvents.ENDERMAN_TELEPORT, 1.5f);
 

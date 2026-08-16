@@ -313,7 +313,16 @@ public class WaterWalkAbility extends Ability implements Ability.Toggled {
         if (player.level().isClientSide() || wallDirection == null || (Math.abs(player.zza) < 0.01F && Math.abs(player.xxa) < 0.01F) || player.tickCount % 10 != 0) {
             return;
         }
-        player.level().playSound(null, player.blockPosition(), SoundEvents.STONE_STEP, SoundSource.PLAYERS, 0.28F, 1.45F);
+        // The step sound comes from whatever is actually underfoot - or rather, under hand:
+        // the block the player is clinging to. A flat STONE_STEP meant running up a glass
+        // tower, a tree or a sand dune all sounded like scrambling on rock.
+        net.minecraft.core.BlockPos wallPos = player.blockPosition().relative(wallDirection);
+        net.minecraft.world.level.block.state.BlockState wall = player.level().getBlockState(wallPos);
+        net.minecraft.world.level.block.SoundType soundType = wall.isAir()
+                ? net.minecraft.world.level.block.SoundType.STONE
+                : wall.getSoundType(player.level(), wallPos, player);
+        player.level().playSound(null, player.blockPosition(), soundType.getStepSound(),
+                SoundSource.PLAYERS, 0.28F, 1.45F);
     }
 
     @Override

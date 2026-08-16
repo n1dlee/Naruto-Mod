@@ -41,11 +41,18 @@ public class AmaterasuFireEntity extends Entity {
         this.setPos(x, y, z);
     }
 
-    /** Tries to resolve the owner entity from the level each time it's needed. */
+    /**
+     * Tries to resolve the owner entity from the level each time it's needed.
+     *
+     * Any entity, not only players. Bosses cast Amaterasu too and hand their own UUID in, so
+     * a player-only lookup returned null for every NPC caster - which made the flames
+     * ownerless and therefore hostile to the boss that lit them, to its clones and to its
+     * puppets. Itachi was setting himself on fire.
+     */
     private Entity resolveOwner() {
         if (ownerUUID == null) return null;
         if (this.level() instanceof ServerLevel serverLevel) {
-            return serverLevel.getPlayerByUUID(ownerUUID);
+            return serverLevel.getEntity(ownerUUID);
         }
         return null;
     }

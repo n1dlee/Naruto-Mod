@@ -133,9 +133,16 @@ public class WoodGolemAbility extends Ability implements Ability.Toggled, Abilit
         if (player.level().isClientSide) {
             return;
         }
-        for (WoodGolemEntity golem : player.level().getEntitiesOfClass(WoodGolemEntity.class,
-                new AABB(player.blockPosition()).inflate(96.0), g -> g.isOwnedBy(player))) {
-            golem.dissolve();
+        // Every golem this player owns in this world, not just the ones within 96 blocks.
+        // A golem left behind by walking away, riding a Hiraishin, or dying and respawning
+        // elsewhere was simply out of range of the sweep, so toggling the technique off did
+        // not dissolve it - it stayed standing, free, for as long as the chunk was loaded.
+        if (player.level() instanceof net.minecraft.server.level.ServerLevel serverLevel) {
+            for (WoodGolemEntity golem : serverLevel.getEntities(
+                    com.sekwah.narutomod.entity.NarutoEntities.WOOD_GOLEM.get(),
+                    g -> g.isOwnedBy(player))) {
+                golem.dissolve();
+            }
         }
     }
 }

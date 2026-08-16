@@ -56,6 +56,24 @@ public class PlayerRendererMixin {
     }
 
     /**
+     * Marks the whole hand render, so the model mixin can tell first person from a still
+     * third-person frame instead of inferring it from zeroed animation arguments.
+     */
+    @Inject(method = "renderHand", at = @At("HEAD"), require = 0)
+    private void narutomod$beginHandRender(PoseStack poseStack, MultiBufferSource bufferSource, int light,
+                                           AbstractClientPlayer player, ModelPart arm, ModelPart sleeve,
+                                           CallbackInfo ci) {
+        FirstPersonAnimHandler.setRenderingFirstPersonHand(true);
+    }
+
+    @Inject(method = "renderHand", at = @At("RETURN"), require = 0)
+    private void narutomod$endHandRender(PoseStack poseStack, MultiBufferSource bufferSource, int light,
+                                         AbstractClientPlayer player, ModelPart arm, ModelPart sleeve,
+                                         CallbackInfo ci) {
+        FirstPersonAnimHandler.setRenderingFirstPersonHand(false);
+    }
+
+    /**
      * The sleeve is a separate part with its own xRot zeroed after the arm is drawn, so posing
      * the arm alone would slide the skin's overlay layer off the limb underneath it.
      */

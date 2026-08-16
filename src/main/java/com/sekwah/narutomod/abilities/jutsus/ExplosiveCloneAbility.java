@@ -126,7 +126,11 @@ public class ExplosiveCloneAbility extends Ability implements Ability.Cooldown {
             return; // killed before the fuse ran out; the trick failed, and that is fair
         }
         Vec3 at = clone.position();
-        Level level = player.level();
+        // The clone's level, not the caster's. The fuse runs for seconds and the caster can
+        // change dimension in that time - through a Kamui, a portal, a death - and the blast
+        // then went off at the clone's coordinates in the WRONG world, hitting whatever
+        // happened to be standing at that x/z in the Nether.
+        Level level = clone.level();
         if (level instanceof ServerLevel serverLevel) {
             NarutoParticles.spawnBurst(serverLevel, at.add(0, 1, 0), 30, 0.6, NarutoParticles.CLAY_GREY);
         }

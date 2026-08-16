@@ -47,6 +47,26 @@ public final class FirstPersonAnimHandler {
         renderingRightHand = right;
     }
 
+    /**
+     * True only while PlayerRenderer is drawing a first-person hand.
+     *
+     * The model mixin used to infer this from setupAnim being called with every argument at
+     * zero. That is true of the hand render, but it is ALSO true of a third-person frame in
+     * which the player happens to be perfectly still and facing due south - and of any other
+     * mod or renderer that calls setupAnim with defaults. Whenever it guessed wrong, the body
+     * poses were silently skipped for that frame. The renderer knows the answer for certain,
+     * so it says so.
+     */
+    private static boolean renderingFirstPersonHand = false;
+
+    public static void setRenderingFirstPersonHand(boolean rendering) {
+        renderingFirstPersonHand = rendering;
+    }
+
+    public static boolean isRenderingFirstPersonHand() {
+        return renderingFirstPersonHand;
+    }
+
     /** How much of the third-person gesture survives into the first-person frame. */
     private static final float SCALE = 0.45f;
 

@@ -199,14 +199,41 @@ public enum MangekyoBossVariant {
     }
 
     /**
-     * Every wielder escalates now. A boss that fights identically at full health and at five
+     * Every wielder escalates. A boss that fights identically at full health and at five
      * percent has no second act, and the whole appeal of these fights is watching someone
      * reach for the next thing when the first one stops working.
      *
      * What escalating MEANS is per character - see MangekyoBossEntity#onStageEntered.
      */
     public boolean transforms() {
-        return true;
+        return this.phaseCount() > 1;
+    }
+
+    /**
+     * How many health bars this wielder actually has.
+     *
+     * This used to be five for everyone, which is where the escalation idea broke down: the
+     * phase multipliers total 8.7 base health bars, so Iruka - a chunin instructor, the
+     * weakest thing on the roster at 150 health - had roughly 1300 effective, and so did
+     * Zabuza, Haku and Hidan. A character with one trick does not need four escalations to
+     * show it, and giving them one made the low tier a slog rather than a warm-up.
+     *
+     * S-rank Mangekyo wielders and the legends keep the full ladder; everyone else gets the
+     * number of acts their kit can actually fill.
+     */
+    public int phaseCount() {
+        return switch (this) {
+            // Uchiha and the legends: the full four-step climb into a Complete Body or its
+            // equivalent is the fight.
+            case ITACHI, SASUKE, MADARA, SHISUI, OBITO, HASHIRAMA, NAGATO, NARUTO, KAKASHI -> 5;
+            // Heavyweights with a real second and third gear.
+            case KISAME, HIDAN, KAKUZU, GAARA, SASORI, MIGHT_GUY, SAKURA, KUROTSUCHI -> 3;
+            // One strong idea each, executed twice.
+            case ZABUZA, DEIDARA, HINATA, SHIKAMARU, KANKURO, TEMARI, HAKU, TENTEN,
+                 WHITE_ZETSU -> 2;
+            // A chunin instructor is a fight you win, not a boss rush.
+            case IRUKA -> 1;
+        };
     }
 
     /**

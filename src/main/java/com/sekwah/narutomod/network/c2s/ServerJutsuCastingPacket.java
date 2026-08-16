@@ -47,6 +47,14 @@ public class ServerJutsuCastingPacket {
                         if(player.gameMode.getGameModeForPlayer() == GameType.SPECTATOR) {
                             return;
                         }
+                        // Rate limited per player. This packet costs the sender nothing and
+                        // makes the server play a sound and fire a game event, so a modified
+                        // client could hold the whole area in a permanent seal noise and
+                        // trigger every sculk sensor in range for free. Two per tick is well
+                        // above anything a human hand produces.
+                        if (!allow(player)) {
+                            return;
+                        }
                         SoundEvent playSound = switch (msg.jutsuKey) {
                             case 1 -> NarutoSounds.SEAL_A.get();
                             case 2 -> NarutoSounds.SEAL_B.get();
@@ -63,6 +71,24 @@ public class ServerJutsuCastingPacket {
                 }
             });
             ctx.get().setPacketHandled(true);
+        }
+
+        /** Last accepted tick per player; a WeakHashMap so leaving frees the entry. */
+        private static final java.util.Map<ServerPlayer, long[]> LAST_SEAL =
+                java.util.Collections.synchronizedMap(new java.util.WeakHashMap<>());
+
+        private static final int MAX_SEALS_PER_TICK = 2;
+
+        private static boolean allow(ServerPlayer player) {
+            long tick = player.serverLevel().getGameTime();
+            long[] state = LAST_SEAL.computeIfAbsent(player, p -> new long[]{-1L, 0L});
+            synchronized (state) {
+                if (state[0] != tick) {
+                    state[0] = tick;
+                    state[1] = 0L;
+                }
+                return ++state[1] <= MAX_SEALS_PER_TICK;
+            }
         }
     }
 }

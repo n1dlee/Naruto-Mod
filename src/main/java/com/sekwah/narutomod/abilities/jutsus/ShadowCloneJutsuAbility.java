@@ -55,7 +55,7 @@ public class ShadowCloneJutsuAbility extends Ability implements Ability.Cooldown
     public void performServer(Player player, INinjaData ninjaData, int ticksActive) {
         ninjaData.setCrossSealPose(true);
         spawnCasterBurst(player, CLONE_COUNT);
-        spawnClones(player, CLONE_COUNT, SPREAD);
+        spawnClones(player, CLONE_COUNT, SPREAD, CHAKRA_COST);
     }
 
     /**
@@ -70,12 +70,18 @@ public class ShadowCloneJutsuAbility extends Ability implements Ability.Cooldown
         }
     }
 
-    protected static void spawnClones(Player player, int count, double spread) {
+    /**
+     * @param paidCost what the technique charged, so each clone can hand back a share of it
+     *                 rather than a flat figure unrelated to the price - see
+     *                 ShadowCloneEntity#setRefundShare.
+     */
+    protected static void spawnClones(Player player, int count, double spread, float paidCost) {
         for (int i = 0; i < count; i++) {
             double offsetX = (player.getRandom().nextDouble() * 2 - 1) * spread;
             double offsetZ = (player.getRandom().nextDouble() * 2 - 1) * spread;
             ShadowCloneEntity clone = new ShadowCloneEntity(NarutoEntities.SHADOW_CLONE.get(), player.level());
             clone.setOwner(player);
+            clone.setRefundShare(paidCost, count);
             for (EquipmentSlot slot : EquipmentSlot.values()) {
                 ItemStack stack = player.getItemBySlot(slot);
                 if (!stack.isEmpty()) {

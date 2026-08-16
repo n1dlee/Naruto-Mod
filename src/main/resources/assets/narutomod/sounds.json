@@ -121,43 +121,43 @@
   },
   "fireball.shoot": {
     "sounds": [
-      "mob/ghast/fireball4"
+      "minecraft:mob/ghast/fireball4"
     ],
     "subtitle": "narutomod.subtitle.fireball.shoot"
   },
   "fireball.explosion": {
     "sounds": [
-      "random/explode1",
-      "random/explode2",
-      "random/explode3",
-      "random/explode4"
+      "minecraft:random/explode1",
+      "minecraft:random/explode2",
+      "minecraft:random/explode3",
+      "minecraft:random/explode4"
     ],
     "subtitle": "narutomod.subtitle.fireball.explosion"
   },
   "waterbullet.shoot": {
     "sounds": [
-      "liquid/swim5",
-      "liquid/swim6",
-      "liquid/swim7",
-      "liquid/swim8",
-      "liquid/swim9",
-      "liquid/swim10",
-      "liquid/swim11",
-      "liquid/swim12",
-      "liquid/swim13",
-      "liquid/swim14",
-      "liquid/swim15",
-      "liquid/swim16",
-      "liquid/swim17",
-      "liquid/swim18"
+      "minecraft:liquid/swim5",
+      "minecraft:liquid/swim6",
+      "minecraft:liquid/swim7",
+      "minecraft:liquid/swim8",
+      "minecraft:liquid/swim9",
+      "minecraft:liquid/swim10",
+      "minecraft:liquid/swim11",
+      "minecraft:liquid/swim12",
+      "minecraft:liquid/swim13",
+      "minecraft:liquid/swim14",
+      "minecraft:liquid/swim15",
+      "minecraft:liquid/swim16",
+      "minecraft:liquid/swim17",
+      "minecraft:liquid/swim18"
     ],
     "subtitle": "narutomod.subtitle.waterbullet.shoot"
   },
   "waterbullet.splash": {
     "sounds": [
-      "mob/dolphin/splash1",
-      "mob/dolphin/splash2",
-      "mob/dolphin/splash3"
+      "minecraft:mob/dolphin/splash1",
+      "minecraft:mob/dolphin/splash2",
+      "minecraft:mob/dolphin/splash3"
     ],
     "subtitle": "narutomod.subtitle.waterbullet.splash"
   },

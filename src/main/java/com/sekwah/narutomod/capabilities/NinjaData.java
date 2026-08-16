@@ -114,7 +114,9 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
      * TODO make this global then expand the channeled logic to be able to handle any visual effects easier.
      * TODO possibly swap the type of this over to an Ability type so that it needs to be looked up less.
      */
-    @Sync(minTicks = 1)
+    // syncGlobally: read by renderers that run for EVERY player in view, not just the owner.
+    // Owner-only sync meant the caster saw their own jutsu and everyone else saw idle hands.
+    @Sync(minTicks = 1, syncGlobally = true)
     private ResourceLocation currentlyChanneled;
 
     @Sync(minTicks = 1)
@@ -204,7 +206,10 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
     @Sync
     private int sharinganTomoe = 0; // 0-3
 
-    @Sync
+    // syncGlobally: PlayerEyeLayer draws this on every player it renders. Owner-only sync
+    // meant everyone else's eyes were drawn from YOUR progression - so a bystander with a
+    // Mangekyo showed plain Sharingan, and your own transplant put one eye on all of them.
+    @Sync(syncGlobally = true)
     private boolean mangekyoAwakened = false;
 
     /** Primary MS form chosen at awakening: "", "itachi", "sasuke", "madara", "shisui", "obito". */
@@ -246,7 +251,7 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
     @Sync
     private int byakuganLevel = 0; // 0-4
 
-    @Sync
+    @Sync(syncGlobally = true)
     private boolean rinneganAwakened = false;
 
     /** csv of unlocked Six Paths ids: "deva,preta,animal,naraka". */
@@ -288,7 +293,7 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
      * burns chakra every second, forever. That permanent tax is the whole trade-off for a
      * non-Uchiha getting the dojutsu at all.
      */
-    @Sync
+    @Sync(syncGlobally = true)
     private boolean transplantedSharingan = false;
 
     /**
@@ -576,7 +581,16 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
 
     @Override
     public void adjustTransformPower(float delta) {
-        this.transformPower = Math.min(Math.max(this.transformPower + delta, 0f), 1f);
+        // Second barrier behind the packet's own validation, because this value feeds the
+        // chakra and Kurama-bond drains and then gets saved. Math.min/Math.max PROPAGATE NaN
+        // rather than clamping it, so the obvious-looking clamp below is not a guard at all -
+        // one non-finite delta poisons the field permanently and every later "can I afford
+        // this" comparison against it quietly answers no.
+        if (!Float.isFinite(delta)) {
+            return;
+        }
+        float updated = Math.min(Math.max(this.transformPower + delta, 0f), 1f);
+        this.transformPower = Float.isFinite(updated) ? updated : 0f;
     }
 
     private void updateTransformPower() {
@@ -645,10 +659,12 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
     }
 
     // --- Rasengan: held in hand, toggled on/off, resized with the scroll wheel ---
-    @Sync(minTicks = 1)
+    // syncGlobally: read by renderers that run for EVERY player in view, not just the owner.
+    // Owner-only sync meant the caster saw their own jutsu and everyone else saw idle hands.
+    @Sync(minTicks = 1, syncGlobally = true)
     private boolean rasenganHeld = false;
 
-    @Sync(minTicks = 1)
+    @Sync(minTicks = 1, syncGlobally = true)
     private int rasenganCharge = 20;
 
     /**
@@ -1754,10 +1770,14 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
                         channeled.handleChannelling(player, this, this.ticksChanneled);
                     }
                 } else {
+                    // Running out of resources is a release like any other. It used to fire
+                    // the technique and register nothing, so letting your chakra run dry was
+                    // strictly better than letting go: a fully charged Kirin could strike
+                    // with no cooldown at all.
                     if (this.ticksChanneled > 0) {
-                        int finalTicksChanneled = this.ticksChanneled - 1;
-                        ability.performServer(player, this, finalTicksChanneled);
-                        this.setCurrentlyChanneledAbility(player, null);
+                        com.sekwah.narutomod.abilities.ChannelCompletion.finish(
+                                player, this, ability, this.ticksChanneled - 1,
+                                com.sekwah.narutomod.abilities.ChannelCompletion.Reason.EXHAUSTED);
                     }
                 }
             } else {

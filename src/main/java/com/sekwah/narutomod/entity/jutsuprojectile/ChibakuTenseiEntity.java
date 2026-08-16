@@ -66,7 +66,20 @@ public class ChibakuTenseiEntity extends Entity {
     private static final int EXCAVATE_DEPTH = 6;
 
     /** Where every lifted block was put, so the sphere can be taken apart when it falls. */
-    private final java.util.List<net.minecraft.core.BlockPos> gathered = new java.util.ArrayList<>();
+    /**
+     * One block the core has torn up: where it came from, where it is now, and what it was.
+     *
+     * The source state is the important field. Without it the technique was a one-way block
+     * deleter - it removed the ground and remembered only the shell, so releasing the moon
+     * destroyed the shell too and the crater it had dug was permanent. Anyone casting this
+     * near a base silently and irreversibly ate part of it, which is not something a combat
+     * technique may do.
+     */
+    private record Lifted(net.minecraft.core.BlockPos from, net.minecraft.core.BlockPos to,
+                          net.minecraft.world.level.block.state.BlockState state) {
+    }
+
+    private final java.util.List<Lifted> gathered = new java.util.ArrayList<>();
     private int gatherRing = 1;
     /**
      * How far the core reaches, in blocks. This is a regional technique, not a room-sized
@@ -206,7 +219,7 @@ public class ChibakuTenseiEntity extends Entity {
 
             serverLevel.removeBlock(from, false);
             serverLevel.setBlock(to, state, net.minecraft.world.level.block.Block.UPDATE_CLIENTS);
-            this.gathered.add(to);
+            this.gathered.add(new Lifted(from, to, state));
             lifted++;
 
             NarutoParticles.spawnBolt(serverLevel,
@@ -255,14 +268,27 @@ public class ChibakuTenseiEntity extends Entity {
                 this.getZ() + Math.sin(theta) * ringRadius * r);
     }
 
-    /** Lets the gathered mass go, so nothing is left floating once the core is gone. */
+    /**
+     * Puts the landscape back.
+     *
+     * Runs on every exit - released, landed, killed, or discarded on chunk unload - because a
+     * core that vanishes without doing this leaves both a crater and a sky full of floating
+     * debris. Restoration is best-effort: if something has since been built where the ground
+     * used to be, that build wins and the original block is simply not restored.
+     */
     private void releaseEarth() {
         if (!(this.level() instanceof ServerLevel serverLevel)) {
             return;
         }
-        for (net.minecraft.core.BlockPos pos : this.gathered) {
-            if (!serverLevel.getBlockState(pos).isAir()) {
-                serverLevel.removeBlock(pos, false);
+        for (Lifted lifted : this.gathered) {
+            // The shell comes down; the crater stays.
+            //
+            // Deliberate, and chosen by the mod's owner: Chibaku Tensei tearing the landscape
+            // open permanently is the whole point of the technique. What is NOT acceptable is
+            // the shell surviving the core - a sphere of stone left hanging in the sky is not
+            // a scar, it is a bug - so the ledger still exists and still runs on every exit.
+            if (!serverLevel.getBlockState(lifted.to()).isAir()) {
+                serverLevel.removeBlock(lifted.to(), false);
             }
         }
         this.gathered.clear();
@@ -447,6 +473,36 @@ public class ChibakuTenseiEntity extends Entity {
         this.entityData.set(SIZE, tag.getFloat("Size"));
         this.ownerUUID = tag.hasUUID("OwnerUUID")
                 ? Optional.of(tag.getUUID("OwnerUUID")) : Optional.empty();
+
+        this.gathered.clear();
+        net.minecraft.nbt.ListTag lifted = tag.getList("Lifted", net.minecraft.nbt.Tag.TAG_COMPOUND);
+        net.minecraft.core.HolderGetter<net.minecraft.world.level.block.Block> blocks =
+                this.level().holderLookup(net.minecraft.core.registries.Registries.BLOCK);
+        for (int i = 0; i < lifted.size() && i < MAX_GATHERED; i++) {
+            CompoundTag row = lifted.getCompound(i);
+            this.gathered.add(new Lifted(
+                    net.minecraft.nbt.NbtUtils.readBlockPos(row.getCompound("From")),
+                    net.minecraft.nbt.NbtUtils.readBlockPos(row.getCompound("To")),
+                    net.minecraft.nbt.NbtUtils.readBlockState(blocks, row.getCompound("State"))));
+        }
+        this.fallSpeed = tag.getDouble("FallSpeed");
+        this.gatherRing = Math.max(1, tag.getInt("GatherRing"));
+    }
+
+    /**
+     * Any disappearance is a release.
+     *
+     * discard(), a kill, or the entity simply going away with the chunk all end up here, and
+     * every one of them has to hand the landscape back. Missing this is how the technique
+     * left permanent craters even with a ledger: the ledger only helped on the paths that
+     * remembered to use it.
+     */
+    @Override
+    public void remove(Entity.RemovalReason reason) {
+        if (!this.level().isClientSide && !this.gathered.isEmpty()) {
+            this.releaseEarth();
+        }
+        super.remove(reason);
     }
 
     @Override
@@ -454,6 +510,21 @@ public class ChibakuTenseiEntity extends Entity {
         tag.putInt("Age", this.age);
         tag.putFloat("Size", this.getSize());
         this.ownerUUID.ifPresent(uuid -> tag.putUUID("OwnerUUID", uuid));
+
+        // The rollback ledger has to survive a chunk unload or a restart. Left in memory only,
+        // a core that was holding torn-up ground when the world saved came back knowing
+        // nothing: the sources stayed deleted and the shell stayed floating, permanently.
+        net.minecraft.nbt.ListTag lifted = new net.minecraft.nbt.ListTag();
+        for (Lifted entry : this.gathered) {
+            CompoundTag row = new CompoundTag();
+            row.put("From", net.minecraft.nbt.NbtUtils.writeBlockPos(entry.from()));
+            row.put("To", net.minecraft.nbt.NbtUtils.writeBlockPos(entry.to()));
+            row.put("State", net.minecraft.nbt.NbtUtils.writeBlockState(entry.state()));
+            lifted.add(row);
+        }
+        tag.put("Lifted", lifted);
+        tag.putDouble("FallSpeed", this.fallSpeed);
+        tag.putInt("GatherRing", this.gatherRing);
     }
 
     @Override

@@ -121,8 +121,29 @@ public class SummonBeastEntity extends PathfinderMob {
     protected void registerGoals() {
         this.goalSelector.addGoal(0, new FloatGoal(this));
         this.goalSelector.addGoal(1, new SummonBeastJutsuGoal(this));
-        this.goalSelector.addGoal(2, new NinjaLeapGoal(this, 1.0D, 0.5D));
-        this.goalSelector.addGoal(3, new MeleeAttackGoal(this, 1.1D, true));
+        // Both of these refuse for a support contract, and they have to decide that in
+        // canUse rather than here: registerGoals runs from the Mob constructor, before any
+        // variant has been set, so at this point every summon still looks like the default.
+        //
+        // Katsuyu is documented as having no melee role and was given the full melee and leap
+        // kit regardless, so the healing slug charged into things and bit them.
+        this.goalSelector.addGoal(2, new NinjaLeapGoal(this, 1.0D, 0.5D) {
+            @Override
+            public boolean canUse() {
+                return !SummonBeastEntity.this.getVariant().isSupport() && super.canUse();
+            }
+        });
+        this.goalSelector.addGoal(3, new MeleeAttackGoal(this, 1.1D, true) {
+            @Override
+            public boolean canUse() {
+                return !SummonBeastEntity.this.getVariant().isSupport() && super.canUse();
+            }
+
+            @Override
+            public boolean canContinueToUse() {
+                return !SummonBeastEntity.this.getVariant().isSupport() && super.canContinueToUse();
+            }
+        });
         this.goalSelector.addGoal(4, new SummonFollowOwnerGoal(this));
         this.goalSelector.addGoal(5, new WaterAvoidingRandomStrollGoal(this, 0.7D));
         this.goalSelector.addGoal(6, new LookAtPlayerGoal(this, Player.class, 10.0F));
@@ -132,20 +153,18 @@ public class SummonBeastEntity extends PathfinderMob {
         // Enemy, so a Monster-only filter would have summons stand and watch a boss fight.
         this.targetSelector.addGoal(2, new NearestAttackableTargetGoal<>(this, LivingEntity.class,
                 10, true, false, target -> target instanceof Enemy && !this.isSummonerOwned(target)));
-        this.targetSelector.addGoal(3, new NearestAttackableTargetGoal<>(this, Monster.class, true));
+        this.targetSelector.addGoal(3, new NearestAttackableTargetGoal<>(this, Monster.class,
+                10, true, false, target -> !this.isSummonerOwned(target)));
     }
 
-    /** True for the summoner and for anything else the summoner called out. */
+    /**
+     * True for the summoner and for anything else that summoner has on the field.
+     *
+     * Delegates to the shared faction test. It used to recognise only other SummonBeastEntity,
+     * so a toad would happily maul its owner's puppets, clones and wood golems.
+     */
     private boolean isSummonerOwned(LivingEntity candidate) {
-        UUID owner = this.getOwnerUUID().orElse(null);
-        if (owner == null) {
-            return false;
-        }
-        if (owner.equals(candidate.getUUID())) {
-            return true;
-        }
-        return candidate instanceof SummonBeastEntity other
-                && owner.equals(other.getOwnerUUID().orElse(null));
+        return com.sekwah.narutomod.util.Faction.sameSide(this, candidate);
     }
 
     public static AttributeSupplier.Builder createAttributes() {

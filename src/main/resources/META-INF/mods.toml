@@ -23,10 +23,15 @@ A mod that adds new items and other features to the game that are from/based on 
     side="BOTH"
 
 # https://maven.apache.org/enforcer/enforcer-rules/versionRanges.html
+#
+# 1.20.1 only, and deliberately closed at the top. "[1.20,)" advertised every future
+# Minecraft release forever - including versions that did not exist when this was built and
+# against which nothing here was ever compiled. A mod that loads into 1.21 and then crashes
+# on the first changed mapping is worse than one that refuses to load.
 [[dependencies.narutomod]]
     modId="minecraft"
     mandatory=true
-    versionRange="[1.20,)"
+    versionRange="[1.20.1,1.20.2)"
     ordering="NONE"
     side="BOTH"
 

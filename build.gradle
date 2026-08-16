@@ -15,13 +15,17 @@ buildscript {
         mavenCentral()
     }
     dependencies {
-        classpath "org.spongepowered:mixingradle:0.7+"
+        // Pinned. A floating "0.7+" meant the same commit could resolve a different plugin
+        // tomorrow and produce a different jar - or stop building entirely - with nothing in
+        // the repository having changed. These are the versions this project actually
+        // resolved and was tested against.
+        classpath "org.spongepowered:mixingradle:0.7.38"
         classpath "org.apache.httpcomponents:httpmime:4.5.14"
-        classpath "org.parchmentmc:librarian:1.+"
+        classpath "org.parchmentmc:librarian:1.2.0"
     }
 }
 plugins {
-    id "com.modrinth.minotaur" version "2.+"
+    id "com.modrinth.minotaur" version "2.8.7"
     id "com.matthewprenger.cursegradle" version "1.4.0"
     id 'net.neoforged.gradle' version '[6.0.13, 6.2)'
 }
@@ -187,6 +191,19 @@ dependencies {
     // http://www.gradle.org/docs/current/userguide/artifact_dependencies_tutorial.html
     // http://www.gradle.org/docs/current/userguide/dependency_management.html
 
+    // `check` reported test NO-SOURCE, so a green build proved compilation and nothing else.
+    // These cover the pure logic that gameplay correctness rests on - the power ladder, the
+    // spike field geometry, the faction rules - which is the part that can be tested without
+    // standing up a Minecraft server.
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+test {
+    useJUnitPlatform()
+    testLogging {
+        events "passed", "skipped", "failed"
+    }
 }
 
 mixin {
@@ -311,7 +328,10 @@ task discordupload {
 tasks.curseforge.enabled = System.getenv("CURSE_API") != null
 
 curseforge {
-    logger.info("Curse api: " + System.getenv("CURSE_API"))
+    // Presence only, never the value. This printed the CurseForge publishing key straight
+    // into the build log, so anyone who could read a CI run - which on a public repository
+    // is everyone - could take over the mod's CurseForge listing.
+    logger.info("Curse api key: " + (System.getenv("CURSE_API") != null ? "present" : "absent"))
     if (System.getenv("CURSE_API") != null) {
         apiKey = System.getenv("CURSE_API")
     }

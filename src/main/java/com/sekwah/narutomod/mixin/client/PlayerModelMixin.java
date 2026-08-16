@@ -25,8 +25,10 @@ public class PlayerModelMixin<T extends LivingEntity> extends HumanoidModel<T> {
 
     @Inject(method = "setupAnim(Lnet/minecraft/world/entity/LivingEntity;FFFFF)V", at = @At(value = "INVOKE", shift = At.Shift.AFTER, target = "Lnet/minecraft/client/model/HumanoidModel;setupAnim(Lnet/minecraft/world/entity/LivingEntity;FFFFF)V"))
     public void setupAnim(T player, float limbSwing, float limbSwingAmount, float ageInTicks, float netHeadYaw, float headPitch, CallbackInfo ci) {
-        if(limbSwing == 0 && ageInTicks == 0 && netHeadYaw == 0 && headPitch == 0) {
-            // Likely is firstpersonrender but try to find a better way of doing this.
+        // Asked, not guessed. PlayerRendererMixin sets this flag around the hand render, so
+        // a still third-person player facing due south no longer looks identical to a
+        // first-person hand and lose its poses for the frame.
+        if (com.sekwah.narutomod.anims.FirstPersonAnimHandler.isRenderingFirstPersonHand()) {
             return;
         }
         PlayerAnimHandler.sprintingAnim(player, (PlayerModel) (Object) this, limbSwing, limbSwingAmount, ageInTicks);

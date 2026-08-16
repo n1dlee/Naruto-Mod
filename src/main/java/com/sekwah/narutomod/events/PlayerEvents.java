@@ -1065,7 +1065,10 @@ public class PlayerEvents {
                 target.hurtMarked = true;
             }
 
-            attacker.level().playSound(null, attacker, NarutoSounds.WATER_BULLET_SPLASH.get(), SoundSource.PLAYERS, 1.5F, 1.4F);
+            // Not the Water Bullet splash. The Rasengan had been borrowing another
+            // technique's sound, which is why slamming one sounded like hitting water.
+            attacker.level().playSound(null, attacker,
+                    net.minecraft.sounds.SoundEvents.ELDER_GUARDIAN_CURSE, SoundSource.PLAYERS, 1.2F, 1.6F);
             if (attacker.level() instanceof ServerLevel serverLevel) {
                 Vec3 pos = target.position().add(0.0D, target.getBbHeight() * 0.5D, 0.0D);
                 serverLevel.sendParticles(ParticleTypes.END_ROD, pos.x, pos.y, pos.z, 20, 0.3D, 0.3D, 0.3D, 0.08D);

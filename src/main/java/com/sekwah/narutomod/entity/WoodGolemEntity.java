@@ -86,7 +86,13 @@ public class WoodGolemEntity extends PathfinderMob {
         this.goalSelector.addGoal(2, new MeleeAttackGoal(this, 1.0D, true));
         this.goalSelector.addGoal(6, new LookAtPlayerGoal(this, Player.class, 12.0F));
         this.targetSelector.addGoal(1, new HurtByTargetGoal(this));
-        this.targetSelector.addGoal(2, new NearestAttackableTargetGoal<>(this, Monster.class, true));
+        this.targetSelector.addGoal(2, new NearestAttackableTargetGoal<>(this, net.minecraft.world.entity.LivingEntity.class, 10, true, false,
+                        // Enemy, not Monster. Every custom boss and tailed beast in this mod
+                        // is a PathfinderMob implementing Enemy rather than a vanilla Monster,
+                        // so a clone or golem sent in against Madara or Kurama simply stood
+                        // there and picked a zombie three hundred blocks away instead.
+                        target -> target instanceof net.minecraft.world.entity.monster.Enemy
+                                && !com.sekwah.narutomod.util.Faction.sameSide(this, target)));
     }
 
     public static AttributeSupplier.Builder createAttributes() {

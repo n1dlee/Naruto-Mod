@@ -35,7 +35,30 @@ public class SageModeAbility extends Ability implements Ability.Channeled, Abili
     private static final float ACTIVATION_COST = 80f;
     private static final int MIN_CHARGE_FOR_ACTIVATION = 50;
     private static final int SAGE_MAX_CHARGE = 100;
-    private static final int PETRIFY_THRESHOLD = 300; // ticks past max charge
+    private static final int PETRIFY_THRESHOLD = 300; // ticks spent sitting at max charge
+
+    /**
+     * Ticks held at a hundred charge. Reset the moment the gather drops below it.
+     *
+     * Per-ability rather than per-player because only one Sage Mode can be gathered at a time
+     * and the value is meaningless outside a live channel.
+     */
+    private int ticksAtMaxCharge = 0;
+
+    /**
+     * Whether the last release actually turned Sage Mode on.
+     *
+     * Sixty seconds of cooldown used to be charged for a release that failed on insufficient
+     * charge or chakra - the two most likely ways for a new player to get this wrong - so
+     * fumbling the technique locked them out of it for a minute.
+     */
+    private boolean lastActivationSucceeded = false;
+
+    /** Only a release that actually activated Sage Mode is a cast worth paying for. */
+    @Override
+    public boolean channelCommittedAt(int ticksChanneled) {
+        return this.lastActivationSucceeded;
+    }
 
     @Override
     public ActivationType activationType() {
@@ -102,6 +125,7 @@ public class SageModeAbility extends Ability implements Ability.Channeled, Abili
             ninjaData.setSageCharge(currentCharge + 1);
 
             // Gathering particles every 5 ticks
+            this.ticksAtMaxCharge = 0;
             if (ticksChanneled % 5 == 0 && player.level() instanceof ServerLevel serverLevel) {
                 serverLevel.sendParticles(
                         new DustParticleOptions(new Vector3f(1.0f, 0.7f, 0.1f), 1.2f),
@@ -112,10 +136,12 @@ public class SageModeAbility extends Ability implements Ability.Channeled, Abili
                         1, 0.2, 0.3, 0.2, 0.01);
             }
         } else {
-            // At max charge — overcharging! Risk petrification
-            // Track overcharge ticks via ticksChanneled minus the tick we hit max
-            // Simple approach: every tick past max adds risk
-            int overchargeTicks = ticksChanneled - (SAGE_MAX_CHARGE - (currentCharge - ticksChanneled));
+            // Overcharging. The clock that matters is how long the gatherer has been sitting
+            // AT full, not how long they have been channelling: a slow gather that only just
+            // reached a hundred was being petrified on arrival, because the old test compared
+            // total channel time against the threshold. The expression that was supposed to
+            // correct for that was computed into a local and then never read.
+            this.ticksAtMaxCharge++;
 
             if (ticksChanneled % 20 == 0) {
                 player.displayClientMessage(
@@ -123,7 +149,7 @@ public class SageModeAbility extends Ability implements Ability.Channeled, Abili
             }
 
             // Petrification after holding too long at max
-            if (ticksChanneled > PETRIFY_THRESHOLD && currentCharge >= SAGE_MAX_CHARGE) {
+            if (this.ticksAtMaxCharge > PETRIFY_THRESHOLD && currentCharge >= SAGE_MAX_CHARGE) {
                 player.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 10 * 20, 9, false, true));
                 player.addEffect(new MobEffectInstance(MobEffects.DIG_SLOWDOWN, 10 * 20, 9, false, true));
                 player.hurt(player.damageSources().magic(), 6.0f);
@@ -140,6 +166,8 @@ public class SageModeAbility extends Ability implements Ability.Channeled, Abili
      */
     @Override
     public void performServer(Player player, INinjaData ninjaData, int ticksActive) {
+        this.lastActivationSucceeded = false;
+        this.ticksAtMaxCharge = 0;
         int charge = ninjaData.getSageCharge();
 
         if (charge < MIN_CHARGE_FOR_ACTIVATION) {
@@ -163,6 +191,7 @@ public class SageModeAbility extends Ability implements Ability.Channeled, Abili
         ninjaData.setSageModeTicks(duration);
         ninjaData.setSageModeActive(true);
         ninjaData.setSageCharge(0);
+        this.lastActivationSucceeded = true;
 
         player.displayClientMessage(
                 Component.translatable("sage.activate",

@@ -85,7 +85,17 @@ public class KuchiyoseAbility extends Ability implements Ability.Cooldown {
         // Far enough out that Gamabunta does not land on top of the ninja who called him.
         double clearance = 2.0 + variant.getWidth();
         Vec3 spawnPos = player.position().add(new Vec3(look.x, 0, look.z).normalize().scale(clearance));
-        beast.setPos(spawnPos.x, player.getY(), spawnPos.z);
+        // Placed on ground with room for the beast's actual size. Spawning blind at the
+        // caster's own Y buried Gamabunta in a hillside or dropped him through a cliff edge -
+        // and a summon embedded in stone is stuck there for its whole duration.
+        Vec3 placed = com.sekwah.narutomod.util.SummonPlacement.findClear(
+                serverLevel, spawnPos, player.getY(), variant.getWidth(), variant.getHeight());
+        if (placed == null) {
+            player.displayClientMessage(Component.literal("No room to summon here.")
+                    .withStyle(ChatFormatting.RED), true);
+            return;
+        }
+        beast.setPos(placed.x, placed.y, placed.z);
         beast.setOwner(player);
         // Order matters: setVariant rewrites max health, so the top-up has to come after it.
         beast.setVariant(variant);
