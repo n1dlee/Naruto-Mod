@@ -44,9 +44,17 @@ public class RenderEvents {
      * applies afterwards turns the player about their new up axis rather than about the
      * world's. Turning on a wall then works exactly like turning on the ground.
      *
-     * Pivoted at the middle of the body rather than at the feet: the hitbox stays upright and
-     * axis-aligned whatever the model does - Minecraft has no rotated hitboxes - so the centre
-     * is the one point that stays put under both.
+     * Pivoted at the feet, and the feet are first moved onto the surface itself.
+     *
+     * Turning about the middle of the body looked like the obvious choice and buried half the
+     * model in the wall: with the body horizontal, the feet swing a full half-height PAST the
+     * pivot, and a hitbox is only three tenths of a block wide. The player ended up embedded
+     * in the bricks with their legs somewhere inside the next chunk.
+     *
+     * So the pivot moves to where the feet are supposed to be - against the face - and the
+     * body then extends outward from it. That is one number for a wall, where the surface is
+     * half a hitbox-width to the side, and a different one for a ceiling, where it is a whole
+     * body-height above the entity's own position.
      */
     private static void orientToSurface(RenderPlayerEvent.Pre event,
                                         com.sekwah.narutomod.capabilities.INinjaData ninjaData) {
@@ -72,12 +80,21 @@ public class RenderEvents {
                 : new net.minecraft.world.phys.Vec3(0.0D, 1.0D, 0.0D).cross(up).normalize();
         float angle = (float) Math.acos(net.minecraft.util.Mth.clamp(dot, -1.0D, 1.0D));
 
-        float half = event.getEntity().getBbHeight() * 0.5f;
+        // How far the surface is from the entity's own position, along the way into it.
+        // Sideways that is half the hitbox width; overhead it is the whole standing height,
+        // because the entity's position sits at its feet and the ceiling is what its head is
+        // pressed against.
+        Player entity = event.getEntity();
+        double reach = surface.getAxis().isVertical()
+                ? entity.getBbHeight()
+                : entity.getBbWidth() * 0.5D;
+        net.minecraft.world.phys.Vec3 into = net.minecraft.world.phys.Vec3
+                .atLowerCornerOf(surface.getNormal()).scale(reach);
+
         var poseStack = event.getPoseStack();
-        poseStack.translate(0.0D, half, 0.0D);
+        poseStack.translate(into.x, into.y, into.z);
         poseStack.mulPose(new org.joml.Quaternionf().rotateAxis(
                 angle, (float) axis.x, (float) axis.y, (float) axis.z));
-        poseStack.translate(0.0D, -half, 0.0D);
     }
 
     @SubscribeEvent

@@ -259,34 +259,27 @@ public class WaterWalkAbility extends Ability implements Ability.Toggled {
 
     private void applyWallPlaneMovement(Player player, INinjaData ninjaData, Direction wallDirection) {
         Vec3 normal = Vec3.atLowerCornerOf(wallDirection.getNormal());
-        Vec3 wallForward = getWallPlaneForward(player, normal);
-        Vec3 wallRight = normal.cross(wallForward).normalize();
-        double baseSpeed = player.isShiftKeyDown() ? WALL_WALK_SNEAK_SPEED : WALL_WALK_RUN_SPEED;
-        double verticalInput = player.zza;
-        double horizontalInput = player.xxa;
-
-        Vec3 wallMovement = wallForward.scale(verticalInput * baseSpeed)
-                .add(wallRight.scale(-horizontalInput * baseSpeed))
-                .add(normal.scale(WALL_GRIP_PUSH));
-        if (Math.abs(verticalInput) < 0.01D && Math.abs(horizontalInput) < 0.01D) {
-            wallMovement = normal.scale(WALL_GRIP_PUSH);
-        }
+        Vec3 wallMovement = planeMovement(player, normal);
 
         // Running into another face turns the corner onto it, rather than grinding to a halt
         // against it. This is what makes a wall and the ceiling above it one continuous
         // surface instead of two unrelated features - go up far enough and you keep going,
         // upside down, which is the thing the technique is for.
-        Vec3 travel = wallMovement.subtract(normal.scale(WALL_GRIP_PUSH));
-        if (travel.lengthSqr() > 1.0E-6) {
-            Direction ahead = Direction.getNearest(travel.x, travel.y, travel.z);
-            if (ahead != wallDirection && ahead != wallDirection.getOpposite()
-                    && isClingable(ahead)
-                    && hasWallBlock(player.level(), player.blockPosition(), ahead)) {
-                ninjaData.setWallWalkDirection(ahead);
-                applyWallPlaneMovement(player, ninjaData, ahead);
-                return;
-            }
+        //
+        // Resolved once and only once. The first version of this called itself with the new
+        // face, and in a wall-and-ceiling corner that never terminated: the wall handed off to
+        // the ceiling, the ceiling looked forward, found the wall and handed straight back. It
+        // crashed the game with a StackOverflowError the moment anybody tried to walk onto a
+        // ceiling, which is the one thing the change existed to allow.
+        Direction turn = cornerTurn(player, wallDirection, wallMovement.subtract(normal.scale(WALL_GRIP_PUSH)));
+        if (turn != null) {
+            wallDirection = turn;
+            normal = Vec3.atLowerCornerOf(turn.getNormal());
+            ninjaData.setWallWalkDirection(turn);
+            wallMovement = planeMovement(player, normal);
         }
+
+        Vec3 travel = wallMovement.subtract(normal.scale(WALL_GRIP_PUSH));
 
         // Landing. Only when they are genuinely on top of a floor and heading into it, rather
         // than any time a solid block existed somewhere below: the old test looked a whole
@@ -312,8 +305,39 @@ public class WaterWalkAbility extends Ability implements Ability.Toggled {
         player.setOnGround(true);
         ninjaData.getDoubleJumpData().canDoubleJumpServer = true;
         player.lerpMotion(wallMovement.x, clampedY, wallMovement.z);
-        float bobTarget = (float) Math.min(0.18D, Math.abs(verticalInput) * 0.12D + Math.abs(horizontalInput) * 0.08D);
+        float bobTarget = (float) Math.min(0.18D,
+                Math.abs(player.zza) * 0.12D + Math.abs(player.xxa) * 0.08D);
         player.bob += (bobTarget - player.bob) * 0.45F;
+    }
+
+    /** Where the player's input takes them along one surface, plus the grip into it. */
+    private Vec3 planeMovement(Player player, Vec3 normal) {
+        Vec3 forward = getWallPlaneForward(player, normal);
+        Vec3 right = normal.cross(forward).normalize();
+        double speed = player.isShiftKeyDown() ? WALL_WALK_SNEAK_SPEED : WALL_WALK_RUN_SPEED;
+        if (Math.abs(player.zza) < 0.01D && Math.abs(player.xxa) < 0.01D) {
+            return normal.scale(WALL_GRIP_PUSH);
+        }
+        return forward.scale(player.zza * speed)
+                .add(right.scale(-player.xxa * speed))
+                .add(normal.scale(WALL_GRIP_PUSH));
+    }
+
+    /**
+     * The face the player is about to run into, if it is one they could stand on instead.
+     *
+     * Null when there is nothing to turn onto, which is the normal case. Never returns the
+     * face they are already on, nor the one directly behind them.
+     */
+    private Direction cornerTurn(Player player, Direction current, Vec3 travel) {
+        if (travel.lengthSqr() <= 1.0E-6) {
+            return null;
+        }
+        Direction ahead = Direction.getNearest(travel.x, travel.y, travel.z);
+        if (ahead == current || ahead == current.getOpposite() || !isClingable(ahead)) {
+            return null;
+        }
+        return hasWallBlock(player.level(), player.blockPosition(), ahead) ? ahead : null;
     }
 
     /**

@@ -1956,11 +1956,14 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
         if (this.sageModeActive) {
             speedBonus += 0.3D;
         }
-        if (this.kuramaCloakActive) {
-            speedBonus += 0.8D;
-        }
+        // Grows with the tails rather than being a flat bonus for wearing the cloak at all.
+        speedBonus += this.getKuramaSpeedBonus();
         if (this.kcmActive) {
-            speedBonus += 2.5D; // "Flash-level" speed — KCM's whole point is raw speed, no shell
+            // The yellow cloak with no beast around it is nothing BUT speed - it is the form
+            // that dodged the Fourth Raikage, who then said out loud that Naruto was faster.
+            // At 2.5 it sat below the Raikage's own armour and below eight tails, which made
+            // the one thing KCM is for the one thing it was not best at.
+            speedBonus += 4.0D;
         }
         // Shisui no Shunshin - "Shisui of the Body Flicker". The boss moves fast enough that
         // you can barely track him, but inheriting his eyes handed over Kotoamatsukami and
@@ -1969,8 +1972,10 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
         if (this.mangekyoAwakened && "shisui".equals(this.mangekyoForm)) {
             speedBonus += 0.85D;
         }
-        // Raiton no Yoroi: the Raikage's armour is deliberately the fastest thing in the
-        // mod, so it out-runs even KCM and a fully opened Eight Gates.
+        // Raiton no Yoroi: the fastest thing anybody can put on without a tailed beast in
+        // them. It used to out-run KCM as well, which had the Raikage beating the form that
+        // beat him in the source; now it clears the Gates and everything else, and loses to
+        // Kurama's chakra by a nose.
         if (this.toggleAbilityData.getAbilitiesHashSet().contains(LIGHTNING_ARMOR_ABILITY)) {
             speedBonus += 3.6D;
         }
@@ -2449,8 +2454,34 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
      * Returns extra damage multiplier for melee hits while Kurama Cloak is active.
      * Called externally for AoE explosion on punch.
      */
+    /**
+     * How much a tail is worth, on the same ladder the beasts themselves use.
+     *
+     * The beasts double with every tail — Kurama is 256 times a Shukaku — and the cloak was
+     * ignoring that completely. One tail and eight tails moved at exactly the same speed and
+     * hit for exactly the same 2.5x, so growing tails changed the silhouette and nothing else.
+     *
+     * The full ladder cannot be handed to a player: 256 times the movement speed is not a
+     * transformation, it is a teleport. So the same base is taken to a fractional power, which
+     * keeps the shape that matters — the step from seven tails to eight is far bigger than the
+     * step from one to two — while landing somewhere a person can still control. The root is
+     * per-axis because speed and damage want different curves, and passing it in is what stops
+     * the two quietly drifting apart later.
+     */
+    private double tailLadder(double root) {
+        int tails = Math.min(Math.max(this.kuramaTailCount, 1), 9);
+        return Math.pow(com.sekwah.narutomod.entity.TailedBeastVariant.POWER_PER_TAIL,
+                (tails - 1) / root);
+    }
+
+    /** One tail hits for about 1.5x; nine reaches the melee cap on its own. */
     public float getKuramaMeleeDamageMultiplier() {
-        return this.kuramaCloakActive ? 2.5f : 1.0f;
+        return this.kuramaCloakActive ? (float) (1.5D * tailLadder(6.5D)) : 1.0f;
+    }
+
+    /** One tail is a jog; eight is faster than an opened Eighth Gate. */
+    public double getKuramaSpeedBonus() {
+        return this.kuramaCloakActive ? 0.45D * tailLadder(2.6D) : 0.0D;
     }
 
     // --- Kurama Chakra Mode (KCM): no shell, just the player glowing + huge speed ---
@@ -3293,6 +3324,11 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
         } finally {
             this.processingMeleeAoE = false;
         }
+
+        // The avatar animates off the same counter the Susanoo does - one timer meaning "a
+        // manifested giant just struck". Without this the fox swept twenty-six blocks of tail
+        // while standing perfectly still.
+        this.susanooSwingTicks = SUSANOO_SWING_TICKS;
 
         if (withinArmsReach) {
             // A paw comes down in a line, not an arc: the effect runs out along the blow.

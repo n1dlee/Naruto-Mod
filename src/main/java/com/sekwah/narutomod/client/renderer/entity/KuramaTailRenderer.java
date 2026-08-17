@@ -143,6 +143,14 @@ public class KuramaTailRenderer {
         poseStack.pushPose();
         poseStack.translate(0.0, 0.9, 0.15);
         poseStack.mulPose(Axis.YP.rotationDegrees(180.0F - bodyYaw));
+        // The fox turns its whole body into a blow, same as the Susanoo does - and for the
+        // same reason, since the avatar is one mesh with nothing to articulate. Sharing the
+        // Susanoo's counter is deliberate: it is one swing timer for "a manifested giant just
+        // struck", and the two forms are mutually exclusive anyway.
+        com.sekwah.narutomod.client.renderer.GiantSwing.apply(poseStack,
+                player.getCapability(com.sekwah.narutomod.capabilities.NinjaCapabilityHandler.NINJA_DATA)
+                        .map(com.sekwah.narutomod.capabilities.INinjaData::getSusanooSwingTicks).orElse(0),
+                com.sekwah.narutomod.capabilities.NinjaData.SUSANOO_SWING_TICKS, partialTick);
 
         /*
          * The procedural tails stop at eight.
