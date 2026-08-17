@@ -143,14 +143,6 @@ public class KuramaTailRenderer {
         poseStack.pushPose();
         poseStack.translate(0.0, 0.9, 0.15);
         poseStack.mulPose(Axis.YP.rotationDegrees(180.0F - bodyYaw));
-        // The fox turns its whole body into a blow, same as the Susanoo does - and for the
-        // same reason, since the avatar is one mesh with nothing to articulate. Sharing the
-        // Susanoo's counter is deliberate: it is one swing timer for "a manifested giant just
-        // struck", and the two forms are mutually exclusive anyway.
-        com.sekwah.narutomod.client.renderer.GiantSwing.apply(poseStack,
-                player.getCapability(com.sekwah.narutomod.capabilities.NinjaCapabilityHandler.NINJA_DATA)
-                        .map(com.sekwah.narutomod.capabilities.INinjaData::getSusanooSwingTicks).orElse(0),
-                com.sekwah.narutomod.capabilities.NinjaData.SUSANOO_SWING_TICKS, partialTick);
 
         /*
          * The procedural tails stop at eight.
@@ -213,6 +205,12 @@ public class KuramaTailRenderer {
             // Shared baked instance: pose it every frame, never assume the last caller left
             // it where this one wants it.
             foxModel.waveTails(ageInTicks);
+            // Kurama fights with its tails, so the strike IS the tails - the idle wave above
+            // carries on underneath and this cracks through it. Shares the Susanoo's swing
+            // counter deliberately: it is one timer meaning "a manifested giant just struck",
+            // and a player cannot be wearing both forms at once.
+            foxModel.strikeTails(com.sekwah.narutomod.client.renderer.GiantSwing
+                    .progressFor(player, partialTick));
             foxModel.renderToBuffer(poseStack, bufferSource.getBuffer(FOX_RENDER_TYPE), packedLight,
                     OverlayTexture.NO_OVERLAY, 1.0f, 1.0f, 1.0f, 0.9f);
             poseStack.popPose();

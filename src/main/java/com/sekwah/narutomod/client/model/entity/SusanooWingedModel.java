@@ -832,6 +832,73 @@ public class SusanooWingedModel extends Model {
         return LayerDefinition.create(mesh, 128, 128);
     }
 
+    /**
+     * Drives the sword arm through a swing.
+     *
+     * The blade is a child of {@code right_arm} in the converted rig, exactly as it was in the
+     * 1.12.2 model this came from, so turning the arm carries the sword with it and nothing
+     * else has to move. An earlier attempt turned the entire giant instead, on the assumption
+     * that the ported bodies were single meshes with no joint to use - they are not, and a
+     * twenty-block figure rotating bodily to swing looks like it is being shoved rather than
+     * striking.
+     *
+     * Angles follow the 1.12.2 convention this geometry was authored in, where a more negative
+     * xRot lifts the arm forward and up; the original model raised its arm to -PI/2 to hold
+     * the sword out, and these are the same units.
+     *
+     * @param progress 0 at the first frame of the swing through to 1 at the last, or negative
+     *                 when there is no swing. Must be called EVERY frame including the
+     *                 negative case: one model instance draws every Susanoo on screen, so a
+     *                 pose left behind by the last one is inherited by the next.
+     */
+    public void swingSword(float progress) {
+        if (progress < 0f) {
+            this.right_arm.xRot = 0f;
+            this.right_arm.zRot = 0f;
+            return;
+        }
+        float xRot;
+        float zRot;
+        if (progress < WINDUP_END) {
+            // Lifting it. Eased, so the blade gathers weight instead of snapping upright.
+            float t = ease(progress / WINDUP_END);
+            xRot = RAISED_X * t;
+            zRot = RAISED_Z * t;
+        } else if (progress < STRIKE_END) {
+            // The cut. Linear and fast - this is the part that is supposed to be hard to read.
+            float t = (progress - WINDUP_END) / (STRIKE_END - WINDUP_END);
+            xRot = lerp(t, RAISED_X, FOLLOW_X);
+            zRot = lerp(t, RAISED_Z, FOLLOW_Z);
+        } else {
+            // Bringing it back to guard.
+            float t = ease((progress - STRIKE_END) / (1f - STRIKE_END));
+            xRot = FOLLOW_X * (1f - t);
+            zRot = FOLLOW_Z * (1f - t);
+        }
+        this.right_arm.xRot = xRot;
+        this.right_arm.zRot = zRot;
+    }
+
+    /** Where the wind-up ends and where the cut ends, as fractions of the whole swing. */
+    private static final float WINDUP_END = 0.30f;
+    private static final float STRIKE_END = 0.60f;
+    /** Overhead and slightly out, at the top of the wind-up. */
+    private static final float RAISED_X = -2.75f;
+    private static final float RAISED_Z = 0.35f;
+    /** Down and across, at the end of the follow-through. */
+    private static final float FOLLOW_X = -0.15f;
+    private static final float FOLLOW_Z = -0.30f;
+
+    private static float lerp(float t, float from, float to) {
+        return from + (to - from) * t;
+    }
+
+    /** Smoothstep. Slow at both ends, quick through the middle. */
+    private static float ease(float t) {
+        float clamped = t < 0f ? 0f : (t > 1f ? 1f : t);
+        return clamped * clamped * (3f - 2f * clamped);
+    }
+
     @Override
     public void renderToBuffer(PoseStack poseStack, VertexConsumer consumer, int packedLight,
                                int packedOverlay, float red, float green, float blue, float alpha) {

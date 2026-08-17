@@ -145,6 +145,51 @@ public class RenderEvents {
         });
     }
 
+    /**
+     * Banks the camera over so the surface underfoot reads as the floor.
+     *
+     * The body was already being turned onto the wall, and leaving the view bolt upright while
+     * it happened is what made wall walking feel wrong: everything on screen said you were
+     * running up a vertical face and the horizon said you were standing in a field. On a
+     * ceiling it was worse - upside down with the sky still above you.
+     *
+     * Roll is the only axis Minecraft's camera actually offers, and it is also the right one:
+     * banking is what a person walking round a surface experiences. Facing straight into the
+     * wall is genuinely ambiguous - no amount of roll puts a surface you are nose-first
+     * against underneath you - and the formula returns zero there, which is the honest answer.
+     */
+    @SubscribeEvent
+    public static void bankCameraOnSurface(net.minecraftforge.client.event.ViewportEvent.ComputeCameraAngles event) {
+        if (!(event.getCamera().getEntity() instanceof Player player)) {
+            return;
+        }
+        player.getCapability(NinjaCapabilityHandler.NINJA_DATA).ifPresent(ninjaData -> {
+            if (!ninjaData.isWallWalkAttached()) {
+                return;
+            }
+            net.minecraft.core.Direction surface = ninjaData.getWallWalkDirection();
+            if (surface == null || surface == net.minecraft.core.Direction.DOWN) {
+                return;
+            }
+            net.minecraft.world.phys.Vec3 into = net.minecraft.world.phys.Vec3
+                    .atLowerCornerOf(surface.getNormal());
+
+            // Where the surface sits relative to the screen: measured against the camera's own
+            // right and the world's down, which together span what "roll" can express.
+            float yawRadians = (float) Math.toRadians(event.getYaw());
+            net.minecraft.world.phys.Vec3 right = new net.minecraft.world.phys.Vec3(
+                    -net.minecraft.util.Mth.cos(yawRadians), 0.0D, -net.minecraft.util.Mth.sin(yawRadians));
+            double alongRight = into.dot(right);
+            double alongDown = -into.y;
+
+            float roll = (float) Math.toDegrees(Math.atan2(alongRight, alongDown));
+            // Eased in over the first few ticks of clinging so attaching does not snap the
+            // horizon through ninety degrees in one frame.
+            float settle = Math.min(1.0f, ninjaData.getWallWalkTicks() / 12.0f);
+            event.setRoll(roll * settle);
+        });
+    }
+
     @SubscribeEvent
     public static void renderNameplateEvent(RenderNameTagEvent event) {
         if (event.getResult() != Event.Result.DENY) {

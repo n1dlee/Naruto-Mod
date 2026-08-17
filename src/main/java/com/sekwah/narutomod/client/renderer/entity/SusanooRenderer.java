@@ -207,19 +207,9 @@ public class SusanooRenderer {
     private static void render(PoseStack poseStack, MultiBufferSource bufferSource, int packedLight,
                                 Player player, float partialTick, int stage, float power,
                                 String mangekyoForm, int customColor) {
-        // The sword swing, on whichever body is about to be drawn. Wrapped around both
-        // branches rather than repeated inside each: the ported meshes and the procedural
-        // model are the same giant as far as the strike is concerned.
-        poseStack.pushPose();
-        com.sekwah.narutomod.client.renderer.GiantSwing.apply(poseStack,
-                player.getCapability(com.sekwah.narutomod.capabilities.NinjaCapabilityHandler.NINJA_DATA)
-                        .map(com.sekwah.narutomod.capabilities.INinjaData::getSusanooSwingTicks).orElse(0),
-                com.sekwah.narutomod.capabilities.NinjaData.SUSANOO_SWING_TICKS, partialTick);
-
         if (detailedReady()) {
             renderDetailed(poseStack, bufferSource, packedLight, player, partialTick, stage, power,
                     mangekyoForm, customColor);
-            poseStack.popPose();
             return;
         }
         VertexConsumer consumer = bufferSource.getBuffer(RENDER_TYPE);
@@ -251,7 +241,6 @@ public class SusanooRenderer {
                 red, green, blue, ALPHA);
 
         poseStack.popPose();
-        poseStack.popPose(); // the swing scope opened at the top
     }
 
     /**
@@ -267,6 +256,12 @@ public class SusanooRenderer {
         ResourceLocation texture;
         float modelHeightU;
         float modelBottomU;
+        // The sword arm, on the one body that carries a sword. Set every frame including the
+        // not-swinging case: a single baked model instance draws every Susanoo on screen, so
+        // a pose left behind by the last one is inherited by the next.
+        wingedModel.swingSword(com.sekwah.narutomod.client.renderer.GiantSwing
+                .progressFor(player, partialTick));
+
         if (clamped >= 4) {
             body = wingedModel;
             texture = WINGED_TEXTURE;

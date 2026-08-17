@@ -108,6 +108,69 @@ public class KuramaFoxModel extends Model {
         }
     }
 
+    /**
+     * Cracks the tails forward, on top of whatever idle wave is already there.
+     *
+     * Kurama fights with its tails, so a strike has to be the tails - not the whole fox
+     * leaning, which is what an earlier attempt did and which reads as the animal being
+     * shoved rather than attacking. Applied after {@link #waveTails} rather than instead of
+     * it: the idle motion carries on underneath, and the strike is the wave being interrupted.
+     *
+     * The tip is evaluated slightly BEHIND the base in time, not merely at a larger angle.
+     * That lag is the whole difference between a whip and a rod: the crack travels down the
+     * length, arriving at the tip after the base has already begun to slow.
+     *
+     * @param progress 0 at the first frame of the strike through to 1 at the last. Negative
+     *                 leaves the tails to their idle wave.
+     */
+    public void strikeTails(float progress) {
+        if (progress < 0f) {
+            return;
+        }
+        float baseSweep = sweepAt(progress);
+        float tipSweep = sweepAt(progress - TIP_STRIKE_LAG) * TIP_GAIN;
+        for (int i = 0; i < TAIL_COUNT; i++) {
+            // Fanned: the outer tails start fractionally later, so nine tails arrive as a
+            // spread rather than as one slab moving in lockstep.
+            float fan = 1f - i * 0.04f;
+            this.tailBase[i].xRot += baseSweep * fan;
+            this.tailTip[i].xRot += tipSweep * fan;
+        }
+    }
+
+    /** How far the tails have swung at this point in the strike. */
+    private static float sweepAt(float progress) {
+        if (progress <= 0f) {
+            return 0f;
+        }
+        if (progress < STRIKE_WINDUP_END) {
+            return STRIKE_WIND_BACK * smoothstep(progress / STRIKE_WINDUP_END);
+        }
+        if (progress < STRIKE_LASH_END) {
+            float t = (progress - STRIKE_WINDUP_END) / (STRIKE_LASH_END - STRIKE_WINDUP_END);
+            return STRIKE_WIND_BACK + (STRIKE_LASH - STRIKE_WIND_BACK) * t;
+        }
+        if (progress >= 1f) {
+            return 0f;
+        }
+        float t = (progress - STRIKE_LASH_END) / (1f - STRIKE_LASH_END);
+        return STRIKE_LASH * (1f - smoothstep(t));
+    }
+
+    private static float smoothstep(float t) {
+        float clamped = net.minecraft.util.Mth.clamp(t, 0f, 1f);
+        return clamped * clamped * (3f - 2f * clamped);
+    }
+
+    /** Gather back, then whip through. The rest of the strike is the tails settling. */
+    private static final float STRIKE_WINDUP_END = 0.32f;
+    private static final float STRIKE_LASH_END = 0.58f;
+    /** Radians back on the gather, and forward at the end of the lash. */
+    private static final float STRIKE_WIND_BACK = -0.75f;
+    private static final float STRIKE_LASH = 1.45f;
+    /** How far behind the base the tip runs, as a fraction of the whole strike. */
+    private static final float TIP_STRIKE_LAG = 0.13f;
+
     public static LayerDefinition createBodyLayer() {
         MeshDefinition mesh = new MeshDefinition();
         PartDefinition partdefinition = mesh.getRoot();

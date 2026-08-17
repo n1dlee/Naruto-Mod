@@ -1489,13 +1489,20 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
         if (this.wallWalkDirection < 0 || this.wallWalkDirection >= Direction.values().length) {
             return null;
         }
-        Direction direction = Direction.values()[this.wallWalkDirection];
-        return direction.getAxis().isHorizontal() ? direction : null;
+        // No horizontal-only filter any more, on either half of this.
+        //
+        // Both the getter and the setter used to drop anything vertical, left over from when a
+        // wall was the only thing you could stand on. That silently defeated ceiling walking
+        // twice over: setWallWalkDirection(UP) was a no-op, so the stored face stayed on
+        // whatever wall you came off and the next tick pulled you back onto it, and the getter
+        // returned null for UP anyway, so the renderer never turned the model over. Walking on
+        // a ceiling half worked, flickered, and drew the player the right way up.
+        return Direction.values()[this.wallWalkDirection];
     }
 
     @Override
     public void setWallWalkDirection(Direction direction) {
-        if (direction != null && direction.getAxis().isHorizontal()) {
+        if (direction != null) {
             this.wallWalkDirection = direction.ordinal();
             this.wallWalkTicks = Math.min(this.wallWalkTicks + 4, 40);
         } else {
