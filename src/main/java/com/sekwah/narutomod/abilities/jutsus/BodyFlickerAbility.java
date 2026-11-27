@@ -2,44 +2,30 @@ package com.sekwah.narutomod.abilities.jutsus;
 
 import com.sekwah.narutomod.abilities.Ability;
 import com.sekwah.narutomod.capabilities.INinjaData;
+import com.sekwah.narutomod.events.FlickerEvents;
 import net.minecraft.ChatFormatting;
-import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.chat.Component;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.level.ClipContext;
-import net.minecraft.world.phys.BlockHitResult;
-import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 
-/**
- * Body Flicker — Shunshin no Jutsu (combo 21).
- * Teleports the player 15 blocks in their look direction.
- * Stops at the first block encountered.
- * Leaves a CLOUD particle poof at the origin; appears with a CLOUD poof at the destination.
- * Costs 20 chakra, 8 second cooldown.
- */
 public class BodyFlickerAbility extends Ability implements Ability.Cooldown {
+    private static final float CHAKRA_COST = 15f;
+    private static final float STAMINA_COST = 30f;
+    private static final double[] RANK_RANGES = {8, 12, 15, 25, 40};
 
-    /** Exempt from the free-hands gate: this is a movement burst, not a hand-cast technique. */
     @Override
     public boolean requiresFreeHands() {
         return false;
     }
-
-    private static final float CHAKRA_COST = 15f;
-    private static final float STAMINA_COST = 30f;
-    private static final double[] RANK_RANGES = {8.0D, 12.0D, 15.0D, 25.0D, 40.0D};
 
     @Override
     public ActivationType activationType() {
         return ActivationType.INSTANT;
     }
 
-    /** A body flicker that reads as a pose has already failed to be one. */
     @Override
     public int castPoseTicks() {
-        return 3;
+        return 0;
     }
 
     @Override
@@ -53,65 +39,35 @@ public class BodyFlickerAbility extends Ability implements Ability.Cooldown {
     }
 
     @Override
-    public boolean handleCost(Player player, INinjaData ninjaData, int chargeAmount) {
-        if (ninjaData.getChakra() < CHAKRA_COST) {
-            player.displayClientMessage(Component.translatable("jutsu.fail.notenoughchakra",
-                    Component.translatable(this.getTranslationKey(ninjaData)).withStyle(ChatFormatting.YELLOW)), true);
+    public boolean handleCost(Player player, INinjaData data, int chargeAmount) {
+        if (data.getChakra() < CHAKRA_COST) {
+            return reject(player, data, "jutsu.fail.notenoughchakra");
+        }
+        if (data.getStamina() < STAMINA_COST) {
+            return reject(player, data, "jutsu.fail.notenoughstamina");
+        }
+        if (!FlickerEvents.canStart(player, path(player, data))) {
+            player.displayClientMessage(Component.translatable("jutsu.flicker.path_blocked"), true);
             return false;
         }
-        if (ninjaData.getStamina() < STAMINA_COST) {
-            player.displayClientMessage(Component.translatable("jutsu.fail.notenoughstamina",
-                    Component.translatable(this.getTranslationKey(ninjaData)).withStyle(ChatFormatting.YELLOW)), true);
-            return false;
-        }
-        ninjaData.useChakra(CHAKRA_COST, 20);
-        ninjaData.useStamina(STAMINA_COST, 20);
+        data.useChakra(CHAKRA_COST, 20);
+        data.useStamina(STAMINA_COST, 20);
         return true;
     }
 
+    private boolean reject(Player player, INinjaData data, String key) {
+        player.displayClientMessage(Component.translatable(key,
+                Component.translatable(this.getTranslationKey(data)).withStyle(ChatFormatting.YELLOW)), true);
+        return false;
+    }
+
     @Override
-    public void performServer(Player player, INinjaData ninjaData, int ticksActive) {
-        Vec3 eye = player.getEyePosition();
-        Vec3 look = player.getLookAngle().normalize();
-        double maxRange = RANK_RANGES[Math.min(Math.max(ninjaData.getNinjaRank(), 0), 4)];
-        Vec3 destination = eye.add(look.scale(maxRange));
+    public void performServer(Player player, INinjaData data, int ticksActive) {
+        FlickerEvents.start(player, path(player, data), null);
+    }
 
-        // Block collision check — stop just before first block
-        BlockHitResult blockHit = player.level().clip(
-                new ClipContext(eye, destination, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, player));
-
-        Vec3 target;
-        if (blockHit.getType() != HitResult.Type.MISS) {
-            // Stop 0.5 blocks before the block hit
-            Vec3 hitDir = blockHit.getLocation().subtract(eye);
-            double dist = Math.max(0, hitDir.length() - 0.5);
-            target = eye.add(look.scale(dist));
-        } else {
-            target = destination;
-        }
-
-        // Particle poof at origin
-        Vec3 origin = player.position();
-        if (player.level() instanceof ServerLevel serverLevel) {
-            serverLevel.sendParticles(ParticleTypes.CLOUD,
-                    origin.x, origin.y + player.getBbHeight() * 0.5, origin.z,
-                    20, 0.3, 0.5, 0.3, 0.1);
-            serverLevel.sendParticles(ParticleTypes.POOF,
-                    origin.x, origin.y + player.getBbHeight() * 0.5, origin.z,
-                    10, 0.2, 0.4, 0.2, 0.05);
-        }
-
-        // Teleport
-        player.teleportTo(target.x, target.y - player.getBbHeight(), target.z);
-
-        // Particle poof at destination
-        if (player.level() instanceof ServerLevel serverLevel) {
-            serverLevel.sendParticles(ParticleTypes.CLOUD,
-                    target.x, target.y - player.getBbHeight() + player.getBbHeight() * 0.5, target.z,
-                    20, 0.3, 0.5, 0.3, 0.1);
-            serverLevel.sendParticles(ParticleTypes.POOF,
-                    target.x, target.y - player.getBbHeight() + player.getBbHeight() * 0.5, target.z,
-                    10, 0.2, 0.4, 0.2, 0.05);
-        }
+    private static Vec3 path(Player player, INinjaData data) {
+        double distance = RANK_RANGES[Math.max(0, Math.min(data.getNinjaRank(), RANK_RANGES.length - 1))];
+        return player.getLookAngle().normalize().scale(distance);
     }
 }

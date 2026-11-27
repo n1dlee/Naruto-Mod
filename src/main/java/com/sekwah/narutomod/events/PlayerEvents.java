@@ -6,7 +6,8 @@ import com.sekwah.narutomod.capabilities.NinjaCapabilityHandler;
 import com.sekwah.narutomod.damagetypes.NarutoDamageTypes;
 import com.sekwah.narutomod.entity.MangekyoBossEntity;
 import com.sekwah.narutomod.entity.MangekyoBossVariant;
-import com.sekwah.narutomod.abilities.jutsus.KamuiPhaseAbility;
+import com.sekwah.narutomod.util.PhasePhysics;
+import com.sekwah.narutomod.util.SusanooForm;
 import com.sekwah.narutomod.entity.RogueNinjaEntity;
 import com.sekwah.narutomod.sounds.NarutoSounds;
 import com.sekwah.narutomod.util.NarutoParticles;
@@ -25,7 +26,6 @@ import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.event.entity.living.LivingEvent;
 import net.minecraftforge.event.entity.living.LivingFallEvent;
@@ -61,10 +61,6 @@ public class PlayerEvents {
      */
     private static final float CHIDORI_TUNNEL_VISION = 1.35f;
 
-    /** Extra Rasengan launch per Wind Nature level, and the level past which it stops growing. */
-    private static final double RASENGAN_WIND_KNOCKBACK = 0.9;
-    private static final int RASENGAN_WIND_LEVEL_CAP = 10;
-
     private static final float[] MOB_DAMAGE_MULTIPLIERS = new float[] {
             1.0F,
             0.90F, 0.88F, 0.85F,
@@ -76,9 +72,6 @@ public class PlayerEvents {
 
     @SubscribeEvent
     public static void onEntityUpdate(LivingEvent.LivingTickEvent event) {
-        // Every living thing, not just players: the black flame catches on mobs too, and
-        // that is most of what it is for.
-        com.sekwah.narutomod.util.AmaterasuFlames.tick(event.getEntity());
         if (event.getEntity() instanceof Player player) {
             // Runs before the ninja-mode gate on purpose: if the mode is switched off while
             // phased, the wielder still has to be put back into a solid body.
@@ -93,90 +86,16 @@ public class PlayerEvents {
         }
     }
 
-    /**
-     * Single owner for every piece of the player's physics this mod switches off -
-     * collision (noPhysics), flight (mayfly), and gravity (noGravity).
-     *
-     * All three had the same bug in different clothes: the state was set in one place and
-     * cleared in several others, each guarded by a condition that could be false at the
-     * exact moment cleanup was due. Miss one path and the player is left permanently
-     * flying, floating, or walking through walls. Reconciling from the authoritative state
-     * once a tick removes the whole class of bug: no exit path has to remember anything,
-     * and a state that somehow got stuck repairs itself on the next tick.
-     *
-     * Two techniques now put the player outside the world's collision: Kamui intangibility
-     * and the Byakugan's scouting flight. They share one reconciliation because they share
-     * one piece of state - whichever is on, the player phases; when neither is, they must
-     * be put back, and doing that twice from two places is how desyncs get written.
-     *
-     * The toggle framework only fires handleAbilityEnded on the server - the client just
-     * watches the synced ability set shrink. Hanging the "stop phasing" cleanup off that
-     * callback would therefore leave a client permanently able to walk through walls after
-     * switching the jutsu off. Reconciling from the synced set instead is idempotent, works
-     * identically on both sides, and repairs itself after a relog, a death or a desync.
-     *
-     * Spectators are skipped outright: their noPhysics is vanilla's own and not ours to
-     * clear.
-     */
     private static void reconcileKamuiPhasing(Player player) {
-        if (player.isSpectator()) {
-            return;
-        }
-        boolean shouldPhase = player.getCapability(NinjaCapabilityHandler.NINJA_DATA)
-                .map(data -> data.isNinjaModeEnabled()
-                        && (data.getToggleAbilityData().getAbilitiesHashSet().contains(KAMUI_PHASE_ABILITY)
-                                || data.getToggleAbilityData().getAbilitiesHashSet()
-                                        .contains(BYAKUGAN_SCOUT_ABILITY)))
-                .orElse(false);
-        if (shouldPhase) {
-            KamuiPhaseAbility.applyPhasing(player);
-        } else if (player.noPhysics) {
-            // Only ever unwinds a state we put the player into - a non-spectator player has
-            // no other reason to have noPhysics set.
-            KamuiPhaseAbility.clearPhasing(player);
-        }
-
-        // Gravity is the other piece of physics the mod switches off, for wall-walking, and
-        // it had the same disease: setNoGravity(false) was scattered across four exit paths
-        // (the ability's detach branch, the descend-to-ground branch, the tick decay, and
-        // the jump-off packet), each behind its own "am I still attached?" guard. Leave the
-        // wall in a way none of them covered - jump off at the same moment the jutsu is
-        // toggled off - and gravity was never handed back, so the player simply floated
-        // away. Reconciling it here means no exit path has to remember any more.
-        // Phasing is no longer in this list: it uses real creative flight now and wants
-        // gravity left switched on, because flight is what holds the player up. Only
-        // wall-walking still needs the gravity flag itself turned off.
-        boolean shouldFloat = player.getCapability(NinjaCapabilityHandler.NINJA_DATA)
-                .map(INinjaData::isWallWalkAttached)
-                .orElse(false);
-        if (!shouldFloat && player.isNoGravity()) {
+        var state = player.getCapability(NinjaCapabilityHandler.NINJA_DATA).resolve();
+        boolean phaseRequested = state.filter(INinjaData::isNinjaModeEnabled)
+                .map(data -> data.getToggleAbilityData().getAbilitiesHashSet().contains(KamuiPhaseEvents.ID)).orElse(false);
+        boolean kamui = KamuiPhaseEvents.reconcile(player, phaseRequested);
+        boolean completeBody = state.map(data -> data.isSusanooActive() && SusanooForm.perfect(data.getSusanooStage())).orElse(false);
+        boolean pocket = com.sekwah.narutomod.world.KamuiDimension.isKamui(player.level());
+        PhasePhysics.reconcile(player, kamui, pocket || completeBody);
+        if (!player.isSpectator() && player.isNoGravity() && !state.map(INinjaData::isWallWalkAttached).orElse(false)) {
             player.setNoGravity(false);
-        }
-
-        // Last, so it wins over the flight teardown above: inside the pocket dimension
-        // everyone flies, exactly as the 1.12.2 EMS helmet did (mayfly = creative || in
-        // kamui). Without it the void is a prison - one slip off a slab and you fall
-        // forever with nothing to land on.
-        //
-        // The revoke half matters just as much. Granting flight on arrival but never taking
-        // it back meant one trip into Kamui left the player able to fly in the overworld
-        // forever, because the phasing teardown above only runs while noPhysics is set and
-        // by then it no longer is.
-        boolean inKamui = com.sekwah.narutomod.world.KamuiDimension.isKamui(player.level());
-        // Complete Body Susanoo flies in canon, and it is most of the reason to grow one:
-        // up to stage 3 you have a shell, at stage 4 you have an aircraft carrier. Same
-        // reconcile as everything else so it is handed back the moment the stage drops.
-        boolean completeBody = player.getCapability(NinjaCapabilityHandler.NINJA_DATA)
-                .map(data -> data.isSusanooActive() && data.getSusanooStage() >= 4)
-                .orElse(false);
-        if ((inKamui || completeBody) && !player.getAbilities().mayfly) {
-            player.getAbilities().mayfly = true;
-            player.onUpdateAbilities();
-        } else if (!inKamui && !completeBody && !shouldPhase && player.getAbilities().mayfly
-                && !player.isCreative()) {
-            player.getAbilities().mayfly = false;
-            player.getAbilities().flying = false;
-            player.onUpdateAbilities();
         }
     }
 
@@ -192,7 +111,7 @@ public class PlayerEvents {
         }
         boolean immovable = player.getCapability(NinjaCapabilityHandler.NINJA_DATA)
                 .map(data -> data.isNinjaModeEnabled()
-                        && data.isSusanooActive() && data.getSusanooStage() >= 4)
+                        && data.isSusanooActive() && SusanooForm.perfect(data.getSusanooStage()))
                 .orElse(false);
         if (immovable) {
             event.setCanceled(true);
@@ -272,8 +191,6 @@ public class PlayerEvents {
      * the source that is supposed to be the canonical one.
      */
     private static final float SHARINGAN_EYE_DROP_CHANCE = 0.60f;
-    private static final float CHAKRA_FLOW_BONUS = 5.0f;     // bonus damage per chakra-flowed hit
-    private static final float CHAKRA_FLOW_HIT_COST = 3.0f;
 
     /**
      * Kill rewards for the mod's own mobs. Flat values rather than health-derived ones so
@@ -292,93 +209,7 @@ public class PlayerEvents {
     private static final float ROGUE_NINJA_KILL_XP = 200f;
     private static final float ROGUE_JONIN_XP_MULTIPLIER = 2.5f;
 
-    /**
-     * Chakra Scalpel (Haruno, toggled): while active, every melee strike severs muscle
-     * from the inside — bonus rank-scaled cut damage, Weakness on the victim, and a small
-     * chakra cost per cut. Toggle state is read straight from the toggle-ability set,
-     * same pattern NinjaData.updateNinjaSpeed uses for Chakra Dash.
-     */
-    private static final net.minecraft.resources.ResourceLocation CHAKRA_SCALPEL_ABILITY =
-            new net.minecraft.resources.ResourceLocation(NarutoMod.MOD_ID, "chakra_scalpel");
 
-    private static final net.minecraft.resources.ResourceLocation KAMUI_PHASE_ABILITY =
-            new net.minecraft.resources.ResourceLocation(NarutoMod.MOD_ID, "kamui_phase");
-
-    private static final net.minecraft.resources.ResourceLocation BYAKUGAN_SCOUT_ABILITY =
-            new net.minecraft.resources.ResourceLocation(NarutoMod.MOD_ID, "byakugan_scout");
-
-    /**
-     * Kamui: Intangibility (Obito's Eternal Mangekyo form) — while the toggle is up the
-     * player is phased into the Kamui dimension and attacks pass through them entirely.
-     * Cancelling the event outright is what "intangible" means; the steep per-tick chakra
-     * drain in KamuiPhaseAbility is what keeps it from being permanent.
-     */
-    private static void applyKamuiIntangibility(LivingHurtEvent event) {
-        if (isPhasedIntangible(event.getEntity())) {
-            event.setCanceled(true);
-        }
-    }
-
-    /**
-     * The same immunity, one event earlier.
-     *
-     * LivingHurtEvent only removes the damage number. Everything else a technique does on
-     * contact - the hurt flash, the knockback, the shield of red particles, the projectile
-     * deciding it has hit something - has already happened by then, so a jutsu thrown at a
-     * phased Obito visibly connected and merely did nothing. Cancelling LivingAttackEvent is
-     * what actually makes it pass through him.
-     */
-    @SubscribeEvent
-    public static void onLivingAttack(net.minecraftforge.event.entity.living.LivingAttackEvent event) {
-        if (isPhasedIntangible(event.getEntity())) {
-            event.setCanceled(true);
-        }
-    }
-
-    private static boolean isPhasedIntangible(net.minecraft.world.entity.LivingEntity entity) {
-        if (!(entity instanceof Player player)) {
-            return false;
-        }
-        return player.getCapability(NinjaCapabilityHandler.NINJA_DATA)
-                .map(data -> data.isNinjaModeEnabled()
-                        && data.getToggleAbilityData().getAbilitiesHashSet().contains(KAMUI_PHASE_ABILITY))
-                .orElse(false);
-    }
-
-    private static final net.minecraft.resources.ResourceLocation PRETA_PATH_ABILITY =
-            new net.minecraft.resources.ResourceLocation(NarutoMod.MOD_ID, "preta_path");
-
-    /**
-     * Preta Path — the Rinnegan drinks ninjutsu. Chakra-based damage is mostly absorbed
-     * and converted back into the user's own reserve; plain physical hits pass through
-     * untouched, which is the canonical hole in the technique.
-     */
-    private static void applyPretaAbsorption(LivingHurtEvent event) {
-        if (!(event.getEntity() instanceof Player player)) {
-            return;
-        }
-        DamageSource source = event.getSource();
-        boolean isNinjutsu = source.is(net.minecraft.world.damagesource.DamageTypes.MAGIC)
-                || source.is(net.minecraft.world.damagesource.DamageTypes.INDIRECT_MAGIC)
-                || source.getMsgId().startsWith("narutomod");
-        if (!isNinjutsu) {
-            return;
-        }
-        player.getCapability(NinjaCapabilityHandler.NINJA_DATA).ifPresent(ninjaData -> {
-            if (!ninjaData.isNinjaModeEnabled()
-                    || !ninjaData.getToggleAbilityData().getAbilitiesHashSet().contains(PRETA_PATH_ABILITY)) {
-                return;
-            }
-            float absorbed = event.getAmount() * 0.8f;
-            event.setAmount(event.getAmount() - absorbed);
-            ninjaData.addChakra(absorbed * 4f);
-            if (player.level() instanceof ServerLevel serverLevel) {
-                serverLevel.sendParticles(new DustParticleOptions(new Vector3f(0.62F, 0.55F, 0.82F), 1.2F),
-                        player.getX(), player.getY() + player.getBbHeight() * 0.6, player.getZ(),
-                        15, 0.4, 0.5, 0.4, 0.02);
-            }
-        });
-    }
 
     /**
      * Rinne Sharingan — once a day, the wielder simply refuses to die: the killing blow
@@ -406,38 +237,6 @@ public class PlayerEvents {
                         player.getX(), player.getY() + 1.0, player.getZ(), 60, 0.6, 1.0, 0.6, 0.05);
             }
         });
-    }
-
-    private static final net.minecraft.resources.ResourceLocation CHAKRA_FLOW_ABILITY =
-            new net.minecraft.resources.ResourceLocation(NarutoMod.MOD_ID, "chakra_flow");
-
-    /**
-     * Chakra Flow: channelling chakra into a held weapon makes it cut far past its
-     * material — a plain kunai starts biting like diamond.
-     *
-     * "Weapon" is decided by what the item actually is, not by whether it can hurt: bows,
-     * arrows, potions and building blocks are excluded on purpose, so this sharpens a
-     * blade instead of turning a stack of cobblestone into a weapon. Bare fists are
-     * excluded too — the technique flows into an object, not into your hand.
-     */
-    private static boolean isChakraFlowWeapon(ItemStack stack) {
-        if (stack.isEmpty()) {
-            return false;
-        }
-        net.minecraft.world.item.Item item = stack.getItem();
-        if (item instanceof net.minecraft.world.item.BlockItem
-                || item instanceof net.minecraft.world.item.BowItem
-                || item instanceof net.minecraft.world.item.CrossbowItem
-                || item instanceof net.minecraft.world.item.ArrowItem
-                || item instanceof net.minecraft.world.item.PotionItem
-                || item instanceof net.minecraft.world.item.ThrowablePotionItem) {
-            return false;
-        }
-        // Anything that swings: vanilla tools/swords plus every ninja weapon we add.
-        return item instanceof net.minecraft.world.item.TieredItem
-                || item instanceof net.minecraft.world.item.TridentItem
-                || stack.getAttributeModifiers(net.minecraft.world.entity.EquipmentSlot.MAINHAND)
-                        .containsKey(Attributes.ATTACK_DAMAGE);
     }
 
     /**
@@ -519,71 +318,12 @@ public class PlayerEvents {
         });
     }
 
-    private static void applyChakraFlowHit(LivingHurtEvent event) {
-        if (!event.getSource().is(net.minecraft.world.damagesource.DamageTypes.PLAYER_ATTACK)) {
-            return;
-        }
-        if (!(event.getSource().getEntity() instanceof Player attacker)) {
-            return;
-        }
-        ItemStack weapon = attacker.getMainHandItem();
-        if (!isChakraFlowWeapon(weapon)) {
-            return;
-        }
-        attacker.getCapability(NinjaCapabilityHandler.NINJA_DATA).ifPresent(ninjaData -> {
-            if (!ninjaData.isNinjaModeEnabled()
-                    || !ninjaData.getToggleAbilityData().getAbilitiesHashSet().contains(CHAKRA_FLOW_ABILITY)) {
-                return;
-            }
-            if (ninjaData.getChakra() < CHAKRA_FLOW_HIT_COST) {
-                return;
-            }
-            ninjaData.useChakra(CHAKRA_FLOW_HIT_COST, 10);
-            // Rank scaling capped: at Six Paths the raw multiplier is 4.2, which made a coat
-            // of chakra worth more than the blade under it.
-            float rankScale = Math.min(ninjaData.getRankDamageMultiplier(), 2.5F);
-            event.setAmount(event.getAmount() + CHAKRA_FLOW_BONUS * rankScale);
-            if (attacker.level() instanceof ServerLevel serverLevel) {
-                Vec3 pos = event.getEntity().position().add(0, event.getEntity().getBbHeight() * 0.6, 0);
-                serverLevel.sendParticles(NarutoParticles.CHIDORI_CYAN,
-                        pos.x, pos.y, pos.z, 8, 0.25, 0.3, 0.25, 0.02);
-            }
-        });
-    }
-
-    private static void applyChakraScalpelHit(LivingHurtEvent event) {
-        if (!event.getSource().is(net.minecraft.world.damagesource.DamageTypes.PLAYER_ATTACK)) {
-            return;
-        }
-        if (!(event.getSource().getEntity() instanceof Player attacker)) {
-            return;
-        }
-        LivingEntity target = event.getEntity();
-        attacker.getCapability(NinjaCapabilityHandler.NINJA_DATA).ifPresent(ninjaData -> {
-            if (!ninjaData.isNinjaModeEnabled()
-                    || !ninjaData.getToggleAbilityData().getAbilitiesHashSet().contains(CHAKRA_SCALPEL_ABILITY)) {
-                return;
-            }
-            if (ninjaData.getChakra() < 4f) {
-                return;
-            }
-            ninjaData.useChakra(4f, 10);
-            event.setAmount(event.getAmount() + 6.0f * ninjaData.getRankDamageMultiplier());
-            target.addEffect(new MobEffectInstance(MobEffects.WEAKNESS, 5 * 20, 1, false, true));
-            if (attacker.level() instanceof ServerLevel serverLevel) {
-                Vec3 pos = target.position().add(0, target.getBbHeight() * 0.6, 0);
-                serverLevel.sendParticles(new DustParticleOptions(new Vector3f(0.3F, 0.95F, 0.8F), 1.0F),
-                        pos.x, pos.y, pos.z, 10, 0.25, 0.3, 0.25, 0.02);
-            }
-        });
-    }
 
     /**
      * Chakra nature affinity: jutsu whose element matches the caster's affinity hit +25%
      * harder ("your affinity nature comes out stronger"). Element is derived from the
      * jutsu's damage type, so this covers every fire/water/lightning/wind technique
-     * centrally without touching each ability. Earth jutsu reshape terrain rather than
-     * use a bespoke damage type, so earth affinity currently has no damage hook.
+     * centrally without touching each ability.
      */
     private static void applyNatureAffinity(LivingHurtEvent event) {
         if (!(event.getSource().getEntity() instanceof Player attacker)) {
@@ -594,6 +334,8 @@ public class PlayerEvents {
             element = "fire";
         } else if (event.getSource().is(NarutoDamageTypes.WATER_BULLET)) {
             element = "water";
+        } else if (event.getSource().is(NarutoDamageTypes.EARTH_SPIKE)) {
+            element = "earth";
         } else if (event.getSource().is(NarutoDamageTypes.CHIDORI)) {
             element = "lightning";
         } else if (event.getSource().is(NarutoDamageTypes.RASENGAN)) {
@@ -693,23 +435,16 @@ public class PlayerEvents {
 
     @SubscribeEvent
     public static void livingHurt(LivingHurtEvent event) {
-        applyKamuiIntangibility(event);
-        if (event.isCanceled()) {
-            return;
-        }
         applySharinganDodge(event);
         if (event.isCanceled()) {
             return;
         }
         applySharinganStressAwakening(event);
         applyRankMeleeDamage(event);
-        applyChakraScalpelHit(event);
-        applyChakraFlowHit(event);
         applyNatureAffinity(event);
         applyChidoriMeleeHit(event);
-        applyRasenganMeleeHit(event);
+        RasenganImpactEvents.onMeleeHit(event);
         applyTransformationDamageSponge(event);
-        applyPretaAbsorption(event);
         applyCombatXp(event);
         if (!(event.getEntity() instanceof Player player)) {
             return;
@@ -771,6 +506,7 @@ public class PlayerEvents {
 
         boolean jutsuHit = event.getSource().is(NarutoDamageTypes.FIREBALL)
                 || event.getSource().is(NarutoDamageTypes.WATER_BULLET)
+                || event.getSource().is(NarutoDamageTypes.EARTH_SPIKE)
                 || event.getSource().is(NarutoDamageTypes.RASENGAN)
                 || event.getSource().is(NarutoDamageTypes.AMATERASU)
                 || event.getSource().is(NarutoDamageTypes.CHIDORI);
@@ -803,24 +539,6 @@ public class PlayerEvents {
     private static final float MELEE_MULTIPLIER_CAP = 3.5F;
     private static final float MELEE_MULTIPLIER_CAP_PVP = 2.0F;
 
-    /**
-     * The single place a melee swing gets multiplied.
-     *
-     * It used to be three: the mode multiplier here, a second Susanoo and Kurama pass on the
-     * same event, and Chakra Flow's bonus in between - and all of them
-     * multiplied. Sage Mode times Kurama Chakra Mode times the cloak times the shell reached
-     * forty-three, which is why a Six Paths player put Madara down in four swings despite his
-     * seven hundred effective health.
-     *
-     * Two rules fix the shape rather than just shaving numbers:
-     *
-     *  - alternatives take the MAX, not the product. Sage Mode and Kurama Chakra Mode are two
-     *    ways of powering the same punch, and so are the shell and the cloak; stacking them
-     *    multiplicatively was never a design decision, it was three handlers not knowing
-     *    about each other.
-     *  - whatever comes out is clamped. A cap means new buffs added later cannot silently
-     *    reopen this, which is the part that actually matters.
-     */
     private static float meleeStateMultiplier(INinjaData ninjaData) {
         // Chakra states: the strongest one you are in, not all of them at once.
         float state = 1.0F;
@@ -906,26 +624,15 @@ public class PlayerEvents {
             attacker.hurtMarked = true;
         }
 
-        player.level().playSound(null, player,
-                shattering ? net.minecraft.sounds.SoundEvents.GLASS_BREAK
-                        : net.minecraft.sounds.SoundEvents.SHIELD_BLOCK,
-                SoundSource.PLAYERS, shattering ? 2.2f : 0.8f,
-                shattering ? 0.5f : 0.5f + integrity * 0.5f);
-
-        if (player.level() instanceof ServerLevel serverLevel) {
-            int count = shattering ? 90 : (int) (6 + (1f - integrity) * 18);
-            serverLevel.sendParticles(
-                    new DustParticleOptions(new Vector3f(0.55f, 0.25f, 0.85f), shattering ? 2.2f : 1.4f),
-                    player.getX(), player.getY() + player.getBbHeight() * 0.5, player.getZ(),
-                    count, shattering ? 2.5 : 0.6, shattering ? 2.5 : 0.7, shattering ? 2.5 : 0.6,
-                    shattering ? 0.35 : 0.03);
-        }
+        FinalChakraEffects.shellImpact(player, event.getSource(), ninjaData.getSusanooStage(),
+                FinalChakraEffects.tint(ninjaData), integrity, shattering);
     }
 
     /** Brings the armour down and starts the lockout that makes breaking it worth doing. */
     private static void shatterSusanoo(Player player, INinjaData ninjaData) {
         ninjaData.setSusanooActive(false);
         ninjaData.setSusanooStage(0);
+        ninjaData.getToggleAbilityData().removeAbility(com.sekwah.narutomod.abilities.NarutoAbilities.SUSANOO.getId());
         ninjaData.setSusanooBrokenTicks(com.sekwah.narutomod.capabilities.NinjaData.SUSANOO_BROKEN_LOCKOUT);
         player.displayClientMessage(net.minecraft.network.chat.Component
                 .literal("Your Susanoo shatters.")
@@ -933,7 +640,8 @@ public class PlayerEvents {
     }
 
     private static void applyTransformationDamageSponge(LivingHurtEvent event) {
-        if (!(event.getEntity() instanceof Player player)) {
+        if (!(event.getEntity() instanceof Player player)
+                || event.getSource().is(net.minecraft.tags.DamageTypeTags.BYPASSES_INVULNERABILITY)) {
             return;
         }
         player.getCapability(NinjaCapabilityHandler.NINJA_DATA).ifPresent(ninjaData -> {
@@ -957,8 +665,8 @@ public class PlayerEvents {
                 // Overflow passes through. Absorbing a two-thousand-point hit on the last
                 // point of integrity would make the final blow the safest one to take.
                 ninjaData.setSusanooDurability(0f);
-                shatterSusanoo(player, ninjaData);
                 susanooImpact(player, event, ninjaData, true);
+                shatterSusanoo(player, ninjaData);
                 event.setAmount(incoming - durability);
                 if (event.getAmount() <= 0f) {
                     event.setCanceled(true);
@@ -969,9 +677,6 @@ public class PlayerEvents {
                 int tails = Math.min(Math.max(ninjaData.getKuramaTailCount(), 0), 9);
                 reduction = Math.max(reduction, KURAMA_DAMAGE_REDUCTION[tails]);
             }
-            // Phase 16 — Sharingan danger sense: a fully matured three-tomoe eye reads an
-            // attacker's movement a fraction of a second early, so blows land glancing.
-            // Small and additive with the shells above rather than competing with them.
             if (ninjaData.isSharinganActive() && ninjaData.getSharinganTomoe() >= 3) {
                 reduction = Math.max(reduction, SHARINGAN_DANGER_SENSE_REDUCTION);
             }
@@ -994,134 +699,19 @@ public class PlayerEvents {
      * Landing a Chidori the ordinary way, by hitting somebody while it is lit.
      *
      * The hit itself lives in {@link com.sekwah.narutomod.util.ChidoriStrike} now, because the
-     * technique also resolves on its own reach when the user thrusts — and two copies of
-     * "what a Chidori does" would drift apart the first time either was tuned.
+     * technique also resolves on its own reach when the user swings into air.
      */
     private static void applyChidoriMeleeHit(LivingHurtEvent event) {
-        if (!(event.getSource().getEntity() instanceof Player attacker)) {
+        if (!(event.getSource().getEntity() instanceof Player attacker)
+                || event.getSource().getDirectEntity() != attacker
+                || !event.getSource().is(net.minecraft.world.damagesource.DamageTypes.PLAYER_ATTACK)) {
             return;
         }
-        LivingEntity target = event.getEntity();
         attacker.getCapability(NinjaCapabilityHandler.NINJA_DATA).ifPresent(ninjaData -> {
             if (!ninjaData.isNinjaModeEnabled() || !ninjaData.isChidoriActive()) {
                 return;
             }
-            com.sekwah.narutomod.util.ChidoriStrike.land(attacker, ninjaData, target);
-        });
-    }
-
-    /**
-     * Ramming a held Rasengan into a target on melee contact — the anime's usual way of
-     * landing it, rather than throwing it. Deals the same rank/charge-scaled damage the old
-     * thrown projectile did, respects the below-Kage "leave at 1 HP" floor on players, and
-     * dismisses the Rasengan afterward (one use per activation, matching Chidori's pattern).
-     */
-    private static void applyRasenganMeleeHit(LivingHurtEvent event) {
-        if (!(event.getSource().getEntity() instanceof Player attacker)) {
-            return;
-        }
-        LivingEntity target = event.getEntity();
-        attacker.getCapability(NinjaCapabilityHandler.NINJA_DATA).ifPresent(ninjaData -> {
-            if (!ninjaData.isNinjaModeEnabled() || !ninjaData.isRasenganHeld()) {
-                return;
-            }
-            DamageSource source = NarutoDamageTypes.getDamageSource(attacker.level(), NarutoDamageTypes.RASENGAN, attacker, attacker);
-            int charge = ninjaData.getRasenganCharge();
-            float t = Math.max(0, Math.min(charge - 20, 40)) / 40.0f;
-            float damageMultiplier = ninjaData.getRankDamageMultiplier();
-
-            // Must clear the held flag BEFORE calling target.hurt() — hurt() fires a new
-            // LivingHurtEvent synchronously, which re-enters this method; leaving the flag
-            // true here caused unbounded recursion (StackOverflowError / game crash).
-            ninjaData.setRasenganHeld(false);
-            // ...and the toggle has to be told, or it forms a new sphere on the very next
-            // tick and the Rasengan is never actually spent. See RasenganJutsuAbility.
-            ninjaData.setRasenganConsumed(true);
-
-            if (target instanceof Player targetPlayer) {
-                float damage = 14.0F * damageMultiplier;
-                if (ninjaData.getNinjaRank() < 4) {
-                    damage = Math.min(damage, targetPlayer.getHealth() - 1.0F);
-                }
-                if (damage > 0.0F) {
-                    target.hurt(source, damage);
-                }
-            } else {
-                target.hurt(source, (15.0F + t * 25.0F) * damageMultiplier);
-            }
-
-            Vec3 diff = target.position().subtract(attacker.position());
-            double horizLen = diff.horizontalDistance();
-            if (horizLen > 0.001) {
-                // Wind Nature is what makes a Rasengan throw people; the sphere is a wind
-                // technique, so mastery of the element is what the launch scales on.
-                int windLevel = Math.max(0, ninjaData.getElementLevel("wind"));
-                double windBonus = Math.min(windLevel, RASENGAN_WIND_LEVEL_CAP) * RASENGAN_WIND_KNOCKBACK;
-                double kbStrength = 4.0 + t * 6.0 + windBonus;
-
-                target.knockback(kbStrength, -diff.x / horizLen, -diff.z / horizLen);
-                Vec3 motion = target.getDeltaMovement();
-                target.setDeltaMovement(motion.x, Math.min(motion.y + 0.6 + windBonus * 0.08, 1.6), motion.z);
-                // Without this the server never sends the velocity change, so a hit PLAYER
-                // simply does not move - which is most of why the Rasengan read as having no
-                // knockback at all. Mobs are pushed by the server tick either way.
-                target.hurtMarked = true;
-            }
-
-            // Not the Water Bullet splash. The Rasengan had been borrowing another
-            // technique's sound, which is why slamming one sounded like hitting water.
-            attacker.level().playSound(null, attacker,
-                    net.minecraft.sounds.SoundEvents.ELDER_GUARDIAN_CURSE, SoundSource.PLAYERS, 1.2F, 1.6F);
-            if (attacker.level() instanceof ServerLevel serverLevel) {
-                Vec3 pos = target.position().add(0.0D, target.getBbHeight() * 0.5D, 0.0D);
-                serverLevel.sendParticles(ParticleTypes.END_ROD, pos.x, pos.y, pos.z, 20, 0.3D, 0.3D, 0.3D, 0.08D);
-            }
-        });
-    }
-
-    /**
-     * Punching a block while holding a Rasengan blasts a small crater — "punching through
-     * walls" like the anime, instead of only being usable on entities.
-     */
-    @SubscribeEvent
-    public static void onLeftClickBlock(net.minecraftforge.event.entity.player.PlayerInteractEvent.LeftClickBlock event) {
-        if (event.getLevel().isClientSide()) {
-            return;
-        }
-        Player player = event.getEntity();
-        player.getCapability(NinjaCapabilityHandler.NINJA_DATA).ifPresent(ninjaData -> {
-            if (!ninjaData.isNinjaModeEnabled() || !ninjaData.isRasenganHeld()) {
-                return;
-            }
-            float cost = 15f;
-            if (ninjaData.getChakra() < cost) {
-                return;
-            }
-            ninjaData.useChakra(cost, 10);
-
-            net.minecraft.core.BlockPos center = event.getPos();
-            int charge = ninjaData.getRasenganCharge();
-            int radius = charge >= 45 ? 2 : 1;
-
-            boolean mobGriefing = net.minecraftforge.event.ForgeEventFactory.getMobGriefingEvent(player.level(), player);
-            if (mobGriefing) {
-                for (net.minecraft.core.BlockPos pos : net.minecraft.core.BlockPos.betweenClosed(
-                        center.offset(-radius, -radius, -radius), center.offset(radius, radius, radius))) {
-                    if (!player.level().getBlockState(pos).isAir()) {
-                        player.level().destroyBlock(pos, true);
-                    }
-                }
-            }
-
-            if (player.level() instanceof ServerLevel serverLevel) {
-                serverLevel.sendParticles(ParticleTypes.EXPLOSION, center.getX() + 0.5, center.getY() + 0.5, center.getZ() + 0.5,
-                        6, 0.4, 0.4, 0.4, 0.05);
-                serverLevel.sendParticles(ParticleTypes.END_ROD, center.getX() + 0.5, center.getY() + 0.5, center.getZ() + 0.5,
-                        16, 0.5, 0.5, 0.5, 0.06);
-            }
-            player.level().playSound(null, center, net.minecraft.sounds.SoundEvents.GENERIC_EXPLODE, SoundSource.BLOCKS, 1.0F, 1.3F);
-
-            ninjaData.setRasenganHeld(false);
+            com.sekwah.narutomod.util.ChidoriStrike.thrust(attacker, ninjaData);
         });
     }
 
@@ -1181,13 +771,6 @@ public class PlayerEvents {
         });
     }
 
-    /**
-     * Everything a felled wielder leaves behind when it is not a Mangekyo.
-     *
-     * The roster used to be a binary - Uchiha hand over an eye, everyone else drops a sword -
-     * and that has no answer for a Rinnegan, a Byakugan, or a Senju who carries neither. Each
-     * legend now leaves the thing that was actually theirs.
-     */
     private static void awardNonMangekyoSpoils(Player killer, MangekyoBossEntity boss,
                                                MangekyoBossVariant variant) {
         killer.getCapability(NinjaCapabilityHandler.NINJA_DATA)
@@ -1246,12 +829,6 @@ public class PlayerEvents {
                 .withStyle(ChatFormatting.GOLD), false);
     }
 
-    /**
-     * Phase 16: defeating one of the roaming Mangekyo wielders takes their eyes. An
-     * ordinary Mangekyo becomes Eternal — no more escalating blindness — and the killer
-     * gains that wielder's signature technique. Beating several stacks their techniques,
-     * so hunting all five is a real progression path rather than a one-off swap.
-     */
     /** Felling a tailed beast is the largest single thing a ninja can do in this world. */
     private static final float TAILED_BEAST_KILL_XP = 14000f;
 
@@ -1338,9 +915,6 @@ public class PlayerEvents {
                     com.sekwah.narutomod.item.NarutoItems.RINNEGAN_EYE.get()));
         }
 
-        // Anything other than a Mangekyo is settled here and the method returns: the tail of
-        // this method is entirely about upgrading the killer's own Mangekyo to Eternal, which
-        // is meaningless for a Senju, a Hyuga or a jinchuriki.
         if (variant.dropKind() != MangekyoBossVariant.BossDrop.MANGEKYO) {
             awardNonMangekyoSpoils(killer, boss, variant);
             return;

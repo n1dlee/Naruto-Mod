@@ -1,5 +1,26 @@
 # Changelog
 
+## 3.0-RELEASE (2026-11-26)
+
+For Minecraft 1.20.1, NeoForge 47.1.62, and Java 17. Requires SekCLib.
+
+* **Seven Susanoo forms.** Ribcage, skeleton, chakra sinew, humanoid, armor, wingless
+  standing avatar, and Perfect Susanoo. Itachi's boss encounter stops at the armored form.
+  Existing saved form IDs are retained.
+* **New avatar rigs and combat visuals.** Articulated hands, shared player and boss attack
+  poses, directional sword contact, and Yasaka Magatama released from the palm. Armor hits
+  show a local flash; the wingless and winged avatars use planted feet and a framed camera.
+* **Susanoo armor meter.** Shows remaining and maximum integrity, warns when the armor is
+  near breaking, and displays the recovery timer after it shatters.
+* **Jutsu and boss updates.** Revised effects, cast cues, projectile alignment, boss chakra
+  limits and encounter spacing, persistent Sharingan copies, and chakra sharing and refunds
+  for Shadow Clones. The `/ninja add everything` and `/ninja remove everything` commands
+  provide a temporary playtest loadout in worlds where commands are allowed.
+
+Replace the old mod JAR on both the client and server before joining multiplayer. Back up
+existing worlds before upgrading. The Gradle build and 361 automated tests passed; this
+release build was not manually playtested in Minecraft.
+
 ## 2.4-RELEASE (2026-08-16)
 
 Animation, effects and the boss fights. Most of this release exists because the mod looked

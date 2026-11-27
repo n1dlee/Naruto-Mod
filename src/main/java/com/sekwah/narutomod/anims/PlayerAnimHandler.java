@@ -6,12 +6,24 @@ import com.sekwah.narutomod.anims.PoseBlender.Curve;
 import com.sekwah.narutomod.anims.PoseBlender.Track;
 import com.sekwah.narutomod.capabilities.INinjaData;
 import com.sekwah.narutomod.capabilities.NinjaCapabilityHandler;
+import com.sekwah.narutomod.client.renderer.ChidoriDashRenderer;
+import com.sekwah.narutomod.client.renderer.NagashiRenderer;
+import com.sekwah.narutomod.client.renderer.LeapFxRenderer;
+import com.sekwah.narutomod.client.renderer.ChakraDashRenderer;
+import com.sekwah.narutomod.client.renderer.ChakraChargeRenderer;
+import com.sekwah.narutomod.client.renderer.FlickerRenderer;
+import com.sekwah.narutomod.client.renderer.KuramaClawRenderer;
+import com.sekwah.narutomod.config.NarutoConfig;
 import com.sekwah.narutomod.registries.NarutoRegistries;
+import com.sekwah.narutomod.util.SurfaceStride;
+import com.sekwah.narutomod.util.KuramaCloakMotion.Strike;
 import net.minecraft.client.model.PlayerModel;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.HumanoidArm;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.player.Player;
 
 /**
  * Drives every player-body pose in the mod.
@@ -42,8 +54,6 @@ public class PlayerAnimHandler {
     private static final float RAMP_GATES = 4f;
     private static final float RAMP_LANDING = 1.5f;
 
-    /** Movement below this along the wall is standing still, not running. */
-    private static final double WALL_RUN_DEAD_ZONE = 0.02;
 
     /** Below this a drop is a step, not a landing worth animating. */
     private static final float LANDING_MIN_FALL = 2.5f;
@@ -64,6 +74,8 @@ public class PlayerAnimHandler {
         playerModel.body.setPos(0F, 0F, 0F);
         playerModel.rightArm.setPos(-5F, 2F, 0F);
         playerModel.leftArm.setPos(5F, 2F, 0F);
+        playerModel.rightLeg.setPos(-1.9F, 12F, 0F);
+        playerModel.leftLeg.setPos(1.9F, 12F, 0F);
     }
 
     public static <T extends LivingEntity> void sprintingAnim(Entity entity, PlayerModel playerModel,
@@ -77,8 +89,10 @@ public class PlayerAnimHandler {
             // The three upper-body stances are mutually exclusive at the source, so only one
             // is ever driven toward 1 - but the other two still need to be ticked so they ease
             // back out instead of freezing at whatever weight they were abandoned on.
-            boolean channelActive = channeledAbility != null;
-            boolean castActive = !channelActive && !chidoriActive && ninjaData.getCastPoseTicks() > 0;
+            boolean chargeChannel = NarutoAbilities.CHAKRA_CHARGE.getId().equals(channeledAbility);
+            boolean channelActive = channeledAbility != null && !chargeChannel;
+            boolean rasenganActive = ninjaData.isRasenganHeld();
+            boolean castActive = !channelActive && !chidoriActive && !rasenganActive && ninjaData.getCastPoseTicks() > 0;
 
 
             boolean wallClimbing = ninjaData.isWallWalkAttached();
@@ -87,10 +101,26 @@ public class PlayerAnimHandler {
             float wallWeight = PoseBlender.weight(entity, Track.WALL_CLIMB, wallClimbing, RAMP_WALL_CLIMB, ageInTicks);
             float sprintWeight = PoseBlender.weight(entity, Track.SPRINT, sprinting, RAMP_SPRINT, ageInTicks);
             if (wallWeight > PoseBlender.EPSILON) {
-                applyWallRunPose(playerModel, entity, wallWeight, ageInTicks);
+                applyWallRunPose(playerModel, wallWeight,
+                        ninjaData.getSurfaceStride().sample(Mth.frac(ageInTicks)));
             }
             if (sprintWeight > PoseBlender.EPSILON) {
                 applyNarutoSprintPose(playerModel, sprintWeight);
+            }
+            float dashLean = ChakraDashRenderer.runWeight(entity, Mth.frac(ageInTicks));
+            float dashBrake = ChakraDashRenderer.brakeWeight(entity, Mth.frac(ageInTicks));
+            if (dashLean > PoseBlender.EPSILON) {
+                applyNarutoSprintPose(playerModel, dashLean);
+            } else if (dashBrake > PoseBlender.EPSILON && !wallClimbing) {
+                PoseBlender.rotate(playerModel.body, dashBrake, -0.14f, 0, 0);
+                PoseBlender.rotate(playerModel.rightLeg, dashBrake, -0.32f, 0, 0);
+                PoseBlender.rotate(playerModel.leftLeg, dashBrake, 0.21f, 0, 0);
+            }
+            float anticipation = FlickerRenderer.pose(entity, Mth.frac(ageInTicks));
+            if (anticipation > PoseBlender.EPSILON) {
+                PoseBlender.rotate(playerModel.body, anticipation, 0.48f, 0, 0);
+                PoseBlender.rotate(playerModel.rightLeg, anticipation, -0.63f, 0, 0.12f);
+                PoseBlender.rotate(playerModel.leftLeg, anticipation, 0.44f, 0, -0.11f);
             }
 
             boolean sageIdle = ninjaData.isSageModeActive() && !entity.isSprinting() && limbSwingAmount < 0.1F;
@@ -105,14 +135,12 @@ public class PlayerAnimHandler {
                 applyKuramaCloakPose(playerModel, kuramaWeight, PoseBlender.elapsed(entity, Track.KURAMA));
             }
 
-            boolean susanooStance = ninjaData.isSusanooActive() && ninjaData.getSusanooStage() < 4;
+            boolean susanooStance = ninjaData.isSusanooActive() && !com.sekwah.narutomod.util.SusanooForm.perfect(ninjaData.getSusanooStage());
             float susanooWeight = PoseBlender.weight(entity, Track.SUSANOO, susanooStance, RAMP_SUSANOO, ageInTicks);
             if (susanooWeight > PoseBlender.EPSILON) {
                 applySusanooPose(playerModel, susanooWeight, PoseBlender.elapsed(entity, Track.SUSANOO));
             }
 
-            // ---- Actions, applied LAST ----
-            //
             // Order here IS priority. PoseBlender.rotate drives a limb toward an absolute
             // angle, so whichever pose runs last owns that limb - and these used to run
             // first, which meant a transformation stance silently erased them. Holding a
@@ -122,12 +150,23 @@ public class PlayerAnimHandler {
             // Stances describe what you ARE and are applied above; actions describe what you
             // are DOING and win, because doing beats being.
             float channelWeight = PoseBlender.weight(entity, Track.CHANNEL, channelActive, RAMP_CHANNEL, ageInTicks);
+            float rasenganWeight = PoseBlender.weight(entity, Track.RASENGAN, rasenganActive, RAMP_CHANNEL, ageInTicks);
             float chidoriWeight = PoseBlender.weight(entity, Track.CHIDORI, chidoriActive, RAMP_CHIDORI, ageInTicks);
             float castWeight = PoseBlender.weight(entity, Track.CAST, castActive, RAMP_CAST, ageInTicks);
 
-            if (channelWeight > PoseBlender.EPSILON) {
+            boolean sageGather = NarutoAbilities.SAGE_MODE.getId().equals(channeledAbility);
+            if (channelWeight > PoseBlender.EPSILON && (!sageGather || entity.onGround() && limbSwingAmount < 0.16f)) {
                 applyChanneledPose(playerModel, channelWeight, channeledAbility,
                         PoseBlender.elapsed(entity, Track.CHANNEL));
+            }
+            float breathWeight = ChakraChargeRenderer.weight(entity, Mth.frac(ageInTicks));
+            if ((chargeChannel || channeledAbility == null) && breathWeight > PoseBlender.EPSILON
+                    && !chidoriActive && !rasenganActive) {
+                applyChakraChargePose(playerModel, breathWeight, ageInTicks);
+                if (!wallClimbing && limbSwingAmount < 0.12f) {
+                    PoseBlender.rotate(playerModel.rightLeg, breathWeight, -0.14f, 0, 0.14f);
+                    PoseBlender.rotate(playerModel.leftLeg, breathWeight, -0.14f, 0, -0.14f);
+                }
             }
             if (chidoriWeight > PoseBlender.EPSILON) {
                 applyChidoriThrustPose(playerModel, chidoriWeight,
@@ -135,7 +174,20 @@ public class PlayerAnimHandler {
             }
             if (castWeight > PoseBlender.EPSILON) {
                 applyCastPose(playerModel, castWeight, castPhase(ninjaData),
-                        ninjaData.getLastCastAbilityId(), ninjaData.isCrossSealPose());
+                        ninjaData.getLastCastAbilityId(), ninjaData.isCrossSealPose(),
+                        entity instanceof LivingEntity caster ? caster.getMainArm() : HumanoidArm.RIGHT);
+            }
+            if (rasenganWeight > PoseBlender.EPSILON && entity instanceof LivingEntity living) {
+                applyRasenganPose(playerModel, rasenganWeight, PoseBlender.elapsed(entity, Track.RASENGAN),
+                        living.getMainArm());
+            }
+            var dash = ChidoriDashRenderer.pose(entity, Mth.frac(ageInTicks));
+            if (dash != null && entity instanceof LivingEntity living) {
+                applyDashPose(playerModel, dash, living.getMainArm());
+            }
+            float discharge = NagashiRenderer.pose(entity, Mth.frac(ageInTicks));
+            if (discharge > PoseBlender.EPSILON) {
+                applyNagashiPose(playerModel, discharge);
             }
 
             // The sword swing overrides the standing stance for as long as it runs - it is the
@@ -152,7 +204,7 @@ public class PlayerAnimHandler {
 
             int gatesOpen = ninjaData.getGatesOpen();
             float gatesWeight = PoseBlender.weight(entity, Track.GATES, gatesOpen >= 5, RAMP_GATES, ageInTicks);
-            if (gatesWeight > PoseBlender.EPSILON) {
+            if (gatesWeight > PoseBlender.EPSILON && !NarutoConfig.reducedBodyRiteEffects) {
                 applyEightGatesShake(playerModel, gatesWeight, gatesOpen, ageInTicks);
             }
 
@@ -165,10 +217,24 @@ public class PlayerAnimHandler {
             if (roarWeight > PoseBlender.EPSILON) {
                 applyGateRoarPose(playerModel, roarWeight, castPhase(ninjaData));
             }
+            if (ninjaData.getSageStoneTicks() > 0) {
+                applyStonePose(playerModel, Math.min(1, ninjaData.getSageStoneTicks() / 12f));
+            }
+            if (entity instanceof Player player && ninjaData.isKuramaCloakActive() && ninjaData.getKuramaTailCount() < 9) {
+                var attack = KuramaClawRenderer.pose(player, Mth.frac(ageInTicks));
+                if (attack != null && attack.kind() == Strike.PAW) {
+                    applyKuramaPawPose(playerModel, player.getMainArm(), attack.progress());
+                }
+            }
 
+            var leap = LeapFxRenderer.pose(entity, Mth.frac(ageInTicks));
+            if (leap != null) {
+                LANDING_STATE.remove(entity);
+                applyLeapPose(playerModel, leap, !castActive && !chidoriActive && !rasenganActive && !channelActive);
+            }
             float landWeight = PoseBlender.weight(entity, Track.LANDING,
-                    landingActive(entity, ageInTicks), RAMP_LANDING, ageInTicks);
-            if (landWeight > PoseBlender.EPSILON) {
+                    leap == null && landingActive(entity, ageInTicks), RAMP_LANDING, ageInTicks);
+            if (leap == null && landWeight > PoseBlender.EPSILON) {
                 applyLandingPose(playerModel, landWeight, PoseBlender.elapsed(entity, Track.LANDING));
             }
         }));
@@ -231,9 +297,10 @@ public class PlayerAnimHandler {
             applyChakraChargePose(playerModel, weight, elapsed);
         } else if (ability != null && ability.equals(NarutoAbilities.FIREBALL.getId())) {
             applyFireballPose(playerModel, weight, elapsed);
-        } else if (ability != null && (ability.equals(NarutoAbilities.RASENGAN.getId())
-                || ability.equals(NarutoAbilities.RASENSHURIKEN.getId()))) {
-            applyRasenganPose(playerModel, weight, elapsed);
+        } else if (NarutoAbilities.EIGHT_TRIGRAMS_ROTATION.getId().equals(ability)) {
+            applyRotationPose(playerModel, weight, Mth.clamp(elapsed / 4, 0, 1));
+        } else if (NarutoAbilities.SAGE_MODE.getId().equals(ability)) {
+            applySageGatherPose(playerModel, weight, elapsed);
         } else {
             applyChanneledJutsuPose(playerModel, weight, elapsed);
         }
@@ -241,9 +308,13 @@ public class PlayerAnimHandler {
 
     /** Picks the stance for the jutsu that just fired, defaulting to the hand-seal snap. */
     private static void applyCastPose(PlayerModel playerModel, float weight, float phase,
-                                      ResourceLocation lastCast, boolean crossSeal) {
+                                      ResourceLocation lastCast, boolean crossSeal, HumanoidArm mainArm) {
         if (lastCast != null && lastCast.equals(NarutoAbilities.AIR_PALM.getId())) {
-            applyAirPalmPose(playerModel, weight, phase);
+            applyAirPalmPose(playerModel, weight, phase, mainArm);
+        } else if (NarutoAbilities.LIGHTNING_SHOCK.getId().equals(lastCast)) {
+            var palm = mainArm == HumanoidArm.RIGHT ? playerModel.rightArm : playerModel.leftArm;
+            float turn = mainArm == HumanoidArm.RIGHT ? -0.16f : 0.16f;
+            PoseBlender.rotate(palm, weight, Mth.lerp(phase, -0.75f, -1.32f), turn, 0);
         } else if (lastCast != null && lastCast.equals(NarutoAbilities.GREAT_BREAKTHROUGH.getId())) {
             applyWindGatherPose(playerModel, weight, phase);
         } else if (lastCast != null && lastCast.equals(NarutoAbilities.ADAMANTINE_CHAINS.getId())) {
@@ -253,6 +324,9 @@ public class PlayerAnimHandler {
         } else if (lastCast != null && lastCast.equals(NarutoAbilities.EIGHT_GATES.getId())) {
             // The roar owns this cast outright; the generic seal would fight it.
             return;
+        } else if (NarutoAbilities.YASAKA_MAGATAMA.getId().equals(lastCast)) {
+            PoseBlender.rotate(playerModel.rightArm, weight, Mth.lerp(phase, -1.15f, -1.77f), -0.32f, 0.21f);
+            PoseBlender.addRotation(playerModel.body, weight, 0, Mth.lerp(phase, -0.24f, 0.16f), 0);
         } else if (lastCast != null && (lastCast.equals(NarutoAbilities.EARTH_WALL.getId())
                 || lastCast.equals(NarutoAbilities.EARTH_SPIKES.getId()))) {
             applyGroundSlamPose(playerModel, weight, phase);
@@ -263,7 +337,7 @@ public class PlayerAnimHandler {
                 || lastCast.equals(NarutoAbilities.SHADOW_STRANGLE.getId()))) {
             applyRatSealPose(playerModel, weight, phase);
         } else if (lastCast != null && lastCast.equals(NarutoAbilities.EIGHT_TRIGRAMS_ROTATION.getId())) {
-            applyRotationPose(playerModel, weight, phase);
+            applyRotationPose(playerModel, weight, 1 - phase);
         } else if (lastCast != null && lastCast.equals(NarutoAbilities.SUBSTITUTION.getId())) {
             applySubstitutionPose(playerModel, weight, phase);
         } else if (lastCast != null && (lastCast.equals(NarutoAbilities.KAMUI.getId())
@@ -272,6 +346,11 @@ public class PlayerAnimHandler {
             applyKamuiPose(playerModel, weight, phase);
         } else if (lastCast != null && lastCast.equals(NarutoAbilities.WOOD_RELEASE.getId())) {
             applyRamSealPose(playerModel, weight, phase);
+        } else if (NarutoAbilities.MIND_DISTURBANCE.getId().equals(lastCast)) {
+            float reach = Mth.sin(Mth.clamp(phase * 1.4f, 0, 1) * Mth.PI);
+            PoseBlender.rotate(playerModel.rightArm, weight, -1.55f - reach * 0.27f, -0.52f, 0.28f);
+            PoseBlender.rotate(playerModel.leftArm, weight, -1.55f - reach * 0.27f, 0.52f, -0.28f);
+            PoseBlender.addRotation(playerModel.body, weight, reach * 0.14f, 0, 0);
         } else {
             applyHandSealPose(playerModel, weight, phase, crossSeal);
         }
@@ -334,10 +413,8 @@ public class PlayerAnimHandler {
 
     /** Kaiten: arms flung wide and the whole body whipping around. */
     private static void applyRotationPose(PlayerModel playerModel, float weight, float phase) {
-        PoseBlender.rotate(playerModel.rightArm, weight, -0.15F, 0F, -1.45F);
-        PoseBlender.rotate(playerModel.leftArm, weight, -0.15F, 0F, 1.45F);
-        // A full turn across the cast, so the spin is a spin and not a T-pose.
-        PoseBlender.addRotation(playerModel.body, weight, 0F, phase * Mth.TWO_PI, 0F);
+        PoseBlender.rotate(playerModel.rightArm, weight, Mth.lerp(phase, -0.91F, -0.25F), -0.23F, Mth.lerp(phase, -0.41F, -1.31F));
+        PoseBlender.rotate(playerModel.leftArm, weight, Mth.lerp(phase, -0.63F, -0.38F), 0.32F, Mth.lerp(phase, 0.29F, 1.17F));
         PoseBlender.addRotation(playerModel.rightLeg, weight, 0F, 0F, -0.20F);
         PoseBlender.addRotation(playerModel.leftLeg, weight, 0F, 0F, 0.20F);
     }
@@ -386,61 +463,111 @@ public class PlayerAnimHandler {
             0.35f, -1.75f, 0.10f, -0.10f,
             1.00f, -1.60f, 0.12f, -0.08f);
 
-    /**
-     * Running up the wall, not clinging to it.
-     *
-     * The old pose was a climb: arms splayed overhead gripping the surface, legs barely
-     * moving. That reads as Spider-Man, which is the one thing this technique is not - a
-     * ninja goes up a wall at a run, upright, arms trailing behind.
-     *
-     * The model is deliberately NOT rotated ninety degrees. A full rotation is right for
-     * "gravity now points at the wall"; for a wall run it lays the player out horizontally
-     * and reads as clinging again. The body only leans a little toward the surface.
-     *
-     * The leg cycle is driven by deltaMovement rather than limbSwing on purpose: limbSwing
-     * tracks horizontal travel, so going straight up a wall - the most common thing anyone
-     * does with this - left the legs frozen mid-stride.
-     *
-     * But raw deltaMovement.length() is not the travel either. Wall Walk applies a constant
-     * push INTO the wall every tick to keep the player attached, so a player standing
-     * perfectly still on a wall still reports motion - and the legs kept cycling at a brisk
-     * jog while nobody was going anywhere. That is the "fast crawl" this technique was
-     * accused of: not the posture, the cadence.
-     *
-     * The grip component is therefore removed by projecting the movement onto the wall plane
-     * and only measuring what is left, and a dead zone keeps sensor noise from twitching the
-     * legs. The stride frequency now scales with that speed too, instead of running at a
-     * fixed 4.6 cycles a second regardless of how fast the player was actually travelling.
-     */
-    private static void applyWallRunPose(PlayerModel playerModel, Entity player,
-                                         float weight, float ageInTicks) {
-        net.minecraft.world.phys.Vec3 motion = player.getDeltaMovement();
-        // Everything except the component along the wall normal. The normal is not known
-        // here, but the grip is the only thing pushing horizontally into a surface the player
-        // is clinging to, so subtracting the collided axes leaves the travel along the wall.
-        double tangential = Math.sqrt(
-                (player.horizontalCollision ? 0.0 : motion.x * motion.x)
-                        + motion.y * motion.y
-                        + (player.horizontalCollision ? 0.0 : motion.z * motion.z));
-        if (tangential < WALL_RUN_DEAD_ZONE) {
-            tangential = 0.0;
+    private static void applyWallRunPose(PlayerModel model, float weight, SurfaceStride.Sample gait) {
+        float pace = gait.pace();
+        float phase = gait.phase();
+        float rightSwing = Mth.cos(phase) * 0.66f * pace;
+        float contact = Math.abs(Mth.sin(phase)) * pace;
+        PoseBlender.rotate(model.body, weight, 0.08f + 0.15f * pace, 0f, 0f);
+        PoseBlender.addRotation(model.head, weight, -0.12f * pace, 0f, 0f);
+
+        wallLeg(model.rightLeg, weight, rightSwing - contact * 0.13f, Mth.sin(phase) * pace, -1);
+        wallLeg(model.leftLeg, weight, -rightSwing - contact * 0.13f, -Mth.sin(phase) * pace, 1);
+
+        PoseBlender.rotate(model.rightArm, weight, 0.12f + 0.75f * pace - rightSwing * 0.38f, -0.12f, 0.08f);
+        PoseBlender.rotate(model.leftArm, weight, 0.12f + 0.75f * pace + rightSwing * 0.38f, 0.12f, -0.08f);
+    }
+
+    private static void wallLeg(net.minecraft.client.model.geom.ModelPart leg, float weight,
+                                float pitch, float lift, int side) {
+        float plant = (1.0f - Mth.cos(pitch)) * 12.0f;
+        PoseBlender.rotate(leg, weight, pitch, 0f, -0.04f * side);
+        PoseBlender.position(leg, weight, 1.9f * side, 12.0f + plant - Math.max(0, lift) * 2.1f, 0);
+    }
+
+    private static void applyDashPose(PlayerModel model, ChidoriDashRenderer.DashPose dash, HumanoidArm arm) {
+        var lead = arm == HumanoidArm.RIGHT ? model.rightArm : model.leftArm;
+        var rear = arm == HumanoidArm.RIGHT ? model.leftArm : model.rightArm;
+        var frontLeg = arm == HumanoidArm.RIGHT ? model.leftLeg : model.rightLeg;
+        var backLeg = arm == HumanoidArm.RIGHT ? model.rightLeg : model.leftLeg;
+        float weight = dash.weight();
+        float sign = arm == HumanoidArm.RIGHT ? 1.0f : -1.0f;
+        switch (dash.phase()) {
+            case BRACE -> {
+                PoseBlender.rotate(model.body, weight, 0.25f, sign * 0.23f, 0f);
+                PoseBlender.rotate(lead, weight, 0.30f, sign * 0.28f, sign * 0.10f);
+                PoseBlender.rotate(rear, weight, -0.95f, -sign * 0.16f, 0f);
+                PoseBlender.rotate(frontLeg, weight, -0.52f, 0f, 0f);
+                PoseBlender.rotate(backLeg, weight, 0.31f, 0f, 0f);
+            }
+            case TRAVEL -> {
+                PoseBlender.rotate(model.body, weight, 0.54f, -sign * 0.14f, 0f);
+                PoseBlender.rotate(lead, weight, -1.49f, -sign * 0.11f, 0f);
+                PoseBlender.rotate(rear, weight, 1.01f, 0f, 0f);
+                PoseBlender.rotate(frontLeg, weight, -0.55f, 0f, 0f);
+                PoseBlender.rotate(backLeg, weight, 0.76f, 0f, 0f);
+            }
+            default -> {
+                PoseBlender.rotate(model.body, weight, -0.17f, -sign * 0.22f, 0f);
+                PoseBlender.rotate(lead, weight, -0.63f, -sign * 0.29f, 0f);
+                PoseBlender.rotate(rear, weight, -0.44f, sign * 0.18f, 0f);
+                PoseBlender.rotate(frontLeg, weight, -0.43f, 0f, 0f);
+                PoseBlender.rotate(backLeg, weight, 0.14f, 0f, 0f);
+            }
         }
-        float speed = (float) net.minecraft.util.Mth.clamp(tangential * 7.0D, 0.0D, 1.0D);
-        // Cadence follows pace: a walk is not a sprint played at the same tempo.
-        float stride = net.minecraft.util.Mth.cos(ageInTicks * (0.45F + 1.15F * speed)) * 0.95F * speed;
+    }
 
-        // A lean toward the wall, not a lie-down on it.
-        PoseBlender.rotate(playerModel.body, weight, 0.24F, 0F, 0F);
-        PoseBlender.addRotation(playerModel.head, weight, -0.10F, 0F, 0F);
+    private static void applyNagashiPose(PlayerModel model, float weight) {
+        PoseBlender.rotate(model.body, weight, 0.17f, 0f, 0f);
+        PoseBlender.rotate(model.rightArm, weight, -0.37f, -0.25f, 0.69f);
+        PoseBlender.rotate(model.leftArm, weight, -0.37f, 0.25f, -0.69f);
+        PoseBlender.rotate(model.rightLeg, weight, 0.13f, 0f, 0.14f);
+        PoseBlender.rotate(model.leftLeg, weight, -0.15f, 0f, -0.14f);
+    }
 
-        PoseBlender.rotate(playerModel.rightLeg, weight, stride, 0F, 0F);
-        PoseBlender.rotate(playerModel.leftLeg, weight, -stride, 0F, 0F);
-
-        // Arms back, the way he runs on the ground - not reaching for the blocks.
-        PoseBlender.rotate(playerModel.rightArm, weight, 1.35F, -0.12F, 0F);
-        PoseBlender.rotate(playerModel.leftArm, weight, 1.35F, 0.12F, 0F);
-        PoseBlender.position(playerModel.rightArm, weight, -5.0F, 3.7F, -4.0F);
-        PoseBlender.position(playerModel.leftArm, weight, 5.0F, 3.4F, -4.0F);
+    private static void applyLeapPose(PlayerModel model, LeapFxRenderer.LeapPose pose, boolean freeArms) {
+        float age = pose.age();
+        switch (pose.phase()) {
+            case BRACE -> {
+                float weight = Mth.clamp((age + 0.4f) / 3.0f, 0, 0.96f);
+                PoseBlender.rotate(model.body, weight, 0.38f, 0, 0);
+                PoseBlender.rotate(model.rightLeg, weight, -0.71f, 0, 0.22f);
+                PoseBlender.rotate(model.leftLeg, weight, -0.66f, 0, -0.22f);
+                model.body.y += 2.3f * weight;
+                model.head.y += 2.3f * weight;
+                if (freeArms) {
+                    PoseBlender.rotate(model.rightArm, weight, 0.57f, -0.06f, 0.17f);
+                    PoseBlender.rotate(model.leftArm, weight, 0.57f, 0.06f, -0.17f);
+                }
+            }
+            case TAKEOFF -> {
+                float weight = Mth.clamp((age + 0.8f) * 0.5f, 0, 1);
+                PoseBlender.rotate(model.rightLeg, weight, 0.35f, 0, 0.27f);
+                PoseBlender.rotate(model.leftLeg, weight, -0.57f, 0, -0.27f);
+                if (freeArms) {
+                    PoseBlender.rotate(model.rightArm, weight, 0.36f, -0.12f, 0.52f);
+                    PoseBlender.rotate(model.leftArm, weight, 0.36f, 0.12f, -0.52f);
+                }
+            }
+            case LAND, WATER -> {
+                float force = pose.phase() == com.sekwah.narutomod.network.s2c.LeapFxPacket.Phase.WATER
+                        ? pose.strength() * 0.55f : pose.strength();
+                applyLandingPose(model, Mth.clamp(force + 0.22f, 0, 1), age * 2.45f);
+            }
+            case BOOST -> {
+                float lift = Mth.clamp(1.0f - age / 8f, 0, 1);
+                float tuck = Mth.clamp(1.0f - age / 3.5f, 0, 1);
+                PoseBlender.rotate(model.body, lift, -0.11f, 0, 0);
+                PoseBlender.rotate(model.rightLeg, lift, -0.95f * tuck + 0.19f, 0, 0.08f);
+                PoseBlender.rotate(model.leftLeg, lift, -1.14f * tuck + 0.27f, 0, -0.08f);
+                if (freeArms) {
+                    PoseBlender.rotate(model.rightArm, lift, 0.38f, 0, 0.31f);
+                    PoseBlender.rotate(model.leftArm, lift, 0.38f, 0, -0.31f);
+                }
+            }
+            default -> {
+            }
+        }
     }
 
     /**
@@ -495,14 +622,18 @@ public class PlayerAnimHandler {
      * It used to share the generic two-handed seal, which is the pose for making a jutsu, not
      * for carrying one that is already spinning. The wobble is the ball fighting the hand.
      */
-    private static void applyRasenganPose(PlayerModel playerModel, float weight, float elapsed) {
+    private static void applyRasenganPose(PlayerModel playerModel, float weight, float elapsed, HumanoidArm arm) {
         float entry = Mth.clamp(elapsed / 7f, 0f, 1f);
         float spin = Mth.sin(elapsed * 0.55f) * 0.045f;
-        RASENGAN_RIGHT.rotate(playerModel.rightArm, entry, weight);
-        RASENGAN_LEFT.rotate(playerModel.leftArm, entry, weight);
-        PoseBlender.position(playerModel.rightArm, weight, -5.5F, 3.0F, -1.5F);
-        PoseBlender.addRotation(playerModel.rightArm, weight, spin, spin * 0.5f, 0F);
-        PoseBlender.addRotation(playerModel.body, weight, 0F, -0.12f * weight, 0F);
+        boolean right = arm == HumanoidArm.RIGHT;
+        float side = right ? 1f : -1f;
+        var active = right ? playerModel.rightArm : playerModel.leftArm;
+        var support = right ? playerModel.leftArm : playerModel.rightArm;
+        RASENGAN_RIGHT.rotate(active, entry, weight, side);
+        RASENGAN_LEFT.rotate(support, entry, weight, side);
+        PoseBlender.position(active, weight, -5.5F * side, 3.0F, -1.5F);
+        PoseBlender.addRotation(active, weight, spin, spin * 0.5f * side, 0F);
+        PoseBlender.addRotation(playerModel.body, weight, 0F, -0.12f * weight * side, 0F);
     }
 
     private static final Curve RASENGAN_RIGHT = Curve.of(
@@ -705,17 +836,17 @@ public class PlayerAnimHandler {
             0.45f, -6.0f, 3.5f, 2.0f,
             1.00f, -4.0f, 2.5f, -2.5f);
 
-    /**
-     * One flat palm thrust forward — Air Palm's signature Hyuga tell, asymmetric so it
-     * reads distinctly from the two-handed generic hand-seal flash.
-     */
-    private static void applyAirPalmPose(PlayerModel playerModel, float weight, float phase) {
-        // Palm withdraws to the ribs and then strikes. A Gentle Fist palm is a strike, and a
-        // strike without a wind-up is a wave.
-        AIR_PALM_ARM.rotate(playerModel.rightArm, phase, weight);
-        AIR_PALM_ARM_POS.position(playerModel.rightArm, phase, weight);
-        PoseBlender.rotate(playerModel.leftArm, weight, -0.2F, 0.1F, 0F);
-        PoseBlender.addRotation(playerModel.body, weight, 0F, AIR_PALM_TWIST.sampleX(phase), 0F);
+    private static void applyAirPalmPose(PlayerModel playerModel, float weight, float phase, HumanoidArm mainArm) {
+        boolean right = mainArm == HumanoidArm.RIGHT;
+        float side = right ? 1 : -1;
+        var striking = right ? playerModel.rightArm : playerModel.leftArm;
+        var guarding = right ? playerModel.leftArm : playerModel.rightArm;
+        PoseBlender.rotate(striking, weight, AIR_PALM_ARM.sampleX(phase),
+                AIR_PALM_ARM.sampleY(phase) * side, AIR_PALM_ARM.sampleZ(phase) * side);
+        PoseBlender.position(striking, weight, AIR_PALM_ARM_POS.sampleX(phase) * side,
+                AIR_PALM_ARM_POS.sampleY(phase), AIR_PALM_ARM_POS.sampleZ(phase));
+        PoseBlender.rotate(guarding, weight, -0.2F, 0.1F * side, 0F);
+        PoseBlender.addRotation(playerModel.body, weight, 0F, AIR_PALM_TWIST.sampleX(phase) * side, 0F);
     }
 
     private static final Curve AIR_PALM_ARM = Curve.of(
@@ -848,6 +979,41 @@ public class PlayerAnimHandler {
             0.35f, -0.18f, -0.45f, 0f,
             0.55f, 0.30f, 0.50f, 0f,
             1.00f, 0.10f, 0.30f, 0f);
+
+    private static void applySageGatherPose(PlayerModel model, float weight, float age) {
+        float breath = Mth.sin(age * 0.11f) * 0.046f;
+        PoseBlender.rotate(model.body, weight, 0.13f + breath, 0, 0);
+        PoseBlender.rotate(model.head, weight, 0.29f + breath, 0, 0);
+        PoseBlender.rotate(model.rightArm, weight, -0.70f, -0.32f, 0.20f);
+        PoseBlender.rotate(model.leftArm, weight, -0.70f, 0.32f, -0.20f);
+        PoseBlender.rotate(model.rightLeg, weight, -1.04f, -0.41f, 0.16f);
+        PoseBlender.rotate(model.leftLeg, weight, -1.04f, 0.41f, -0.16f);
+        float seat = 4.8f * weight;
+        model.body.y += seat;
+        model.head.y += seat;
+        model.rightArm.y += seat;
+        model.leftArm.y += seat;
+        model.rightLeg.y += seat;
+        model.leftLeg.y += seat;
+    }
+
+    private static void applyStonePose(PlayerModel model, float weight) {
+        PoseBlender.rotate(model.body, weight, 0.29f, 0, 0);
+        PoseBlender.rotate(model.head, weight, 0.39f, 0, 0.10f);
+        PoseBlender.rotate(model.rightArm, weight, -0.51f, -0.31f, 0.13f);
+        PoseBlender.rotate(model.leftArm, weight, -0.67f, 0.25f, -0.19f);
+        PoseBlender.rotate(model.rightLeg, weight, -0.16f, -0.18f, 0);
+        PoseBlender.rotate(model.leftLeg, weight, -0.26f, 0.17f, 0);
+    }
+
+    private static void applyKuramaPawPose(PlayerModel model, HumanoidArm side, float time) {
+        float weight = Mth.sin(Mth.clamp(time, 0, 1) * Mth.PI);
+        float drop = Mth.clamp((time - 0.31f) / 0.19f, 0, 1);
+        var arm = side == HumanoidArm.RIGHT ? model.rightArm : model.leftArm;
+        float sign = side == HumanoidArm.RIGHT ? 1 : -1;
+        PoseBlender.rotate(arm, weight, Mth.lerp(drop, -2.11f, 0.42f), sign * -0.31f, sign * 0.24f);
+        PoseBlender.addRotation(model.body, weight, 0.26f * drop, sign * 0.18f, 0);
+    }
 
     /** Sage Mode standing still: slow, deep, deliberately calm breathing. */
     private static void applySageIdlePose(PlayerModel playerModel, float weight, float elapsed) {

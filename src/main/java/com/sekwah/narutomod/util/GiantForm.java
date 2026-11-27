@@ -1,5 +1,10 @@
 package com.sekwah.narutomod.util;
 
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
+
 /**
  * One size for every final form in the mod.
  *
@@ -24,10 +29,26 @@ public final class GiantForm {
      * is taller than the render distance is useful at and cannot be seen from the ground.
      */
     public static final float HEIGHT_BLOCKS = 18.0f;
+    public static final float SUSANOO_WIDTH = HEIGHT_BLOCKS * .33f;
 
     /** Clear blocks needed overhead before a giant can rise, with a little slack. */
     public static final int HEADROOM = 19;
 
     private GiantForm() {
+    }
+
+    public static AABB susanooClearance(Vec3 feet) {
+        float radius = SUSANOO_WIDTH / 2;
+        return new AABB(feet.x - radius, feet.y, feet.z - radius, feet.x + radius, feet.y + HEADROOM, feet.z + radius);
+    }
+
+    public static boolean canRaiseSusanoo(LivingEntity actor) {
+        if (!(actor.level() instanceof ServerLevel level) || actor.isPassenger() || !actor.onGround()) {
+            return false;
+        }
+        AABB space = susanooClearance(actor.position());
+        return space.maxY < level.getMaxBuildHeight() && level.getWorldBorder().isWithinBounds(space)
+                && FinalChakraGeometry.loaded(level, new Vec3(space.minX, space.minY, space.minZ),
+                new Vec3(space.maxX, space.maxY, space.maxZ)) && level.noCollision(actor, space) && !level.containsAnyLiquid(space);
     }
 }

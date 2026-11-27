@@ -61,6 +61,8 @@ public class KuramaFoxModel extends Model {
     private static final float TIP_GAIN = 1.5f;
 
     private final ModelPart root;
+    private final ModelPart rightPaw;
+    private final ModelPart leftPaw;
 
     /** Tail bases and tips, index 0-8, paired with the rest pose the wave is added to. */
     private final ModelPart[] tailBase = new ModelPart[TAIL_COUNT];
@@ -73,6 +75,9 @@ public class KuramaFoxModel extends Model {
     public KuramaFoxModel(ModelPart root) {
         super(net.minecraft.client.renderer.RenderType::entityTranslucent);
         this.root = root;
+        ModelPart chest = root.getChild("body").getChild("biped_body");
+        this.rightPaw = chest.getChild("biped_right_arm");
+        this.leftPaw = chest.getChild("biped_left_arm");
         ModelPart tails = root.getChild("body").getChild("tails");
         for (int i = 0; i < TAIL_COUNT; i++) {
             ModelPart base = tails.getChild("Tail" + i + "0");
@@ -97,6 +102,8 @@ public class KuramaFoxModel extends Model {
      * spin a segment about its own length and show nothing at all.
      */
     public void waveTails(float ageInTicks) {
+        this.rightPaw.resetPose();
+        this.leftPaw.resetPose();
         for (int i = 0; i < TAIL_COUNT; i++) {
             float phase = ageInTicks * WAVE_SPEED - i * WAVE_LAG;
             this.tailBase[i].xRot = this.baseRestX[i] + net.minecraft.util.Mth.sin(phase) * SWING;
@@ -106,6 +113,17 @@ public class KuramaFoxModel extends Model {
             this.tailTip[i].xRot = this.tipRestX[i] + net.minecraft.util.Mth.sin(tipPhase) * SWING * TIP_GAIN;
             this.tailTip[i].zRot = this.tipRestZ[i] + net.minecraft.util.Mth.cos(tipPhase * 0.8f) * CURL * TIP_GAIN;
         }
+    }
+
+    public void strikePaw(float progress) {
+        float gather = smoothstep(Math.min(1, progress / 0.36f));
+        float drop = smoothstep(Math.min(1, Math.max(0, (progress - 0.34f) / 0.16f)));
+        float recoil = smoothstep(Math.min(1, Math.max(0, (progress - 0.50f) / 0.50f)));
+        float lift = gather * 0.85f - drop * 1.10f + recoil * 0.25f;
+        this.rightPaw.xRot -= lift * 0.92f;
+        this.rightPaw.yRot += lift * 0.18f;
+        this.rightPaw.y -= lift * 3.2f;
+        this.leftPaw.xRot += lift * 0.14f;
     }
 
     /**

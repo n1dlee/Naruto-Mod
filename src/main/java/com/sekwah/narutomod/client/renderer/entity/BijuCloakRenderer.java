@@ -6,6 +6,8 @@ import com.mojang.math.Axis;
 import com.sekwah.narutomod.NarutoMod;
 import com.sekwah.narutomod.capabilities.NinjaCapabilityHandler;
 import com.sekwah.narutomod.client.model.entity.BijuCloakModel;
+import com.sekwah.narutomod.client.renderer.KuramaClawRenderer;
+import com.sekwah.narutomod.util.KuramaCloakMotion;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
@@ -76,7 +78,7 @@ public class BijuCloakRenderer {
         }
         Player player = event.getEntity();
         Minecraft mc = Minecraft.getInstance();
-        if (player == mc.player && mc.options.getCameraType().isFirstPerson()) {
+        if (player.isInvisible() || player == mc.player && mc.options.getCameraType().isFirstPerson()) {
             return;
         }
 
@@ -100,6 +102,14 @@ public class BijuCloakRenderer {
             // while the player underneath runs, sneaks and casts - the KCM form standing to
             // attention inside a sprinting body.
             model.animateFrom(event.getRenderer().getModel());
+            float growth = 1;
+            if (cloak && !kcm) {
+                var strike = KuramaClawRenderer.pose(player, event.getPartialTick());
+                float lash = strike != null && strike.kind() == KuramaCloakMotion.Strike.TAIL
+                        ? (float) Math.sin(strike.progress() * Math.PI) : 0;
+                growth = KuramaCloakMotion.unfold(ninjaData.getKuramaTailAge() + event.getPartialTick(), tails);
+                model.moveRedTails(tails, player.tickCount + event.getPartialTick(), growth, lash);
+            }
 
             ResourceLocation texture;
             if (kcm) {
@@ -125,7 +135,7 @@ public class BijuCloakRenderer {
             poseStack.scale(-CLOAK_SCALE, -CLOAK_SCALE, CLOAK_SCALE);
 
             model.renderToBuffer(poseStack, consumer, event.getPackedLight(), OverlayTexture.NO_OVERLAY,
-                    1.0f, 1.0f, 1.0f, 0.9f);
+                    1.0f, kcm ? 1.0f : 0.66f + growth * 0.18f, kcm ? 1.0f : 0.60f, kcm ? 0.9f : 0.67f + growth * 0.23f);
             poseStack.popPose();
         });
     }

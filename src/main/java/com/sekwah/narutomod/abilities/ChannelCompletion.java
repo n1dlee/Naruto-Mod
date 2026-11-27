@@ -38,7 +38,8 @@ public final class ChannelCompletion {
         /** The player let go. */
         RELEASED,
         /** Chakra, stamina or the ability's own upkeep check gave out mid-channel. */
-        EXHAUSTED
+        EXHAUSTED,
+        FULL
     }
 
     private ChannelCompletion() {
@@ -67,13 +68,9 @@ public final class ChannelCompletion {
 
         ability.performServer(player, ninjaData, ticksChanneled);
 
-        // The ability decides what counts as having gone far enough to matter. Below that
-        // line a channel is an aborted attempt: it may still have had a visible effect, but
-        // it does not pay out.
-        boolean committed = ability.channelCommittedAt(ticksChanneled);
+        boolean committed = ability.channelCommittedAt(ninjaData, ticksChanneled);
         if (committed) {
             ability.grantCastXp(ninjaData);
-            consumeCopy(ninjaData, ability);
             registerCooldown(player, ninjaData, ability);
             if (player instanceof ServerPlayer serverPlayer) {
                 NarutoRegistries.ABILITIES.getResourceKey(ability).ifPresent(key ->
@@ -83,18 +80,6 @@ public final class ChannelCompletion {
 
         ninjaData.setCurrentlyChanneledAbility(player, null);
         return committed;
-    }
-
-    /**
-     * A one-shot Sharingan copy is spent by USING it, however the cast was delivered.
-     *
-     * Only the instant path did this, so a copied Fireball released from a channel stayed in
-     * the copy slot permanently and kept bypassing its fire-affinity requirement.
-     */
-    private static void consumeCopy(INinjaData ninjaData, Ability ability) {
-        if (ability.isCopiedBySharingan(ninjaData)) {
-            ninjaData.setCopiedJutsu("");
-        }
     }
 
     /**

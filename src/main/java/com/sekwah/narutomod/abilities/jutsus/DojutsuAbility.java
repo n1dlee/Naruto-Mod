@@ -5,14 +5,16 @@ import com.sekwah.narutomod.abilities.NarutoAbilities;
 import com.sekwah.narutomod.capabilities.INinjaData;
 import com.sekwah.narutomod.capabilities.toggleabilitydata.ToggleAbilityData;
 import com.sekwah.narutomod.registries.NarutoRegistries;
+import com.sekwah.narutomod.util.DojutsuVisual;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.entity.player.Player;
 
 public class DojutsuAbility extends Ability {
 
-    /** Exempt from the free-hands gate: this is an eye being opened, not a hand-cast technique. */
     @Override
     public boolean requiresFreeHands() {
         return false;
@@ -39,8 +41,17 @@ public class DojutsuAbility extends Ability {
     }
 
     @Override
+    public int castPoseTicks() {
+        return 0;
+    }
+
+    @Override
+    public void grantCastXp(INinjaData data) {
+    }
+
+    @Override
     public boolean handleCost(Player player, INinjaData ninjaData, int chargeAmount) {
-        Ability selected = getClanDojutsu(ninjaData);
+        Ability selected = selectedEye(player, ninjaData);
         if (selected == null) {
             player.displayClientMessage(Component.translatable("jutsu.fail.dojutsu",
                     Component.translatable(this.getTranslationKey(ninjaData)).withStyle(ChatFormatting.YELLOW)), true);
@@ -59,7 +70,7 @@ public class DojutsuAbility extends Ability {
 
     @Override
     public void performServer(Player player, INinjaData ninjaData, int ticksActive) {
-        Ability selected = getClanDojutsu(ninjaData);
+        Ability selected = selectedEye(player, ninjaData);
         if (selected == null) {
             return;
         }
@@ -67,30 +78,38 @@ public class DojutsuAbility extends Ability {
         ResourceLocation selectedId = NarutoRegistries.ABILITIES.getResourceKey(selected).orElseThrow().location();
 
         if (toggles.getAbilitiesHashSet().contains(selectedId)) {
-            toggles.removeAbilityEnded(player, ninjaData, selected);
+            if (toggles.removeAbilityEnded(player, ninjaData, selected)) {
+                player.playNotifySound(SoundEvents.AMETHYST_BLOCK_HIT, SoundSource.PLAYERS, 0.35f, 0.87f);
+                show(player, ninjaData, selected, false);
+            }
             return;
         }
 
         removeIfActive(player, ninjaData, NarutoAbilities.SHARINGAN.get());
         removeIfActive(player, ninjaData, NarutoAbilities.BYAKUGAN.get());
-        toggles.addAbilityStarted(player, ninjaData, selected);
+        if (toggles.addAbilityStarted(player, ninjaData, selected)) {
+            var sound = selected.castingSound();
+            if (sound != null) {
+                player.level().playSound(null, player, sound, SoundSource.PLAYERS, 0.62f, 1);
+            }
+            show(player, ninjaData, selected, true);
+        }
     }
 
-    /**
-     * Which eye this key drives. A clan's own dojutsu always wins - a Hyuga who also
-     * carries a transplanted Sharingan still keys their Byakugan, and the foreign eye
-     * keeps working the way it always does, passively and unclosably.
-     *
-     * The fallback is what matters: without it a non-Uchiha who transplanted a Sharingan
-     * had no way to switch it into combat mode at all, which made the whole transplant
-     * path half-dead.
-     */
-    private Ability getClanDojutsu(INinjaData ninjaData) {
-        return switch (ninjaData.getClanId()) {
-            case "uchiha" -> NarutoAbilities.SHARINGAN.get();
-            case "hyuga" -> NarutoAbilities.BYAKUGAN.get();
-            default -> ninjaData.isTransplantedSharingan() ? NarutoAbilities.SHARINGAN.get() : null;
+    private static Ability selectedEye(Player player, INinjaData data) {
+        String clan = data.getClanId();
+        return switch (DojutsuVisual.select(clan, data.hasSharinganEye(), "hyuga".equals(clan) || data.getByakuganLevel() > 0,
+                player.isShiftKeyDown())) {
+            case SHARINGAN -> NarutoAbilities.SHARINGAN.get();
+            case BYAKUGAN -> NarutoAbilities.BYAKUGAN.get();
+            case NONE -> null;
         };
+    }
+
+    private static void show(Player player, INinjaData data, Ability eye, boolean active) {
+        player.displayClientMessage(Component.translatable(active ? "jutsu.dojutsu.combat" : "jutsu.dojutsu.rest",
+                        Component.translatable(eye.getTranslationKey(data)).withStyle(ChatFormatting.AQUA)),
+                true);
     }
 
     private void removeIfActive(Player player, INinjaData ninjaData, Ability ability) {

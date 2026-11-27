@@ -3,7 +3,12 @@ package com.sekwah.narutomod.entity.goal;
 import com.sekwah.narutomod.entity.TailedBeastEntity;
 import com.sekwah.narutomod.entity.TailedBeastVariant;
 import com.sekwah.narutomod.entity.jutsuprojectile.TailedBeastBombEntity;
+import com.sekwah.narutomod.events.FinalChakraEffects;
+import com.sekwah.narutomod.network.s2c.FinalChakraPacket.Phase;
+import com.sekwah.narutomod.network.s2c.FinalChakraPacket.Shape;
 import com.sekwah.narutomod.sounds.NarutoSounds;
+import com.sekwah.narutomod.util.BijudamaProfile;
+import com.sekwah.narutomod.util.FinalChakraGeometry;
 import com.sekwah.narutomod.util.NarutoParticles;
 import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
@@ -41,9 +46,11 @@ public class TailedBeastJutsuGoal extends Goal {
     private static final double CLOSE_RANGE = 10.0;
 
     /** Ticks the sphere gathers before it is thrown. */
-    private static final int BIJUDAMA_CHARGE = 40;
+    private static final int BIJUDAMA_CHARGE = BijudamaProfile.WINDUP;
     /** Rough one-in-N chance the beast opens with a Bijudama rather than its species kit. */
     private static final int BIJUDAMA_ODDS = 4;
+    private static final int BIJUDAMA_COST = 105;
+    private static final int KIT_COST = com.sekwah.narutomod.entity.BossChakraReserve.BEAST_CAST_FLOOR;
 
     private static final DustParticleOptions SAND_TAN =
             new DustParticleOptions(new Vector3f(0.80F, 0.72F, 0.45F), 1.3F);
@@ -75,6 +82,9 @@ public class TailedBeastJutsuGoal extends Goal {
 
     @Override
     public boolean canUse() {
+        if (com.sekwah.narutomod.events.AdamantineChainEvents.sealed(this.beast)) {
+            return false;
+        }
         if (this.cooldown > 0) {
             this.cooldown--;
             return false;
@@ -84,7 +94,7 @@ public class TailedBeastJutsuGoal extends Goal {
             return false;
         }
         double distance = this.beast.distanceTo(target);
-        if (distance > MAX_RANGE) {
+        if (distance > MAX_RANGE || !this.beast.canUseChakra(KIT_COST)) {
             return false;
         }
         return distance < CLOSE_RANGE || this.beast.getSensing().hasLineOfSight(target);
@@ -105,37 +115,37 @@ public class TailedBeastJutsuGoal extends Goal {
         if (!this.charging) {
             return false;
         }
+        if (com.sekwah.narutomod.events.AdamantineChainEvents.sealed(this.beast)) {
+            interrupt();
+            return false;
+        }
         LivingEntity target = this.beast.getTarget();
         if (target == null || !target.isAlive()) {
             return false;
         }
         if (this.beast.getHurtCount() != this.hurtStampAtChargeStart) {
-            interrupt("hit");
+            interrupt();
             return false;
         }
         if (this.beast.distanceTo(target) > MAX_RANGE) {
-            interrupt("range");
+            interrupt();
             return false;
         }
         if (!this.beast.getSensing().hasLineOfSight(target)) {
-            interrupt("sight");
+            interrupt();
             return false;
         }
         return true;
     }
 
-    /** Drops the gathered sphere. Short cooldown - the beast has spent nothing but time. */
-    private void interrupt(String reason) {
+    private void interrupt() {
         this.charging = false;
         this.chargeTicks = 0;
         this.cooldown = 40;
-        if (this.beast.level() instanceof ServerLevel serverLevel) {
-            Vec3 mouth = this.mouthPosition();
-            serverLevel.sendParticles(ParticleTypes.LARGE_SMOKE,
-                    mouth.x, mouth.y, mouth.z, 30, 0.6, 0.6, 0.6, 0.03);
-        }
-        this.beast.level().playSound(null, this.beast.blockPosition(),
-                SoundEvents.FIRE_EXTINGUISH, SoundSource.HOSTILE, 2.0f, 0.6f);
+        this.beast.setBijudamaCharge(0);
+        var shape = this.chargeShape(this.mouthPosition(), this.beast.getLookAngle());
+        FinalChakraEffects.emit(this.beast, Phase.BIJU_CHARGE_BREAK, shape);
+        FinalChakraEffects.sound(this.beast, shape, NarutoSounds.BIJU_ABORT.get(), 1.5f, 0.95f);
     }
 
     @Override
@@ -157,8 +167,11 @@ public class TailedBeastJutsuGoal extends Goal {
         // technique that never happens. Point blank is fine here - the two-second wind-up is
         // the counterplay, not the distance.
         int odds = Math.max(2, BIJUDAMA_ODDS - this.beast.getRage());
-        if (this.beast.getRandom().nextInt(odds) == 0) {
+        if (this.beast.getRandom().nextInt(odds) == 0 && this.beast.useChakra(BIJUDAMA_COST)) {
             this.beginBijudama();
+            return;
+        }
+        if (!this.beast.useChakra(KIT_COST)) {
             return;
         }
         this.cooldown = switch (this.beast.getVariant()) {
@@ -174,81 +187,80 @@ public class TailedBeastJutsuGoal extends Goal {
     }
 
     @Override
+    public boolean requiresUpdateEveryTick() {
+        return true;
+    }
+
+    @Override
     public void tick() {
         if (!this.charging) {
             return;
         }
         LivingEntity target = this.beast.getTarget();
-        if (target == null) {
-            this.charging = false;
+        if (target == null || !canContinueToUse()) {
+            if (this.charging) {
+                interrupt();
+            }
             return;
         }
         this.beast.getLookControl().setLookAt(target, 30f, 30f);
-        // Planted while charging: a beast that walked through its own wind-up would make the
-        // tell unreadable and the dodge unlearnable.
         this.beast.getNavigation().stop();
-
         this.chargeTicks++;
-        // Drives the rear-back pose in TailedBeastRenderer. The charge is the tell.
         this.beast.setBijudamaCharge((float) this.chargeTicks / BIJUDAMA_CHARGE);
-        if (this.beast.level() instanceof ServerLevel serverLevel) {
-            Vec3 mouth = this.mouthPosition();
-            float progress = (float) this.chargeTicks / BIJUDAMA_CHARGE;
-            DustParticleOptions dust =
-                    new DustParticleOptions(this.beast.getVariant().getChakraColour(), 2.5F);
-            NarutoParticles.spawnRing(serverLevel, mouth,
-                    0.5 + 2.5 * (1.0 - progress), 18, dust);
-            serverLevel.sendParticles(ParticleTypes.SMOKE,
-                    mouth.x, mouth.y, mouth.z, 4, 0.4, 0.4, 0.4, 0.01);
-        }
-
         if (this.chargeTicks >= BIJUDAMA_CHARGE) {
-            this.fireBijudama(target);
-            this.charging = false;
-            this.beast.setBijudamaCharge(0f);
+            fireBijudama(target);
         }
     }
 
     @Override
     public void stop() {
-        this.charging = false;
-        // Cleared here too: a charge interrupted by losing the target would otherwise leave
-        // the beast frozen mid-rear for as long as it lived.
-        this.beast.setBijudamaCharge(0f);
+        if (this.charging) {
+            interrupt();
+        }
     }
-
-    // ------------------------------------------------------------------ Bijudama
 
     private void beginBijudama() {
         this.charging = true;
         this.chargeTicks = 0;
-        this.beast.setBijudamaCharge(0f);
+        this.beast.setBijudamaCharge(0.01f);
         this.hurtStampAtChargeStart = this.beast.getHurtCount();
-        this.beast.playSound(this.beast.getVariant().getRoar(), 5.0f, 0.8f);
+        var shape = chargeShape(mouthPosition(), this.beast.getLookAngle());
+        FinalChakraEffects.sound(this.beast, shape, NarutoSounds.BIJU_BUILD.get(), 2.2f, 0.94f);
     }
 
     private void fireBijudama(LivingEntity target) {
-        TailedBeastVariant variant = this.beast.getVariant();
-        // Bigger beasts throw bigger bombs, and a cornered one throws bigger still.
-        float power = 4.0f + variant.getTails() * 0.45f + this.beast.getRage() * 0.8f;
-
         Vec3 mouth = this.mouthPosition();
-        Vec3 aim = target.position().add(0, target.getBbHeight() * 0.5, 0).subtract(mouth);
-        TailedBeastBombEntity bomb = new TailedBeastBombEntity(this.beast, aim, variant, power);
-        bomb.setPos(mouth.x, mouth.y, mouth.z);
-        this.beast.level().addFreshEntity(bomb);
-
-        this.beast.level().playSound(null, this.beast.blockPosition(),
-                NarutoSounds.BIJUDAMA.get(), SoundSource.HOSTILE, 4.0f, 1.2f);
+        Vec3 aim = target.position().add(0, target.getBbHeight() * 0.55, 0).subtract(mouth).normalize();
+        if (!(this.beast.level() instanceof ServerLevel level) || aim.lengthSqr() < 0.1
+                || !FinalChakraGeometry.clear(level, this.beast, this.beast.getEyePosition(), mouth)
+                || !FinalChakraGeometry.clear(level, this.beast, mouth, mouth.add(aim.scale(0.8)))) {
+            interrupt();
+            return;
+        }
+        var shape = chargeShape(mouth, aim);
+        var bomb = new TailedBeastBombEntity(this.beast, mouth, aim, this.beast.getVariant(), shape.size());
+        if (!level.addFreshEntity(bomb)) {
+            interrupt();
+            return;
+        }
+        this.charging = false;
+        this.beast.setBijudamaCharge(0);
+        this.beast.kickBijudama();
+        FinalChakraEffects.emit(this.beast, Phase.BIJU_FIRE, shape);
+        FinalChakraEffects.sound(this.beast, shape, NarutoSounds.BIJU_LAUNCH.get(), 2.6f, 0.91f);
         this.cooldown = 150 - this.beast.getRage() * 20;
     }
 
+    private Shape chargeShape(Vec3 at, Vec3 axis) {
+        var variant = this.beast.getVariant();
+        var tint = variant.getChakraColour();
+        return new Shape(at, axis, BijudamaProfile.radius(variant, this.beast.getRage()),
+                FinalChakraEffects.rgb(tint.x(), tint.y(), tint.z()));
+    }
+
     private Vec3 mouthPosition() {
-        Vec3 look = this.beast.getLookAngle();
-        double reach = this.beast.getBbWidth() * 0.6 + 1.5;
-        return this.beast.position()
-                .add(0, this.beast.getBbHeight() * 0.78, 0)
-                .add(look.x * reach, 0, look.z * reach);
+        return BijudamaProfile.mouth(this.beast.getVariant(), this.beast.position(), this.beast.getBbWidth(),
+                this.beast.getBbHeight(), this.beast.getYHeadRot());
     }
 
     // ------------------------------------------------------------------ species kits

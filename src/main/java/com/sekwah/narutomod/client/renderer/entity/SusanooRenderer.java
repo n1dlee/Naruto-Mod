@@ -5,35 +5,24 @@ import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
 import com.sekwah.narutomod.NarutoMod;
 import com.sekwah.narutomod.capabilities.INinjaData;
-import com.sekwah.narutomod.capabilities.NinjaCapabilityHandler;
 import com.sekwah.narutomod.client.model.entity.SusanooClothedModel;
 import com.sekwah.narutomod.client.model.entity.SusanooModel;
 import com.sekwah.narutomod.client.model.entity.SusanooSkeletonModel;
 import com.sekwah.narutomod.client.model.entity.SusanooWingedModel;
+import com.sekwah.narutomod.util.SpectralSword;
 import net.minecraft.client.model.Model;
 import com.sekwah.narutomod.entity.MangekyoBossVariant;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.player.Player;
-import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.client.event.RenderPlayerEvent;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.common.Mod;
 
 /**
- * Renders the Susanoo ribcage/avatar around the player based on
- * {@code INinjaData.isSusanooActive()} / {@code getSusanooStage()}.
- *
- * Stages 1-3 render on Post (player still visible, avatar looms around them). Stage 4
- * (Complete Body) is rendered directly from RenderEvents' Pre handler instead — see
- * {@link #renderFullBody} — because canceling Pre to hide the player appears to also
- * suppress Post from firing, which would otherwise leave nothing rendered at stage 4.
+ * Draws the player's Complete Body when the normal player model is hidden in RenderPlayerEvent.Pre.
  */
-@Mod.EventBusSubscriber(value = Dist.CLIENT, modid = NarutoMod.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public class SusanooRenderer {
 
     private static final ResourceLocation SUSANOO_TEXTURE =
@@ -57,15 +46,10 @@ public class SusanooRenderer {
 
     private static SusanooModel model;
 
-    /**
-     * Phase 18: the detailed bodies ported from the 1.12.2 mod's Susanoo entities, used in
-     * place of the blocky fallback once they are baked. Stages map onto the canon
-     * progression: skeleton for the early ribcage, clothed for the armoured torso,
-     * winged for Complete Body.
-     */
     private static SusanooSkeletonModel skeletonModel;
     private static SusanooClothedModel clothedModel;
     private static SusanooWingedModel wingedModel;
+    private static SusanooWingedModel bossWingedModel;
 
     private static final ResourceLocation SKELETON_TEXTURE =
             new ResourceLocation(NarutoMod.MOD_ID, "textures/susanooskeleton.png");
@@ -110,16 +94,16 @@ public class SusanooRenderer {
         wingedModel = winged;
     }
 
+    public static void setBossWingedModel(SusanooWingedModel winged) {
+        bossWingedModel = winged;
+    }
+
     static boolean detailedReady() {
         return skeletonModel != null && clothedModel != null && wingedModel != null;
     }
 
-    // --- Shared with BossSusanooLayer -------------------------------------------------
-    // The bosses manifest the same Susanoo the player does, so the model/texture/geometry
-    // choice per stage lives here once instead of being copied and drifting out of sync.
-
     static Model detailedBodyForStage(int stage) {
-        return stage >= 4 ? wingedModel : stage == 3 ? clothedModel : skeletonModel;
+        return stage >= 4 ? bossWingedModel : stage == 3 ? clothedModel : skeletonModel;
     }
 
     static ResourceLocation detailedTextureForStage(int stage) {
@@ -138,47 +122,16 @@ public class SusanooRenderer {
         return STAGE_TARGET_HEIGHT[Mth.clamp(stage, 0, STAGE_TARGET_HEIGHT.length - 1)];
     }
 
-    @SubscribeEvent
-    public static void onRenderPlayer(RenderPlayerEvent.Post event) {
-        if (model == null) {
-            return;
-        }
-        Player player = event.getEntity();
-
-        Minecraft mc = Minecraft.getInstance();
-        if (player == mc.player && mc.options.getCameraType().isFirstPerson()) {
-            return;
-        }
-
-        player.getCapability(NinjaCapabilityHandler.NINJA_DATA).ifPresent(ninjaData -> {
-            if (!ninjaData.isSusanooActive()) {
-                return;
-            }
-            int stage = ninjaData.getSusanooStage();
-            // Stage 4 (Complete Body) is rendered via renderFullBody() from Pre instead,
-            // since the player is hidden at that point and Post won't fire for them.
-            if (stage <= 0 || stage >= 4) {
-                return;
-            }
-
-            render(event.getPoseStack(), event.getMultiBufferSource(), event.getPackedLight(),
-                    player, event.getPartialTick(), stage, ninjaData.getTransformPower(),
-                    ninjaData.getMangekyoForm(), ninjaData.getSusanooColor());
-        });
-    }
-
     /**
      * Draws the full Complete Body Susanoo in place of the (now hidden) player, called
      * directly from RenderEvents.playerRenderEvent(Pre) while that event is being canceled.
      */
     public static void renderFullBody(RenderPlayerEvent.Pre event, INinjaData ninjaData) {
-        if (model == null) {
+        if (model == null || event.getEntity().isInvisible()) {
             return;
         }
         render(event.getPoseStack(), event.getMultiBufferSource(), event.getPackedLight(),
-                event.getEntity(), event.getPartialTick(), ninjaData.getSusanooStage(),
-                ninjaData.getTransformPower(), ninjaData.getMangekyoForm(),
-                ninjaData.getSusanooColor());
+                event.getEntity(), event.getPartialTick(), ninjaData);
     }
 
     /**
@@ -205,13 +158,12 @@ public class SusanooRenderer {
     }
 
     private static void render(PoseStack poseStack, MultiBufferSource bufferSource, int packedLight,
-                                Player player, float partialTick, int stage, float power,
-                                String mangekyoForm, int customColor) {
+                                Player player, float partialTick, INinjaData data) {
         if (detailedReady()) {
-            renderDetailed(poseStack, bufferSource, packedLight, player, partialTick, stage, power,
-                    mangekyoForm, customColor);
+            renderDetailed(poseStack, bufferSource, packedLight, player, partialTick, data);
             return;
         }
+        int stage = data.getSusanooStage();
         VertexConsumer consumer = bufferSource.getBuffer(RENDER_TYPE);
 
         poseStack.pushPose();
@@ -220,7 +172,7 @@ public class SusanooRenderer {
         // player's own position is the correct origin for every stage.
         float bodyYaw = Mth.rotLerp(partialTick, player.yBodyRotO, player.yBodyRot);
         poseStack.mulPose(Axis.YP.rotationDegrees(180.0F - bodyYaw));
-        float scale = STAGE_BASE_SCALE[Mth.clamp(stage, 1, 4)] + power * 2.0f;
+        float scale = STAGE_BASE_SCALE[Mth.clamp(stage, 1, 4)] + data.getTransformPower() * 2.0f;
         // Vanilla model-space flip: SusanooModel is authored in the standard entity-model
         // convention (negative Y = up), which vanilla renderers handle via scale(-1,-1,1).
         // Without this flip everything authored "upward" renders straight down into the
@@ -229,10 +181,8 @@ public class SusanooRenderer {
         poseStack.scale(-scale, -scale, scale);
 
         model.setStage(stage);
-        // Phase 16: the shell takes the colour of whichever Mangekyo the wielder carries —
-        // Itachi's red-orange, Madara's blue, and so on. Plain Mangekyo keeps the violet.
-        MangekyoBossVariant form = MangekyoBossVariant.byFormId(mangekyoForm);
-        float[] tint = resolveTint(form, customColor,
+        MangekyoBossVariant form = MangekyoBossVariant.byFormId(data.getMangekyoForm());
+        float[] tint = resolveTint(form, data.getSusanooColor(),
                 new float[]{DEFAULT_RED, DEFAULT_GREEN, DEFAULT_BLUE});
         float red = tint[0];
         float green = tint[1];
@@ -249,9 +199,8 @@ public class SusanooRenderer {
      * colour — otherwise the artwork would be flattened into a single hue.
      */
     private static void renderDetailed(PoseStack poseStack, MultiBufferSource bufferSource, int packedLight,
-                                       Player player, float partialTick, int stage, float power,
-                                       String mangekyoForm, int customColor) {
-        int clamped = Mth.clamp(stage, 1, 4);
+                                       Player player, float partialTick, INinjaData data) {
+        int clamped = Mth.clamp(data.getSusanooStage(), 1, 4);
         Model body;
         ResourceLocation texture;
         float modelHeightU;
@@ -259,8 +208,8 @@ public class SusanooRenderer {
         // The sword arm, on the one body that carries a sword. Set every frame including the
         // not-swinging case: a single baked model instance draws every Susanoo on screen, so
         // a pose left behind by the last one is inherited by the next.
-        wingedModel.swingSword(com.sekwah.narutomod.client.renderer.GiantSwing
-                .progressFor(player, partialTick));
+        wingedModel.swingSword(com.sekwah.narutomod.client.renderer.FinalChakraRenderer
+                .swordProgress(player, partialTick));
 
         if (clamped >= 4) {
             body = wingedModel;
@@ -280,7 +229,8 @@ public class SusanooRenderer {
         }
         VertexConsumer consumer = bufferSource.getBuffer(RenderType.entityTranslucent(texture));
 
-        MangekyoBossVariant form = MangekyoBossVariant.byFormId(mangekyoForm);
+        MangekyoBossVariant form = MangekyoBossVariant.byFormId(data.getMangekyoForm());
+        int customColor = data.getSusanooColor();
         // Blend the form colour only part-way toward white so the painted detail survives
         float[] base = resolveTint(form, customColor, new float[]{1.0f, 1.0f, 1.0f});
         boolean tinted = form != null || customColor >= 0;
@@ -309,8 +259,10 @@ public class SusanooRenderer {
         // Same model-space flip the vanilla entity renderers apply (negative Y is up).
         poseStack.scale(-scale, -scale, scale);
 
-        body.renderToBuffer(poseStack, consumer, packedLight, OverlayTexture.NO_OVERLAY,
-                red, green, blue, DETAILED_ALPHA);
+        float integrity = Mth.clamp(data.getSusanooDurability() / Math.max(1, data.getSusanooMaxDurability()), 0, 1);
+        float assembled = SpectralSword.formation(data.getSusanooStageAge() + partialTick);
+        float opacity = DETAILED_ALPHA * (0.4f + assembled * 0.6f) * (0.72f + integrity * 0.28f);
+        body.renderToBuffer(poseStack, consumer, packedLight, OverlayTexture.NO_OVERLAY, red, green, blue, opacity);
         poseStack.popPose();
     }
 

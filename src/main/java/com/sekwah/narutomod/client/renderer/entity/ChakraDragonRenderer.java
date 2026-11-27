@@ -2,13 +2,19 @@ package com.sekwah.narutomod.client.renderer.entity;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
+import com.mojang.math.Axis;
 import com.sekwah.narutomod.client.renderer.NarutoRenderTypes;
+import com.sekwah.narutomod.client.renderer.ProjectileModelPose;
+import com.sekwah.narutomod.client.renderer.WaterDragonBodyRenderer;
 import com.sekwah.narutomod.entity.jutsuprojectile.ChakraDragonEntity;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
+import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
 
 /**
@@ -69,7 +75,10 @@ public class ChakraDragonRenderer extends EntityRenderer<ChakraDragonEntity> {
     public void render(ChakraDragonEntity dragon, float entityYaw, float partialTick,
                        PoseStack poseStack, MultiBufferSource bufferSource, int packedLight) {
         float age = dragon.tickCount + partialTick;
-        boolean lightning = dragon.getKind() == ChakraDragonEntity.Kind.LIGHTNING;
+        if (dragon.getKind() == ChakraDragonEntity.Kind.WATER) {
+            this.renderWater(dragon, partialTick, poseStack, bufferSource, age);
+            return;
+        }
 
         poseStack.pushPose();
         // Point the body down its flight path; the spine is then laid out along local -Z.
@@ -83,18 +92,16 @@ public class ChakraDragonRenderer extends EntityRenderer<ChakraDragonEntity> {
         VertexConsumer consumer = bufferSource.getBuffer(NarutoRenderTypes.CHAKRA_GLOW);
         Matrix4f matrix = poseStack.last().pose();
 
-        // Water is a body of moving liquid, lightning is a discharge - so the water dragon
-        // undulates smoothly and the lightning one snaps in tighter, faster kinks.
-        float amplitude = lightning ? WAVE_AMPLITUDE * 0.55f : WAVE_AMPLITUDE;
-        float frequency = lightning ? WAVE_FREQUENCY * 2.1f : WAVE_FREQUENCY;
-        float speed = lightning ? WAVE_SPEED * 3.0f : WAVE_SPEED;
+        float amplitude = WAVE_AMPLITUDE * 0.55f;
+        float frequency = WAVE_FREQUENCY * 2.1f;
+        float speed = WAVE_SPEED * 3.0f;
 
         float[] prev = null;
         for (int i = 0; i <= SEGMENTS; i++) {
             float t = i / (float) SEGMENTS;
             float[] ring = ringAt(t, age, amplitude, frequency, speed);
             if (prev != null) {
-                stitch(matrix, consumer, prev, ring, t, lightning);
+                stitch(matrix, consumer, prev, ring, t);
             }
             prev = ring;
         }
@@ -109,7 +116,6 @@ public class ChakraDragonRenderer extends EntityRenderer<ChakraDragonEntity> {
         poseStack.translate(0.0, 0.15, -0.35);
         poseStack.mulPose(com.mojang.math.Axis.YP.rotationDegrees(180f));
         poseStack.scale(-HEAD_SCALE, -HEAD_SCALE, HEAD_SCALE);
-        // A slow open-and-close on the jaw line, so the head is not a frozen prop.
         this.headModel.renderToBuffer(poseStack,
                 bufferSource.getBuffer(net.minecraft.client.renderer.RenderType
                         .entityTranslucent(getTextureLocation(dragon))),
@@ -117,6 +123,46 @@ public class ChakraDragonRenderer extends EntityRenderer<ChakraDragonEntity> {
                 1.0f, 1.0f, 1.0f, 0.95f);
         poseStack.popPose();
 
+        poseStack.popPose();
+    }
+
+    private void renderWater(ChakraDragonEntity dragon, float partialTick, PoseStack poseStack,
+                             MultiBufferSource buffers, float age) {
+        int phase = dragon.waterPhase();
+        float scale = dragon.getScale();
+        float gather = phase > 0
+                ? Mth.clamp((ChakraDragonEntity.WATER_WINDUP - phase + partialTick)
+                        / ChakraDragonEntity.WATER_WINDUP, 0.0f, 1.0f)
+                : 1.0f;
+        VertexConsumer water = buffers.getBuffer(NarutoRenderTypes.WATER_SURFACE);
+        if (phase > 0) {
+            poseStack.pushPose();
+            ProjectileModelPose.align(poseStack, dragon.waterHeading());
+            WaterDragonBodyRenderer.drawGather(poseStack.last().pose(), water, gather, age);
+            poseStack.popPose();
+        } else {
+            Vec3 head = new Vec3(Mth.lerp(partialTick, dragon.xOld, dragon.getX()),
+                    Mth.lerp(partialTick, dragon.yOld, dragon.getY()),
+                    Mth.lerp(partialTick, dragon.zOld, dragon.getZ()));
+            int samples = Minecraft.getInstance().options.graphicsMode().get()
+                    == net.minecraft.client.GraphicsStatus.FAST ? 13 : SEGMENTS + 1;
+            WaterDragonBodyRenderer.draw(poseStack.last().pose(), water,
+                    dragon.waterTrail().sample(head, BODY_LENGTH * scale, samples), head, scale, age, phase < 0);
+        }
+        poseStack.pushPose();
+        ProjectileModelPose.align(poseStack, dragon.waterHeading());
+        poseStack.scale(scale, scale, scale);
+        poseStack.translate(0.0, 0.05, -0.78);
+        float headScale = HEAD_SCALE * (0.5f + 0.5f * gather);
+        float flatten = phase < 0 ? Math.max(0.25f, 0.75f + (phase + 1) * 0.35f - partialTick * 0.25f) : 1.0f;
+        poseStack.mulPose(Axis.YP.rotationDegrees(180f));
+        poseStack.scale(-headScale, -headScale * flatten, headScale);
+        this.headModel.setJawOpening(0.18f + 0.14f * Mth.sin(age * 0.64f));
+        this.headModel.renderToBuffer(poseStack,
+                buffers.getBuffer(net.minecraft.client.renderer.RenderType.entityTranslucent(WATER_SKIN)),
+                LightTexture.pack(13, 15), net.minecraft.client.renderer.texture.OverlayTexture.NO_OVERLAY,
+                0.84f, 0.97f, 1.0f, phase < 0 ? 0.48f * flatten : (0.19f + 0.73f * gather));
+        this.headModel.setJawOpening(0.0f);
         poseStack.popPose();
     }
 
@@ -148,13 +194,13 @@ public class ChakraDragonRenderer extends EntityRenderer<ChakraDragonEntity> {
 
     /** Joins two consecutive rings into a band of quads. */
     private static void stitch(Matrix4f matrix, VertexConsumer consumer,
-                               float[] a, float[] b, float t, boolean lightning) {
+                               float[] a, float[] b, float t) {
         // Brightest at the head, fading out along the body so the tail dissolves.
         float fade = (1f - t) * (1f - t);
-        float red = lightning ? 0.75f : 0.25f;
-        float green = lightning ? 0.90f : 0.62f;
+        float red = 0.75f;
+        float green = 0.90f;
         float blue = 1.0f;
-        float alpha = (lightning ? 0.85f : 0.72f) * Math.max(0.05f, fade);
+        float alpha = 0.85f * Math.max(0.05f, fade);
 
         for (int i = 0; i < RING; i++) {
             int j = (i + 1) % RING;

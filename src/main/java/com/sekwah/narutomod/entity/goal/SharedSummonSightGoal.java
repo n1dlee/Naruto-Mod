@@ -37,7 +37,7 @@ public class SharedSummonSightGoal extends Goal {
 
     @Override
     public boolean canUse() {
-        if (this.beast.getTarget() != null) {
+        if (this.beast.usesContractLedger() || this.beast.getTarget() != null) {
             return false;
         }
         LivingEntity shared = this.findAllyTarget();
@@ -52,7 +52,7 @@ public class SharedSummonSightGoal extends Goal {
     private LivingEntity findAllyTarget() {
         for (SummonBeastEntity ally : this.beast.level().getEntitiesOfClass(SummonBeastEntity.class,
                 this.beast.getBoundingBox().inflate(SIGHT_SHARING_RANGE),
-                other -> other != this.beast && other.isAlive()
+                other -> other != this.beast && other.isAlive() && !other.usesContractLedger()
                         && Faction.sameSide(this.beast, other))) {
             LivingEntity target = ally.getTarget();
             if (target != null && target.isAlive() && !Faction.sameSide(this.beast, target)) {

@@ -2,52 +2,35 @@ package com.sekwah.narutomod.world;
 
 import com.sekwah.narutomod.NarutoMod;
 import com.sekwah.narutomod.block.NarutoBlocks;
-import com.sekwah.narutomod.capabilities.INinjaData;
+import com.sekwah.narutomod.capabilities.NinjaCapabilityHandler;
+import com.sekwah.narutomod.util.KamuiStep;
+import com.sekwah.narutomod.util.KamuiTransitRoute;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.Registries;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Mob;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.levelgen.Heightmap;
+import net.minecraft.world.level.portal.PortalInfo;
+import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.common.util.ITeleporter;
 
 import javax.annotation.Nullable;
 import java.util.function.Function;
 
-/**
- * Kamui's pocket dimension - the black void of floating slabs Obito and Kakashi shunt
- * themselves and their targets into.
- *
- * The dimension itself is data-driven (data/narutomod/dimension/kamui.json plus its
- * dimension_type and biome): a flat generator with zero layers, so the world is genuinely
- * empty, lit only by ambient light with nether-style fog over a pure black biome colour.
- * That is the 1.20 equivalent of the 1.12.2 mod's WorldProvider, which did the same thing
- * in code - empty chunk provider, black fog vector, no sky, no respawn, no weather.
- *
- * What this class owns is everything the JSON cannot express: getting an entity in and out,
- * and raising a slab under them when they arrive so they do not fall forever. The original
- * built one solid pillar from bedrock to y64 on entry; this keeps the silhouette but builds
- * a bounded slab plus a few neighbours, so the place reads as the anime's field of floating
- * blocks instead of one lonely column.
- */
 public final class KamuiDimension {
-
     public static final ResourceKey<Level> KAMUI = ResourceKey.create(Registries.DIMENSION,
             new ResourceLocation(NarutoMod.MOD_ID, "kamui"));
-
-    /** Slabs sit at this height; everything below is void. */
-    public static final int PLATFORM_Y = 64;
-
-    private static final int SLAB_MIN_RADIUS = 4;
-    private static final int SLAB_MAX_RADIUS = 7;
-    private static final int SLAB_DEPTH = 6;
-    private static final int NEIGHBOUR_SLABS = 4;
-    private static final int NEIGHBOUR_SPREAD = 40;
+    private static final String MOB_ANCHOR = "NarutoKamuiReturn";
 
     private KamuiDimension() {
     }
@@ -56,158 +39,163 @@ public final class KamuiDimension {
         return level.dimension().equals(KAMUI);
     }
 
-    /**
-     * Sends a player in, remembering where they came from so they can be put back. Returns
-     * false if the dimension is missing - a datapack can remove it, and a jutsu that fails
-     * cleanly is better than one that throws.
-     */
-    public static boolean enter(ServerPlayer player, INinjaData ninjaData) {
-        ServerLevel target = player.server.getLevel(KAMUI);
-        if (target == null) {
+    @Nullable
+    public static LivingEntity enter(LivingEntity traveler, ServerLevel pocket) {
+        if (!isKamui(pocket) || isKamui(traveler.level())) {
+            return null;
+        }
+        Anchor origin = new Anchor(traveler.level().dimension().location().toString(), traveler.position());
+        var data = traveler.getCapability(NinjaCapabilityHandler.NINJA_DATA).resolve();
+        if (traveler instanceof ServerPlayer && data.isEmpty()) {
+            return null;
+        }
+        BlockPos platform = KamuiTransitRoute.island(traveler.getUUID());
+        if (!pocket.getWorldBorder().isWithinBounds(platform)) {
+            platform = new BlockPos(0, KamuiTransitRoute.PLATFORM_Y, 0);
+        }
+        buildIsland(pocket, platform);
+        Vec3 entry = Vec3.atBottomCenterOf(platform.above()).add(0, 0.02, 0);
+        Vec3 safe = KamuiTransitRoute.landing(entry, pos -> supported(pocket, traveler, pos));
+        LivingEntity moved = safe == null ? null : move(traveler, pocket, safe);
+        if (moved instanceof ServerPlayer) {
+            data.ifPresent(value -> value.setKamuiReturnPoint(origin.dimension(), origin.feet().x, origin.feet().y, origin.feet().z));
+        } else if (moved instanceof Mob mob) {
+            storeMob(mob, origin, pocket.getGameTime() + KamuiTransitRoute.MOB_STAY);
+        }
+        return moved;
+    }
+
+    @Nullable
+    public static LivingEntity exit(ServerPlayer player) {
+        var data = player.getCapability(NinjaCapabilityHandler.NINJA_DATA).resolve();
+        Anchor saved = data.map(value -> new Anchor(value.getKamuiReturnDimension(),
+                new Vec3(value.getKamuiReturnX(), value.getKamuiReturnY(), value.getKamuiReturnZ())))
+                .orElse(new Anchor("", Vec3.ZERO));
+        var moved = returnHome(player, player.server, saved);
+        if (moved != null) {
+            data.ifPresent(value -> value.clearKamuiReturnPoint());
+        }
+        return moved;
+    }
+
+    public static boolean mobReturnDue(Mob mob, long clock) {
+        return mob.getPersistentData().contains(MOB_ANCHOR, Tag.TAG_COMPOUND)
+                && mob.getPersistentData().getCompound(MOB_ANCHOR).getLong("until") <= clock;
+    }
+
+    @Nullable
+    public static LivingEntity exitMob(Mob mob, ServerLevel pocket) {
+        var tag = mob.getPersistentData().getCompound(MOB_ANCHOR);
+        var anchor = new Anchor(tag.getString("dimension"), new Vec3(tag.getDouble("x"), tag.getDouble("y"), tag.getDouble("z")));
+        LivingEntity moved = returnHome(mob, pocket.getServer(), anchor);
+        if (moved != null) {
+            moved.getPersistentData().remove(MOB_ANCHOR);
+        }
+        return moved;
+    }
+
+    private static void storeMob(Mob mob, Anchor anchor, long deadline) {
+        var data = new CompoundTag();
+        data.putString("dimension", anchor.dimension());
+        data.putDouble("x", anchor.feet().x);
+        data.putDouble("y", anchor.feet().y);
+        data.putDouble("z", anchor.feet().z);
+        data.putLong("until", deadline);
+        mob.getPersistentData().put(MOB_ANCHOR, data);
+    }
+
+    @Nullable
+    private static LivingEntity returnHome(LivingEntity actor, MinecraftServer server, Anchor anchor) {
+        ResourceLocation parsed = ResourceLocation.tryParse(anchor.dimension());
+        ServerLevel world = parsed == null ? null : server.getLevel(ResourceKey.create(Registries.DIMENSION, parsed));
+        if (world != null && !isKamui(world) && finite(anchor.feet()) && loadArea(world, BlockPos.containing(anchor.feet()))) {
+            ServerLevel destination = world;
+            Vec3 near = KamuiTransitRoute.landing(anchor.feet(), pos -> supported(destination, actor, pos));
+            if (near != null) {
+                return move(actor, destination, near);
+            }
+        }
+        ServerLevel fallback = server.overworld();
+        BlockPos spawn = fallback.getSharedSpawnPos();
+        if (!loadArea(fallback, spawn)) {
+            return null;
+        }
+        int top = fallback.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, spawn.getX(), spawn.getZ());
+        Vec3 safe = KamuiTransitRoute.landing(new Vec3(spawn.getX() + 0.5, top + 0.03, spawn.getZ() + 0.5),
+                pos -> supported(fallback, actor, pos));
+        return safe == null ? null : move(actor, fallback, safe);
+    }
+
+    private static boolean loadArea(ServerLevel level, BlockPos center) {
+        if (!level.getWorldBorder().isWithinBounds(center)) {
             return false;
         }
-        ninjaData.setKamuiReturnPoint(player.level().dimension().location().toString(),
-                player.getX(), player.getY(), player.getZ());
-
-        // Offset the landing site by the player's identity so two people don't land on top
-        // of each other, and so a single player keeps returning to their own island.
-        int x = (int) (player.getUUID().getMostSignificantBits() % 2000) * 4;
-        int z = (int) (player.getUUID().getLeastSignificantBits() % 2000) * 4;
-        BlockPos landing = new BlockPos(x, PLATFORM_Y + 1, z);
-
-        buildIsland(target, landing.below());
-        teleport(player, target, landing);
+        for (int x = (center.getX() - 7) >> 4; x <= (center.getX() + 7) >> 4; x++) {
+            for (int z = (center.getZ() - 7) >> 4; z <= (center.getZ() + 7) >> 4; z++) {
+                level.getChunk(x, z);
+            }
+        }
         return true;
     }
 
-    /**
-     * Banishes something that is not the caster - the use Obito and Kakashi actually put
-     * this to in a fight. The victim keeps no return point of their own, so a mob dropped
-     * in here is simply gone, and a player has to find their own way out.
-     *
-     * Non-players are teleported with changeDimension too rather than being killed, so a
-     * boss you could not beat is removed from the fight but still exists.
-     */
-    public static boolean banish(ServerPlayer caster, Entity victim) {
-        ServerLevel target = caster.server.getLevel(KAMUI);
-        if (target == null || victim.level().dimension().equals(KAMUI)) {
-            return false;
-        }
-        int x = (int) (caster.getUUID().getMostSignificantBits() % 2000) * 4;
-        int z = (int) (caster.getUUID().getLeastSignificantBits() % 2000) * 4;
-        BlockPos landing = new BlockPos(x, PLATFORM_Y + 1, z);
-        buildIsland(target, landing.below());
-
-        if (victim instanceof ServerPlayer victimPlayer) {
-            // A banished player gets a return point so they are not trapped forever, but it
-            // is the only mercy: they still have to walk out of a black void.
-            victimPlayer.getCapability(com.sekwah.narutomod.capabilities.NinjaCapabilityHandler.NINJA_DATA)
-                    .ifPresent(data -> data.setKamuiReturnPoint(
-                            victimPlayer.level().dimension().location().toString(),
-                            victimPlayer.getX(), victimPlayer.getY(), victimPlayer.getZ()));
-            teleport(victimPlayer, target, landing);
-            return true;
-        }
-        Entity moved = victim.changeDimension(target, new DirectTeleporter(landing));
-        return moved != null;
+    private static boolean supported(ServerLevel level, LivingEntity actor, Vec3 feet) {
+        return KamuiStep.safe(level, actor, feet)
+                && level.getBlockCollisions(actor, KamuiStep.arrivalBounds(actor, feet).move(0, -0.25, 0)).iterator().hasNext();
     }
 
-    /**
-     * Puts a player back where they entered from. Falls back to the overworld spawn if the
-     * stored dimension no longer exists, so nobody is ever stranded in the void.
-     */
-    public static boolean exit(ServerPlayer player, INinjaData ninjaData) {
-        String dimensionId = ninjaData.getKamuiReturnDimension();
-        ServerLevel destination = null;
-        if (dimensionId != null && !dimensionId.isEmpty()) {
-            destination = player.server.getLevel(ResourceKey.create(Registries.DIMENSION,
-                    new ResourceLocation(dimensionId)));
+    @Nullable
+    private static LivingEntity move(LivingEntity actor, ServerLevel level, Vec3 position) {
+        Entity moved = actor.changeDimension(level, new Transit(position));
+        if (!(moved instanceof LivingEntity living) || living.level() != level) {
+            return null;
         }
-        BlockPos pos;
-        if (destination == null) {
-            destination = player.server.overworld();
-            pos = destination.getSharedSpawnPos();
-        } else {
-            pos = BlockPos.containing(ninjaData.getKamuiReturnX(),
-                    ninjaData.getKamuiReturnY(), ninjaData.getKamuiReturnZ());
-        }
-        teleport(player, destination, pos);
-        ninjaData.clearKamuiReturnPoint();
-        return true;
+        living.fallDistance = 0;
+        living.setDeltaMovement(Vec3.ZERO);
+        return living;
     }
 
-    /**
-     * Moves an entity across dimensions at an exact position. Forge's ITeleporter hook is
-     * the supported way to do this - without it vanilla hunts for or digs a portal at the
-     * destination, which would carve nether portals into the void.
-     */
-    private static void teleport(ServerPlayer player, ServerLevel destination, BlockPos pos) {
-        if (player.level().dimension().equals(destination.dimension())) {
-            player.teleportTo(pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5);
+    private static void buildIsland(ServerLevel level, BlockPos center) {
+        if (!loadArea(level, center) || level.getBlockState(center).is(NarutoBlocks.KAMUI_BLOCK.get())) {
             return;
         }
-        player.changeDimension(destination, new DirectTeleporter(pos));
-        player.fallDistance = 0f;
+        slab(level, center, 4, 3);
+        slab(level, center.offset(13, -5, 7), 2, 4);
+        slab(level, center.offset(-12, 4, -8), 2, 3);
+        slab(level, center.offset(7, 8, -13), 2, 3);
     }
 
-    /**
-     * Raises the slab the arriving player stands on, plus a scatter of others in view.
-     * Idempotent in practice: if the centre is already Kamui stone the island is standing
-     * from a previous visit and nothing is rebuilt.
-     */
-    private static void buildIsland(ServerLevel level, BlockPos centre) {
-        BlockState kamui = NarutoBlocks.KAMUI_BLOCK.get().defaultBlockState();
-        if (level.getBlockState(centre).is(NarutoBlocks.KAMUI_BLOCK.get())) {
-            return;
-        }
-        RandomSource random = level.getRandom();
-        buildSlab(level, centre, kamui, SLAB_MIN_RADIUS + random.nextInt(SLAB_MAX_RADIUS - SLAB_MIN_RADIUS + 1));
-
-        for (int i = 0; i < NEIGHBOUR_SLABS; i++) {
-            BlockPos offset = centre.offset(
-                    random.nextInt(NEIGHBOUR_SPREAD * 2) - NEIGHBOUR_SPREAD,
-                    random.nextInt(24) - 12,
-                    random.nextInt(NEIGHBOUR_SPREAD * 2) - NEIGHBOUR_SPREAD);
-            buildSlab(level, offset, kamui,
-                    SLAB_MIN_RADIUS + random.nextInt(SLAB_MAX_RADIUS - SLAB_MIN_RADIUS + 1));
-        }
-    }
-
-    private static void buildSlab(ServerLevel level, BlockPos centre, BlockState state, int radius) {
-        for (int dy = 0; dy < SLAB_DEPTH; dy++) {
-            for (int dx = -radius; dx <= radius; dx++) {
-                for (int dz = -radius; dz <= radius; dz++) {
-                    BlockPos pos = centre.offset(dx, -dy, dz);
-                    if (pos.getY() < level.getMinBuildHeight() || !level.getBlockState(pos).is(Blocks.AIR)) {
-                        continue;
-                    }
-                    level.setBlock(pos, state, Block_FLAG_SILENT);
-                }
+    private static void slab(ServerLevel level, BlockPos at, int radius, int depth) {
+        var state = NarutoBlocks.KAMUI_BLOCK.get().defaultBlockState();
+        for (BlockPos pos : BlockPos.betweenClosed(at.offset(-radius, 1 - depth, -radius), at.offset(radius, 0, radius))) {
+            if (level.getWorldBorder().isWithinBounds(pos) && level.getBlockState(pos).isAir()) {
+                level.setBlock(pos, state, Block.UPDATE_CLIENTS);
             }
         }
     }
 
-    /** Update neighbours but skip client block-update packets for every one of ~1500 blocks. */
-    private static final int Block_FLAG_SILENT = 2;
+    private static boolean finite(Vec3 point) {
+        return Double.isFinite(point.x) && Double.isFinite(point.y) && Double.isFinite(point.z)
+                && Math.abs(point.x) < 30_000_000 && Math.abs(point.z) < 30_000_000;
+    }
 
-    /**
-     * Drops the entity at a fixed spot instead of letting vanilla look for a portal.
-     */
-    private record DirectTeleporter(BlockPos pos) implements ITeleporter {
-        @Nullable
+    private record Anchor(String dimension, Vec3 feet) {
+    }
+
+    private record Transit(Vec3 position) implements ITeleporter {
         @Override
-        public Entity placeEntity(Entity entity, ServerLevel currentWorld, ServerLevel destWorld,
-                                  float yaw, Function<Boolean, Entity> repositionEntity) {
-            Entity placed = repositionEntity.apply(false);
-            placed.teleportTo(this.pos.getX() + 0.5, this.pos.getY(), this.pos.getZ() + 0.5);
-            placed.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
-            placed.fallDistance = 0f;
-            return placed;
+        public PortalInfo getPortalInfo(Entity actor, ServerLevel level, Function<ServerLevel, PortalInfo> vanilla) {
+            return new PortalInfo(this.position, Vec3.ZERO, actor.getYRot(), actor.getXRot());
         }
 
         @Override
-        public boolean playTeleportSound(ServerPlayer player, ServerLevel sourceWorld, ServerLevel destWorld) {
-            return false; // the jutsu plays its own
+        public Entity placeEntity(Entity actor, ServerLevel source, ServerLevel destination, float yaw,
+                                  Function<Boolean, Entity> reposition) {
+            return reposition.apply(false);
+        }
+
+        @Override
+        public boolean playTeleportSound(ServerPlayer player, ServerLevel source, ServerLevel destination) {
+            return false;
         }
     }
 }

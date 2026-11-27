@@ -2,14 +2,32 @@ package com.sekwah.narutomod.capabilities;
 
 import com.mojang.logging.LogUtils;
 import com.sekwah.narutomod.abilities.Ability;
+import com.sekwah.narutomod.abilities.JutsuScrolls;
+import com.sekwah.narutomod.abilities.jutsus.KuramaChakraModeAbility;
+import com.sekwah.narutomod.abilities.NarutoAbilities;
 import com.sekwah.narutomod.capabilities.toggleabilitydata.ToggleAbilityData;
 import com.sekwah.narutomod.config.NarutoConfig;
 import com.sekwah.narutomod.gameevents.NarutoGameEvents;
 import com.sekwah.narutomod.registries.NarutoRegistries;
 import com.sekwah.narutomod.util.NarutoParticles;
+import com.sekwah.narutomod.util.SurfaceStride;
+import com.sekwah.narutomod.util.SurfaceSupport;
+import com.sekwah.narutomod.util.DashStride;
+import com.sekwah.narutomod.util.ChargeFeedback;
 import com.sekwah.sekclib.capabilitysync.capabilitysync.annotation.Sync;
 import net.minecraft.ChatFormatting;
-import net.minecraft.core.BlockPos;
+import com.sekwah.narutomod.util.HiraishinFormula;
+import com.sekwah.narutomod.events.BodyRiteEffects;
+import com.sekwah.narutomod.events.BodyRiteLifecycle;
+import com.sekwah.narutomod.events.KuramaCloakEvents;
+import com.sekwah.narutomod.events.SusanooCombat;
+import com.sekwah.narutomod.util.GiantForm;
+import com.sekwah.narutomod.util.SpectralSword;
+import com.sekwah.narutomod.util.SusanooForm;
+import com.sekwah.narutomod.sounds.NarutoSounds;
+import com.sekwah.narutomod.util.KuramaCloakMotion;
+import com.sekwah.narutomod.util.EightGateCycle;
+import com.sekwah.narutomod.util.SageFocus;
 import net.minecraft.core.Direction;
 import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
@@ -18,6 +36,7 @@ import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
@@ -118,6 +137,9 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
     // Owner-only sync meant the caster saw their own jutsu and everyone else saw idle hands.
     @Sync(minTicks = 1, syncGlobally = true)
     private ResourceLocation currentlyChanneled;
+    private final ChargeFeedback chargeFeedback = new ChargeFeedback();
+    @Sync(minTicks = 2, syncGlobally = true)
+    private int chargeIntensity;
 
     @Sync(minTicks = 1)
     private int ticksChanneled;
@@ -128,6 +150,9 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
     // visible to anyone else, so an Akimichi grew to giant size on their own screen only.
     @Sync(syncGlobally = true)
     private ToggleAbilityData toggleAbilityData;
+
+    @Sync(minTicks = 1, syncGlobally = true)
+    private int eyeVisualState;
 
 
     /**
@@ -144,9 +169,11 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
     // CooldownTickEvent to follow the same style you have for DelayedPlayerTickEvent
     private HashMap<String, CooldownTickEvent> cooldownTickEvents = new HashMap<>();
 
-    // --- Phase 3: Progression ---
     @Sync
     private float chakraXp = 0;
+    @Sync(minTicks = 1)
+    private boolean trainingLoadoutEnabled;
+    private TrainingLoadout trainingLoadout;
 
     @Sync
     private int ninjaRank = 0; // 0=Academy, 1=Genin, 2=Chunin, 3=Jonin, 4=Kage
@@ -177,7 +204,6 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
     @Sync
     private String natureAffinity = "";
 
-    // --- Phase 15: Nature Release progression ---
     /** csv of unlocked element ids, e.g. "fire,wind". First entry doubles as the affinity. */
     @Sync
     private String unlockedElements = "";
@@ -202,7 +228,6 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
     @Sync
     private String learnedJutsu = "";
 
-    // --- Phase 16: Dojutsu progression (stored, no longer purely rank-derived) ---
     @Sync
     private int sharinganTomoe = 0; // 0-3
 
@@ -273,7 +298,7 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
      * UUID of the creature branded with the Flying Thunder God seal, or empty. Not @Sync —
      * only the server resolves it when the jump happens. Persisted manually like the rest.
      */
-    private String hiraishinEntityMark = "";
+    private HiraishinFormula.Book hiraishinFormulas = HiraishinFormula.Book.EMPTY;
 
     /**
      * Where the wielder was standing when they warped into the Kamui dimension, so the
@@ -286,7 +311,6 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
     private double kamuiReturnY;
     private double kamuiReturnZ;
 
-    // --- Phase 23: transplanted Sharingan, copy-jutsu, dodge ---
     /**
      * A Sharingan taken from an Uchiha corpse and implanted into someone else (Kakashi's
      * situation). The eye is NOT the wielder's own, so it can never be switched off — it
@@ -298,7 +322,7 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
 
     /**
      * A single jutsu path the Sharingan has read off an enemy and can throw back once.
-     * Empty when nothing is stored. Consumed the moment it is cast.
+     * Last technique learned through the Sharingan, for the HUD.
      */
     @Sync
     private String copiedJutsu = "";
@@ -320,14 +344,12 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
 
     private static final int MS_BLINDNESS_DECAY_TICKS = 1200; // 60s of rest per counter step
 
-    // --- Bingo Book bounty (see BingoBookItem + PlayerEvents kill tracking) ---
     @Sync
     private String bountyTargetId = ""; // entity type id, e.g. "minecraft:zombie"
     @Sync
     private int bountyRemaining = 0;
     private float bountyRewardXp = 0f;
 
-    // --- Rank ladder ---
     //
     // The five ranks each split into Low/Mid/High (Academy excepted - a student has no
     // grades), plus a final Six Paths step that XP cannot buy. Everything below is indexed
@@ -369,15 +391,7 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
             2400
     };
 
-    /**
-     * Seconds to refill an empty chakra pool at each step.
-     *
-     * Regeneration used to be the flat NarutoConfig.chakraRegen of 0.05 per tick - one point
-     * a second - at every rank. The pool grew a hundred and fifty times from Academy to Kage
-     * and the regeneration grew not at all, so a Kage refilling from empty needed over four
-     * hours of standing around. Deriving the rate from the pool instead of hardcoding it is
-     * the fix; the numbers here just decide how much heavier the top end feels.
-     */
+    /** Refill time in seconds by rank and tier; the tick rate scales with pool size. */
     private static final float[] RANK_REFILL_SECONDS = {
             100,
             104, 109, 113,
@@ -415,8 +429,10 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
     private static final ResourceLocation SHARINGAN_ABILITY = new ResourceLocation("narutomod", "sharingan");
     private static final ResourceLocation BYAKUGAN_ABILITY = new ResourceLocation("narutomod", "byakugan");
     private static final ResourceLocation CHAKRA_DASH_ABILITY = new ResourceLocation("narutomod", "chakra_dash");
-    private static final ResourceLocation LIGHTNING_ARMOR_ABILITY = new ResourceLocation("narutomod", "lightning_armor");
+    private final DashStride dashStride = new DashStride();
     private static final UUID NINJA_SPEED_UUID = UUID.fromString("a3f2c0e1-7b4d-4e8f-9c1a-5d6e7f8a9b0c");
+    private static final UUID SHARINGAN_READ_ATTACK = UUID.fromString("04894f30-bb5f-4c6b-83db-ad4a294d816d");
+    private static final UUID BYAKUGAN_FOCUS_ATTACK = UUID.fromString("a3b62d81-0d6e-4f0c-b48d-058070a131f0");
     /**
      * Byakugan sight radius by eye level.
      *
@@ -426,7 +442,6 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
      * render distance) there is simply nothing more to report, so a larger figure would be
      * a number in a tooltip rather than extra vision.
      */
-    private static final int[] BYAKUGAN_RANGE = {20, 100, 300, 500, 600};
     public static final float CHIDORI_TICK_COST = 0.75F;
     private static final DustParticleOptions CHIDORI_PARTICLE = new DustParticleOptions(new Vector3f(0.45F, 0.85F, 1.0F), 1.0F);
 
@@ -449,6 +464,9 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
 
     @Sync(minTicks = 1)
     private int wallWalkDetachTicks = 0;
+    private final SurfaceStride surfaceStride = new SurfaceStride();
+    private int wallWalkTurnTicks;
+    private Direction wallWalkTurnFrom;
 
     public NinjaData(boolean isServer) {
         if (isServer) {
@@ -615,11 +633,7 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
     @Sync(minTicks = 1, syncGlobally = true)
     private int castPoseTicks = 0;
 
-    /**
-     * Mirrored/cross variant of the hand-seal flash, used by Shadow Clone's cross seal
-     * instead of the default tiger seal. Reset to false before every INSTANT cast so it
-     * never bleeds into an unrelated jutsu's flash (see ServerAbilityActivatePacket).
-     */
+    /** True when the cast pose uses the Shadow Clone cross seal. */
     @Sync(minTicks = 1, syncGlobally = true)
     private boolean crossSealPose = false;
 
@@ -686,7 +700,6 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
         this.summonContract = contract != null ? contract : "";
     }
 
-    // --- Rasengan: held in hand, toggled on/off, resized with the scroll wheel ---
     // syncGlobally: read by renderers that run for EVERY player in view, not just the owner.
     // Owner-only sync meant the caster saw their own jutsu and everyone else saw idle hands.
     @Sync(minTicks = 1, syncGlobally = true)
@@ -730,6 +743,16 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
     }
 
     @Override
+    public boolean consumeHeldRasengan() {
+        if (!this.rasenganHeld) {
+            return false;
+        }
+        this.setRasenganHeld(false);
+        this.rasenganConsumed = true;
+        return true;
+    }
+
+    @Override
     public int getRasenganCharge() {
         return this.rasenganCharge;
     }
@@ -739,18 +762,51 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
         this.rasenganCharge = Math.min(Math.max(this.rasenganCharge + delta, 20), 60);
     }
 
-    // --- Phase 3: Progression methods ---
 
     @Override
     public float getChakraXp() {
-        return this.chakraXp;
+        return this.trainingLoadoutEnabled
+                ? Math.max(this.chakraXp, RANK_XP_THRESHOLDS[TrainingLoadout.HIGH_KAGE]) : this.chakraXp;
     }
 
     @Override
     public void addChakraXp(float amount) {
+        if (this.trainingLoadoutEnabled) {
+            return;
+        }
         this.chakraXp += amount;
         this.advanceLadder();
         this.checkRankElementPerks();
+    }
+
+    @Override
+    public boolean hasTrainingLoadout() {
+        return this.trainingLoadoutEnabled;
+    }
+
+    @Override
+    public void enableTrainingLoadout() {
+        if (this.trainingLoadout == null) {
+            float current = this.chakra;
+            this.trainingLoadout = new TrainingLoadout(Float.isFinite(current) ? Math.max(0, current) : 0);
+        }
+        this.trainingLoadoutEnabled = true;
+        this.getConfigData();
+        this.chakra = this.maxChakra;
+    }
+
+    @Override
+    public boolean disableTrainingLoadout() {
+        if (this.trainingLoadout == null) {
+            return false;
+        }
+        float previous = this.trainingLoadout.previousChakra();
+        this.trainingLoadout = null;
+        this.trainingLoadoutEnabled = false;
+        this.getConfigData();
+        this.chakra = Math.min(previous, this.maxChakra);
+        this.stamina = Math.min(this.stamina, this.maxStamina);
+        return true;
     }
 
     /**
@@ -761,7 +817,7 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
     private void advanceLadder() {
         for (int index = RANK_XP_THRESHOLDS.length - 1; index >= 0; index--) {
             if (this.chakraXp >= RANK_XP_THRESHOLDS[index]) {
-                if (index > this.getRankIndex()) {
+                if (index > this.getPermanentRankIndex()) {
                     this.applyRankIndex(index);
                     this.getConfigData();
                 }
@@ -794,6 +850,11 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
      */
     @Override
     public int getRankIndex() {
+        int permanent = this.getPermanentRankIndex();
+        return this.trainingLoadoutEnabled ? Math.max(TrainingLoadout.HIGH_KAGE, permanent) : permanent;
+    }
+
+    private int getPermanentRankIndex() {
         if (this.sixPathsUnlocked) {
             return 13;
         }
@@ -805,7 +866,7 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
 
     @Override
     public int getRankTier() {
-        return this.ninjaRank <= 0 ? 0 : Math.min(Math.max(this.rankTier, 0), 2);
+        return this.trainingLoadoutEnabled ? 2 : this.ninjaRank <= 0 ? 0 : Math.min(Math.max(this.rankTier, 0), 2);
     }
 
     @Override
@@ -841,7 +902,7 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
     private boolean checkSixPaths() {
         if (this.sixPathsUnlocked
                 || this.mangekyoBossKills < SIX_PATHS_BOSS_KILLS
-                || this.getRankIndex() < 12) {
+                || this.getPermanentRankIndex() < TrainingLoadout.HIGH_KAGE) {
             return false;
         }
         this.sixPathsUnlocked = true;
@@ -851,14 +912,14 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
 
     @Override
     public int getNinjaRank() {
-        return this.ninjaRank;
+        return this.trainingLoadoutEnabled ? 4 : this.ninjaRank;
     }
 
     @Override
     public void setNinjaRank(int rank) {
         this.ninjaRank = Math.min(Math.max(rank, 0), 4);
         this.rankTier = 0;
-        float floor = RANK_XP_THRESHOLDS[this.getRankIndex()];
+        float floor = RANK_XP_THRESHOLDS[this.getPermanentRankIndex()];
         if (this.chakraXp < floor) {
             this.chakraXp = floor;
         }
@@ -870,7 +931,7 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
     @Override
     public void setRankTier(int tier) {
         this.rankTier = Math.min(Math.max(tier, 0), 2);
-        float floor = RANK_XP_THRESHOLDS[this.getRankIndex()];
+        float floor = RANK_XP_THRESHOLDS[this.getPermanentRankIndex()];
         if (this.chakraXp < floor) {
             this.chakraXp = floor;
         }
@@ -898,7 +959,6 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
         this.natureAffinity = nature != null ? nature : "";
     }
 
-    // --- Phase 15: Nature Release progression ---
 
     /**
      * Canon-flavored default affinities: picking a clan immediately awakens its
@@ -931,7 +991,7 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
      * Fire + Lightning pairing).
      */
     private void checkRankElementPerks() {
-        if (this.ninjaRank >= 3 && "uchiha".equals(this.clanId) && !this.isElementUnlocked("lightning")) {
+        if (this.ninjaRank >= 3 && "uchiha".equals(this.clanId) && !this.knowsElement("lightning")) {
             this.forceUnlockElement("lightning");
         }
         this.grantNatureStarterJutsu();
@@ -969,7 +1029,7 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
     }
 
     /**
-     * Phase 16: rank advancement grows the clan dojutsu. Uchiha gain a tomoe per rank
+     * Rank advancement grows the clan dojutsu. Uchiha gain a tomoe per rank
      * (Genin=1, Chunin=2, Jonin=3) and awaken the Mangekyo at Kage; Hyuga's Byakugan
      * range level tracks rank the same way. Levels only ever grow — never regress.
      */
@@ -1001,6 +1061,10 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
         if (element == null || element.isEmpty()) {
             return false;
         }
+        return this.trainingLoadoutEnabled && TrainingLoadout.NATURES.contains(element) || this.knowsElement(element);
+    }
+
+    private boolean knowsElement(String element) {
         for (String unlocked : this.unlockedElements.split(",")) {
             if (unlocked.equals(element)) {
                 return true;
@@ -1011,6 +1075,9 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
 
     @Override
     public java.util.List<String> getUnlockedElements() {
+        if (this.trainingLoadoutEnabled) {
+            return TrainingLoadout.NATURES;
+        }
         java.util.List<String> result = new java.util.ArrayList<>();
         for (String unlocked : this.unlockedElements.split(",")) {
             if (!unlocked.isEmpty()) {
@@ -1022,14 +1089,7 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
 
     /** Ceiling for an ordinary Sharingan bearer. */
     public static final int SHARINGAN_MAX_ELEMENT_SLOTS = 4;
-    /**
-     * All five natures, and the only way to reach them.
-     *
-     * Four used to be a hard stop for everyone, which meant the fifth nature simply did not
-     * exist in the game. It exists now, but it is not a number that ticks up with rank: it
-     * takes a Kage who has also taken a Mangekyo off one of the roaming Uchiha, so the last
-     * slot is something you went and did rather than something you waited for.
-     */
+    /** The fifth nature slot requires both Kage rank and an Eternal Mangekyo. */
     public static final int ETERNAL_MAX_ELEMENT_SLOTS = 5;
 
     /**
@@ -1044,6 +1104,9 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
      */
     @Override
     public int getMaxElementSlots() {
+        if (this.trainingLoadoutEnabled) {
+            return TrainingLoadout.NATURES.size();
+        }
         int slots = this.ninjaRank >= 4 ? 3 : (this.ninjaRank >= 3 ? 2 : 1);
         if (this.hasSharinganEye()) {
             slots += this.getSharinganElementSlotBonus();
@@ -1083,7 +1146,7 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
 
     /** Unlock ignoring the slot cap — clan defaults and rank perks use this. */
     private void forceUnlockElement(String element) {
-        if (element == null || element.isEmpty() || this.isElementUnlocked(element)) {
+        if (element == null || element.isEmpty() || this.knowsElement(element)) {
             return;
         }
         this.unlockedElements = this.unlockedElements.isEmpty()
@@ -1097,6 +1160,9 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
 
     @Override
     public float getElementXp(String element) {
+        if (element != null && this.trainingLoadoutEnabled && TrainingLoadout.NATURES.contains(element)) {
+            return TrainingLoadout.ELEMENT_XP;
+        }
         return switch (element == null ? "" : element) {
             case "fire" -> this.elementXpFire;
             case "water" -> this.elementXpWater;
@@ -1115,7 +1181,7 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
 
     @Override
     public void addElementXp(String element, float amount) {
-        if (!this.isElementUnlocked(element) || amount <= 0) {
+        if (this.trainingLoadoutEnabled || !this.isElementUnlocked(element) || amount <= 0) {
             return;
         }
         amount *= ELEMENT_XP_RATE;
@@ -1135,7 +1201,7 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
      */
     @Override
     public void setElementLevel(String element, int level) {
-        if (!this.isElementUnlocked(element)) {
+        if (!this.knowsElement(element)) {
             return;
         }
         float xp = (float) (Math.min(Math.max(level, 1), 20) * (double) level * 25.0);
@@ -1193,10 +1259,6 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
      * it - the damage sponge takes up to 90% at Complete Body - but they detonate where they
      * land, which is both what it should look like and what stops them accumulating.
      */
-    private static boolean isJutsuProjectile(net.minecraft.world.entity.projectile.Projectile projectile) {
-        return projectile instanceof net.minecraft.world.entity.projectile.AbstractHurtingProjectile;
-    }
-
     /** Bypasses the unlocked check in setElementLevel, for wiping a removed nature. */
     private void setElementXpDirect(String element, float xp) {
         switch (element == null ? "" : element) {
@@ -1235,6 +1297,10 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
         if (jutsuPath == null || jutsuPath.isEmpty()) {
             return false;
         }
+        return this.trainingLoadoutEnabled && JutsuScrolls.requiresScroll(jutsuPath) || this.knowsJutsu(jutsuPath);
+    }
+
+    private boolean knowsJutsu(String jutsuPath) {
         for (String learned : this.learnedJutsu.split(",")) {
             if (learned.equals(jutsuPath)) {
                 return true;
@@ -1245,7 +1311,7 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
 
     @Override
     public void learnJutsu(String jutsuPath) {
-        if (jutsuPath == null || jutsuPath.isEmpty() || this.isJutsuLearned(jutsuPath)) {
+        if (jutsuPath == null || jutsuPath.isEmpty() || this.knowsJutsu(jutsuPath)) {
             return;
         }
         this.learnedJutsu = this.learnedJutsu.isEmpty()
@@ -1341,7 +1407,8 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
 
     @Override
     public void setCopiedJutsu(String jutsuPath) {
-        this.copiedJutsu = jutsuPath == null ? "" : jutsuPath;
+        this.copiedJutsu = jutsuPath != null && JutsuScrolls.requiresScroll(jutsuPath) ? jutsuPath : "";
+        this.learnJutsu(this.copiedJutsu);
     }
 
     @Override
@@ -1419,10 +1486,11 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
 
     @Override
     public int getByakuganRange() {
-        if (!"hyuga".equals(this.clanId) || !this.isByakuganActive()) {
+        if (!this.ninjaModeEnabled) {
             return 0;
         }
-        return BYAKUGAN_RANGE[Math.min(Math.max(this.byakuganLevel, 0), 4)];
+        return com.sekwah.narutomod.util.ByakuganSight.range(this.byakuganLevel, "hyuga".equals(this.clanId),
+                this.isByakuganActive());
     }
 
     /** The Sharingan reads chakra, but only what is nearly in front of it. */
@@ -1467,6 +1535,11 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
     @Override
     public boolean isByakuganActive() {
         return this.toggleAbilityData.getAbilitiesHashSet().contains(BYAKUGAN_ABILITY);
+    }
+
+    @Override
+    public int getEyeVisualState() {
+        return this.eyeVisualState;
     }
 
     @Override
@@ -1518,6 +1591,11 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
 
     @Override
     public void setWallWalkAttached(boolean attached) {
+        if (this.wallWalkAttached && !attached) {
+            this.wallWalkTurnTicks = 0;
+            this.wallWalkTurnFrom = null;
+            this.surfaceStride.advance(Vec3.ZERO, null);
+        }
         this.wallWalkAttached = attached;
         if (!attached) {
             this.setWallWalkDirection(null);
@@ -1528,6 +1606,32 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
     @Override
     public int getWallWalkTicks() {
         return this.wallWalkTicks;
+    }
+
+    @Override
+    public SurfaceStride getSurfaceStride() {
+        return this.surfaceStride;
+    }
+
+    @Override
+    public DashStride getDashStride() {
+        return this.dashStride;
+    }
+
+    @Override
+    public int getWallWalkTurnTicks() {
+        return this.wallWalkTurnTicks;
+    }
+
+    @Override
+    public Direction getWallWalkTurnFrom() {
+        return this.wallWalkTurnFrom;
+    }
+
+    @Override
+    public void beginWallWalkTurn(Direction previous) {
+        this.wallWalkTurnFrom = previous;
+        this.wallWalkTurnTicks = 5;
     }
 
     @Override
@@ -1564,6 +1668,7 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
 
     @Override
     public void resetProgression() {
+        this.disableTrainingLoadout();
         this.chakraXp = 0;
         this.ninjaRank = 0;
         this.rankTier = 0;
@@ -1590,7 +1695,7 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
         this.rinneganPathsUnlocked = "";
         this.rinneSharinganAwakened = false;
         this.phoenixSageChargeUsedDay = -1L;
-        this.hiraishinEntityMark = "";
+        this.hiraishinFormulas = HiraishinFormula.Book.EMPTY;
         this.transplantedSharingan = false;
         this.copiedJutsu = "";
         this.sharinganDodgeCooldown = 0;
@@ -1672,6 +1777,8 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
 
     @Override
     public void setCurrentlyChanneledAbility(Player player, Ability ability) {
+        this.chargeFeedback.clear();
+        this.chargeIntensity = 0;
         if (ability != null) {
             if (ability.castingSound() != null) {
                 player.level().playSound(null, player, ability.castingSound(), SoundSource.PLAYERS, 0.5f, 1.0f);
@@ -1713,6 +1820,15 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
 
     @Override
     public void updateDataServer(Player player) {
+        this.sageStoneTicks = (int) Math.max(0, Math.min(SageFocus.STONE_TICKS,
+                this.sageStoneUntil - BodyRiteEffects.clock(player)));
+        BodyRiteLifecycle.beforeNinjaMode(player, this);
+        if (!player.isAlive()) {
+            this.eyeVisualState = 0;
+            return;
+        }
+        this.eyeVisualState = player.isAlive() && !player.isSpectator()
+                ? com.sekwah.narutomod.util.DojutsuVisual.resolve(this) : 0;
         // The giant's hitbox is real now, so the server has to notice the form appearing and
         // disappearing too. Left client-only this would keep server-side hit detection on the
         // old player-sized box while the client drew and collided with an eighteen-block one.
@@ -1729,7 +1845,6 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
             this.castPoseTicks--;
         }
 
-        // Phase 16: Mangekyo eye strain relaxes one step per 60s of not casting MS jutsu
         if (this.msBlindnessDecayTicks > 0) {
             this.msBlindnessDecayTicks--;
             if (this.msBlindnessDecayTicks == 0 && this.msUseCounter > 0) {
@@ -1741,6 +1856,10 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
         }
 
         if(!this.isNinjaModeEnabled()) {
+            if (this.kuramaCloakActive) {
+                this.setKuramaCloakActive(false);
+                this.refreshGiantFormDimensions(player);
+            }
             this.updateNinjaSpeed(player);
             this.chidoriTicks = 0;
             this.setWallWalkAttached(false);
@@ -1771,7 +1890,7 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
         }
 
         if (this.staminaRegenInfo.canRegen()) {
-            this.stamina += 0.5f + this.ninjaRank * 0.3f;
+            this.stamina += 0.5f + this.getNinjaRank() * 0.3f;
         }
         if (this.chakraRegenInfo.canRegen()) {
             this.chakra += this.getChakraRegenPerTick() * getClanChakraRegenMultiplier();
@@ -1780,7 +1899,7 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
         this.substitutions = Math.min(Math.max(this.substitutions, 0), this.maxSubstitutions);
         this.stamina = Math.min(Math.max(this.stamina, 0), this.maxStamina);
         this.chakra = Math.min(Math.max(this.chakra, 0), this.maxChakra);
-        if ("uzumaki".equals(this.clanId)) {
+        if ("uzumaki".equals(this.clanId) && !this.kuramaCloakActive && !this.kcmActive) {
             this.kuramaBond = Math.min(this.kuramaBond + KURAMA_BOND_REGEN, MAX_KURAMA_BOND);
         }
 
@@ -1790,7 +1909,6 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
         // recording this tick's state before they run would make the edge permanently false.
         this.swingingLastTick = player.swinging;
         this.decayWallWalkState(player);
-        this.updateShadowPossession(player);
         this.updateSageMode(player);
         this.updateEightGates(player);
         this.updateTransformPower();
@@ -1822,10 +1940,15 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
             } else {
                 LOGGER.error("Somehow non channeled ability has been set to ninja data {}", this.currentlyChanneled);
             }
-            this.ticksChanneled++;
+            if (this.currentlyChanneled != null) {
+                this.ticksChanneled++;
+            }
         }
 
-        if(player.onGround()) {
+        if ((player.onGround() && !player.level().noCollision(player, player.getBoundingBox().move(0, -0.14, 0)))
+                || player.isInWaterOrBubble() || player.onClimbable()
+                || (this.toggleAbilityData.getAbilitiesHashSet().contains(NarutoAbilities.WATER_WALK.getId())
+                && SurfaceSupport.waterAtFeet(player, player.position()) != null)) {
             this.doubleJumpData.canDoubleJumpServer = true;
         }
 
@@ -1941,6 +2064,17 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
 
     private void updateNinjaSpeed(Player player) {
         this.updateGiantStepHeight(player);
+        int eye = this.ninjaModeEnabled && this.isSharinganToggled() && this.hasSharinganEye()
+                ? this.getSharinganLevel() : 0;
+        double focus = this.isByakuganActive() && this.getByakuganRange() > 0
+                ? com.sekwah.narutomod.util.ByakuganSight.strength(this.byakuganLevel) : 0;
+        var damage = player.getAttribute(Attributes.ATTACK_DAMAGE);
+        syncEyeAttack(damage, SHARINGAN_READ_ATTACK, "Sharingan timing", eye >= 3 ? 3 : 0);
+        syncEyeAttack(damage, BYAKUGAN_FOCUS_ATTACK, "Byakugan focus", focus);
+        boolean dash = this.ninjaModeEnabled && !this.wallWalkAttached && !player.isPassenger()
+                && !player.isFallFlying() && !player.isSwimming()
+                && this.toggleAbilityData.getAbilitiesHashSet().contains(CHAKRA_DASH_ABILITY);
+        this.dashStride.update(player.position(), dash);
 
         AttributeInstance speedAttr = player.getAttribute(Attributes.MOVEMENT_SPEED);
         if (speedAttr == null) {
@@ -1952,10 +2086,10 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
             return;
         }
 
-        double speedBonus = 0.0D;
-        if (this.toggleAbilityData.getAbilitiesHashSet().contains(CHAKRA_DASH_ABILITY)) {
+        double speedBonus = eye >= 2 ? 0.2D : 0.0D;
+        if (dash) {
             double[] rankSpeeds = new double[] {0.3D, 0.5D, 0.8D, 1.2D, 2.0D};
-            speedBonus += rankSpeeds[Math.min(Math.max(this.ninjaRank, 0), 4)];
+            speedBonus += rankSpeeds[Math.min(Math.max(this.getNinjaRank(), 0), 4)];
         }
         if (this.gatesOpen > 0) {
             speedBonus += this.gatesOpen * 0.4D;
@@ -1979,12 +2113,8 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
         if (this.mangekyoAwakened && "shisui".equals(this.mangekyoForm)) {
             speedBonus += 0.85D;
         }
-        // Raiton no Yoroi: the fastest thing anybody can put on without a tailed beast in
-        // them. It used to out-run KCM as well, which had the Raikage beating the form that
-        // beat him in the source; now it clears the Gates and everything else, and loses to
-        // Kurama's chakra by a nose.
-        if (this.toggleAbilityData.getAbilitiesHashSet().contains(LIGHTNING_ARMOR_ABILITY)) {
-            speedBonus += 3.6D;
+        if (!this.wallWalkAttached && com.sekwah.narutomod.util.LightningCoat.active(player, this)) {
+            speedBonus += com.sekwah.narutomod.util.LightningCoat.SPEED_BONUS;
         }
 
         if (speedBonus > 0.0D) {
@@ -1996,7 +2126,24 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
         }
     }
 
+    private static void syncEyeAttack(AttributeInstance damage, UUID key, String name, double bonus) {
+        if (damage == null) {
+            return;
+        }
+        var previous = damage.getModifier(key);
+        if (previous != null && Double.compare(previous.getAmount(), bonus) == 0) {
+            return;
+        }
+        damage.removeModifier(key);
+        if (bonus > 0) {
+            damage.addTransientModifier(new AttributeModifier(key, name, bonus, AttributeModifier.Operation.ADDITION));
+        }
+    }
+
     private void decayWallWalkState(Player player) {
+        if (this.wallWalkTurnTicks > 0) {
+            this.wallWalkTurnTicks--;
+        }
         if (this.wallWalkDetachTicks > 0) {
             this.wallWalkDetachTicks--;
         }
@@ -2007,12 +2154,10 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
                 // Ticks ran out while attached — restore gravity
                 player.setNoGravity(false);
             }
-            this.wallWalkDirection = -1;
-            this.wallWalkAttached = false;
+            this.setWallWalkAttached(false);
         }
     }
 
-    // --- Shadow Possession (Nara clan) ---
     private UUID shadowPossessedTargetUUID = null;
     private int shadowPossessionTicks = 0;
 
@@ -2037,99 +2182,7 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
         return this.shadowPossessedTargetUUID != null && this.shadowPossessionTicks > 0;
     }
 
-    /** Beyond this the shadow cannot stretch, whatever the light is doing. */
-    private static final double SHADOW_TETHER_RANGE = 18.0;
-    /** Below this light level there is no shadow to send - a Nara is powerless in the dark. */
-    private static final int SHADOW_MIN_LIGHT = 4;
 
-    /**
-     * Whether the shadow can still reach its target.
-     *
-     * Three ways to break it, all of them things a player can actually do: get far enough
-     * away, put something solid in between, or take the fight somewhere with no light to cast
-     * a shadow. The last one is the technique's real weakness in the source and is why a Nara
-     * is dangerous at noon and helpless underground.
-     */
-    private boolean shadowTetherHolds(Player player, net.minecraft.world.entity.Mob mob) {
-        if (player.distanceTo(mob) > SHADOW_TETHER_RANGE) {
-            return false;
-        }
-        if (player.level().getMaxLocalRawBrightness(player.blockPosition()) < SHADOW_MIN_LIGHT) {
-            return false;
-        }
-        // Traced along the ground rather than eye to eye: the shadow crawls, it does not fly.
-        Vec3 from = player.position().add(0, 0.1, 0);
-        Vec3 to = mob.position().add(0, 0.1, 0);
-        net.minecraft.world.phys.BlockHitResult hit = player.level().clip(
-                new net.minecraft.world.level.ClipContext(from, to,
-                        net.minecraft.world.level.ClipContext.Block.COLLIDER,
-                        net.minecraft.world.level.ClipContext.Fluid.NONE, player));
-        return hit.getType() == net.minecraft.world.phys.HitResult.Type.MISS;
-    }
-
-    private void updateShadowPossession(Player player) {
-        if (!hasShadowTarget()) {
-            this.shadowPossessedTargetUUID = null;
-            this.shadowPossessionTicks = 0;
-            return;
-        }
-        this.shadowPossessionTicks--;
-        if (this.shadowPossessionTicks <= 0) {
-            this.shadowPossessedTargetUUID = null;
-            return;
-        }
-        if (!(player.level() instanceof net.minecraft.server.level.ServerLevel serverLevel)) return;
-        net.minecraft.world.entity.Entity targetEntity = null;
-        for (net.minecraft.world.entity.Entity e : serverLevel.getEntities().getAll()) {
-            if (e.getUUID().equals(this.shadowPossessedTargetUUID)) {
-                targetEntity = e;
-                break;
-            }
-        }
-        if (!(targetEntity instanceof net.minecraft.world.entity.Mob mob)) {
-            this.shadowPossessedTargetUUID = null;
-            this.shadowPossessionTicks = 0;
-            return;
-        }
-        // The tether is a shadow on the ground, and it breaks like one.
-        //
-        // Nothing checked it before: once the UUID was stored the mob was puppeted for six
-        // full seconds regardless of distance, walls, or the target simply walking away. The
-        // Nara technique's entire counterplay is breaking the connection - getting out of
-        // range, putting a wall between you, or standing where there is no shadow to reach -
-        // and none of it did anything.
-        if (!this.shadowTetherHolds(player, mob)) {
-            this.shadowPossessedTargetUUID = null;
-            this.shadowPossessionTicks = 0;
-            player.displayClientMessage(Component.literal("The shadow loses its grip.")
-                    .withStyle(ChatFormatting.GRAY), true);
-            return;
-        }
-
-        // Mirror player's movement: apply player's delta movement to mob
-        Vec3 playerVel = player.getDeltaMovement();
-        Vec3 mobVel = mob.getDeltaMovement();
-        mob.setDeltaMovement(playerVel.x, mobVel.y, playerVel.z);
-        // Face same direction as player
-        mob.setYRot(player.getYRot());
-        mob.yHeadRot = player.getYHeadRot();
-        // Dark particles along shadow path (every 5 ticks)
-        if (this.shadowPossessionTicks % 5 == 0) {
-            Vec3 playerPos = player.position();
-            Vec3 mobPos = mob.position();
-            int steps = (int) playerPos.distanceTo(mobPos) * 3;
-            for (int i = 0; i <= steps; i++) {
-                double t = steps == 0 ? 0 : i / (double) steps;
-                Vec3 pos = playerPos.lerp(mobPos, t);
-                serverLevel.sendParticles(
-                        new net.minecraft.core.particles.DustParticleOptions(
-                                new org.joml.Vector3f(0.05f, 0.0f, 0.15f), 1.0f),
-                        pos.x, pos.y, pos.z, 1, 0.1, 0.0, 0.1, 0.0);
-            }
-        }
-    }
-
-    // --- Sage Mode ---
     @Sync(minTicks = 1, syncGlobally = true)
     private boolean sageModeActive = false;
 
@@ -2140,9 +2193,10 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
     private int sageCharge = 0; // 0-100, accumulated while standing still
 
     public static final float SAGE_CHAKRA_PER_TICK = 2.0f;
-    private static final int SAGE_MAX_DURATION = 30 * 20; // 30 seconds
-    private static final int SAGE_MAX_CHARGE = 100;
-    // Overcharge/petrification now handled in SageModeAbility.handleChannelling()
+    private final SageFocus sageFocus = new SageFocus();
+    private long sageStoneUntil;
+    @Sync(minTicks = 5, syncGlobally = true)
+    private int sageStoneTicks;
 
     @Override
     public boolean isSageModeActive() {
@@ -2174,64 +2228,44 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
 
     @Override
     public void setSageCharge(int charge) {
-        this.sageCharge = Math.max(0, Math.min(charge, SAGE_MAX_CHARGE));
+        this.sageCharge = Math.max(0, Math.min(charge, SageFocus.MAXIMUM));
+    }
+
+    @Override
+    public SageFocus getSageFocus() {
+        return this.sageFocus;
+    }
+
+    @Override
+    public long getSageStoneUntil() {
+        return this.sageStoneUntil;
+    }
+
+    @Override
+    public void setSageStoneUntil(long until) {
+        this.sageStoneUntil = until;
+    }
+
+    @Override
+    public int getSageStoneTicks() {
+        return this.sageStoneTicks;
     }
 
     private void updateSageMode(Player player) {
-        // Natural energy gathering is now handled by SageModeAbility (CHANNELED — hold combo to gather)
-
-        // --- Active Sage Mode tick ---
-        if (this.sageModeActive) {
-            if (this.chakra < SAGE_CHAKRA_PER_TICK || this.sageModeTicks <= 0) {
-                // Run out of chakra or time — deactivate
-                this.sageModeActive = false;
-                this.sageModeTicks = 0;
-                player.displayClientMessage(Component.translatable("sage.deactivate").withStyle(ChatFormatting.RED), true);
-                return;
-            }
-
-            this.useChakra(SAGE_CHAKRA_PER_TICK, 5);
-            this.sageModeTicks--;
-
-            // Apply Sage Mode buffs every 20 ticks (1 second)
-            if (this.sageModeTicks % 20 == 0) {
-                player.addEffect(new MobEffectInstance(MobEffects.DAMAGE_BOOST, 30, 1, false, false));     // Strength II
-                player.addEffect(new MobEffectInstance(MobEffects.REGENERATION, 30, 0, false, false));     // Regen I
-            }
-
-            // Orange aura particles (every 3 ticks)
-            if (this.sageModeTicks % 3 == 0 && player.level() instanceof ServerLevel serverLevel) {
-                double angle = Math.toRadians((player.tickCount * 15) % 360);
-                double px = player.getX() + 0.6 * Math.cos(angle);
-                double pz = player.getZ() + 0.6 * Math.sin(angle);
-                serverLevel.sendParticles(
-                        new DustParticleOptions(new org.joml.Vector3f(1.0f, 0.65f, 0.05f), 1.0f),
-                        px, player.getY() + 0.2 + Math.random() * 1.5, pz,
-                        1, 0.05, 0.1, 0.05, 0.01);
-                serverLevel.sendParticles(ParticleTypes.FLAME,
-                        player.getX() + (Math.random() - 0.5) * 0.5,
-                        player.getY() + Math.random() * 1.8,
-                        player.getZ() + (Math.random() - 0.5) * 0.5,
-                        1, 0.0, 0.02, 0.0, 0.005);
-            }
-        }
-    }
-
-    // --- Flying Thunder God ---
-    private BlockPos thunderGodMark = null;
-
-    @Override
-    public BlockPos getThunderGodMark() {
-        return this.thunderGodMark;
+        BodyRiteLifecycle.tickSage(player, this, SAGE_CHAKRA_PER_TICK);
     }
 
     @Override
-    public void setThunderGodMark(BlockPos pos) {
-        this.thunderGodMark = pos;
+    public HiraishinFormula.Book getHiraishinFormulas() {
+        return this.hiraishinFormulas;
     }
 
-    // --- Eight Gates ---
-    public static final int MAX_GATES = 8;
+    @Override
+    public void setHiraishinFormulas(HiraishinFormula.Book book) {
+        this.hiraishinFormulas = book;
+    }
+
+    public static final int MAX_GATES = EightGateCycle.LAST;
     /** Stamina per tick, per open gate. Read by the active-jutsu HUD as well. */
     public static final float GATE_STAMINA_PER_TICK_PER_GATE = 0.5F;
 
@@ -2241,6 +2275,12 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
     /** Synced so the HUD can count the gates down; the client cannot derive this. */
     @Sync(minTicks = 1)
     private int gatesTicks = 0; // ticks remaining before gates auto-close
+    private final EightGateCycle gateCycle = new EightGateCycle();
+
+    @Override
+    public EightGateCycle getGateCycle() {
+        return this.gateCycle;
+    }
 
     @Override
     public int getGatesOpen() {
@@ -2249,7 +2289,7 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
 
     @Override
     public void setGatesOpen(int gates) {
-        this.gatesOpen = Math.max(0, Math.min(gates, 8));
+        this.gatesOpen = Math.max(0, Math.min(gates, MAX_GATES));
     }
 
     @Override
@@ -2263,66 +2303,13 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
     }
 
     private void updateEightGates(Player player) {
-        if (this.gatesOpen <= 0) return;
-
-        this.gatesTicks--;
-        float staminaCost = this.gatesOpen * GATE_STAMINA_PER_TICK_PER_GATE;
-        // The Gate of Death is a decision, not a stance. Every other gate still snaps shut
-        // when the body gives out, but the eighth runs to its timer no matter what is left
-        // in the tank - opening it is supposed to be the last thing you ever choose to do.
-        if (this.stamina < staminaCost && this.gatesOpen < MAX_GATES) {
-            this.gatesOpen = 0;
-            this.gatesTicks = 0;
-            player.displayClientMessage(Component.literal("Eight Gates closed: stamina exhausted.")
-                    .withStyle(ChatFormatting.RED), true);
-            return;
-        }
-        this.useStamina(staminaCost, 5);
-
-        // Apply effects based on gates open
-        if (this.gatesTicks % 20 == 0) {
-            int strengthLevel = Math.min(this.gatesOpen - 1, 3); // Strength 0-3
-            player.addEffect(new MobEffectInstance(MobEffects.DAMAGE_BOOST, 30, strengthLevel, false, false));
-
-            if (this.gatesOpen >= 3) {
-                player.addEffect(new MobEffectInstance(MobEffects.JUMP, 30, 1, false, false));
-            }
-            if (this.gatesOpen == 8) {
-                // Gate of Death: God Mode
-                player.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 30, 4, false, false));
-                player.addEffect(new MobEffectInstance(MobEffects.DAMAGE_BOOST, 30, 9, false, false));
-            }
-        }
-
-        // Gates 5-7: lose 2 HP/sec
-        if (this.gatesOpen >= 5 && this.gatesOpen <= 7 && this.gatesTicks % 20 == 0) {
-            player.hurt(player.damageSources().magic(), 2.0f);
-        }
-
-        // The aura itself is drawn client-side from gatesOpen (see JutsuVfxHandler), where it
-        // costs no bandwidth and can be dense enough to read as a shell of chakra rather than
-        // one green speck a tick. The colour escalates with the gate count there too - this
-        // used to be the same flat green at gate 1 and at the Gate of Death.
-
-        // Auto-close
-        if (this.gatesTicks <= 0) {
-            if (this.gatesOpen == 8) {
-                // Gate of Death: instant death
-                player.hurt(player.damageSources().magic(), 999.0f);
-                player.displayClientMessage(Component.literal("The Gate of Death closes...")
-                        .withStyle(ChatFormatting.DARK_RED), true);
-            } else {
-                player.displayClientMessage(Component.literal("Eight Gates closed.")
-                        .withStyle(ChatFormatting.GREEN), true);
-            }
-            this.gatesOpen = 0;
-            this.gatesTicks = 0;
-        }
+        BodyRiteLifecycle.tickGates(player, this, GATE_STAMINA_PER_TICK_PER_GATE);
     }
 
-    // --- Kurama Cloak (Jinchuriki) ---
     @Sync(minTicks = 1, syncGlobally = true)
     private boolean kuramaCloakActive = false;
+    @Sync(minTicks = 1, syncGlobally = true)
+    private int kuramaTailAge;
 
     @Sync(minTicks = 1)
     private int kuramaCloakTicks = 0;
@@ -2345,13 +2332,17 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
 
     @Override
     public void setKuramaCloakActive(boolean active) {
+        if (active && !this.kuramaCloakActive) {
+            this.setKuramaTailCount(1);
+        }
         this.kuramaCloakActive = active;
         if (!active) {
             this.kuramaCloakTicks = 0;
-            this.kuramaTailCount = 0;
+            this.setKuramaTailCount(0);
         } else {
             // Mutually exclusive with KCM — the tailed cloak and "just a glow" mode don't stack
-            this.kcmActive = false;
+            this.setKcmActive(false);
+            this.toggleAbilityData.removeAbility(KuramaChakraModeAbility.ID);
         }
     }
 
@@ -2372,88 +2363,61 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
 
     @Override
     public void setKuramaTailCount(int count) {
-        this.kuramaTailCount = count;
+        if (this.kuramaTailCount != count) {
+            this.kuramaTailCount = count;
+            this.kuramaTailAge = 0;
+        }
+    }
+
+    @Override
+    public int getKuramaTailAge() {
+        return this.kuramaTailAge;
     }
 
     private void updateKuramaCloak(Player player) {
         if (!this.kuramaCloakActive) {
-            if (this.kuramaTailCount != 0) {
-                this.kuramaTailCount = 0;
-            }
             return;
         }
-
-        // No fixed duration — Kurama Cloak lasts as long as the bond holds out (see the
-        // ~5-minute math above), not a hardcoded 20-second timer.
-        if (this.kuramaBond < KURAMA_CHAKRA_PER_TICK) {
-            this.kuramaCloakActive = false;
-            this.kuramaCloakTicks = 0;
-            this.kuramaTailCount = 0;
-            player.displayClientMessage(Component.literal("Kurama Cloak faded - Kurama's chakra is spent!")
-                    .withStyle(ChatFormatting.RED), true);
+        if (this.getNinjaRank() < 3 || !"uzumaki".equals(this.clanId) || !player.isAlive()) {
+            this.setKuramaCloakActive(false);
             return;
         }
-
-        // Rank caps the reachable tail count: Jonin -> up to tail 4, Kage -> up to the Full
-        // Avatar at tail 9. transformPower (scroll wheel) decides where within that ceiling
-        // the current tail count sits — same "deliberate push" model as Susanoo.
-        int rankCeiling = this.ninjaRank >= 4 ? 9 : 4;
-        int targetTails = 1 + (int) Math.floor(this.transformPower * (rankCeiling - 1));
-        if (this.kuramaTailCount != targetTails) {
-            this.kuramaTailCount = targetTails;
+        advanceKuramaStage(player);
+        float base = KURAMA_CHAKRA_PER_TICK + this.transformPower * KURAMA_SURGE_DRAIN;
+        if (this.kuramaBond < base) {
+            this.setKuramaCloakActive(false);
+            player.displayClientMessage(Component.translatable("kurama.cloak.spent").withStyle(ChatFormatting.RED), true);
+            return;
         }
-
-        // Higher tail tiers cost more bond per tick — scales continuously with transformPower
-        this.useKuramaBond(this.transformPower * KURAMA_SURGE_DRAIN);
-        this.useKuramaBond(KURAMA_CHAKRA_PER_TICK);
-
-        // Kurama actively channels chakra into Naruto too, not just the shell — tops up the
-        // player's own chakra pool while the cloak is active (pulled from the same bond).
-        this.useKuramaBond(KURAMA_CHAKRA_DONATION_PER_TICK);
-        this.addChakra(KURAMA_CHAKRA_DONATION_PER_TICK);
-
-        // Buffs every second. The cloak is the armoured form: it trades raw personal power
-        // for a shell that grows into the Full Avatar, so it out-tanks KCM but does not
-        // out-fight it.
+        float donation = Math.min(Math.max(0, this.maxChakra - this.chakra),
+                Math.min(KURAMA_CHAKRA_DONATION_PER_TICK, this.kuramaBond - base));
+        this.useKuramaBond(base + donation);
+        this.addChakra(donation);
         if (player.tickCount % 20 == 0) {
-            player.addEffect(new MobEffectInstance(MobEffects.DAMAGE_BOOST, 30, 2, false, false));      // Strength III
-            player.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 30, 0, false, false)); // Resistance I
-            player.addEffect(new MobEffectInstance(MobEffects.REGENERATION, 30, 0, false, false));      // Regeneration I
+            player.addEffect(new MobEffectInstance(MobEffects.DAMAGE_BOOST, 30, 2, false, false));
+            player.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 30, 0, false, false));
+            player.addEffect(new MobEffectInstance(MobEffects.REGENERATION, 30, 0, false, false));
         }
+    }
 
-        // Full Avatar crush aura — same reasoning as Susanoo's Complete Body (see
-        // updateSusanoo): with the camera up at the fox's head, ground melee is out of
-        // reach, so the giant tramples whatever stands inside its footprint instead.
-        if (this.kuramaTailCount >= 9 && player.tickCount % 15 == 0) {
-            crushAura(player, 7.0, 7.0f * this.getRankDamageMultiplier());
+    private void advanceKuramaStage(Player player) {
+        this.kuramaTailAge = Math.min(this.kuramaTailAge + 1, 24);
+        int wanted = KuramaCloakMotion.desiredTails(this.transformPower, this.getNinjaRank());
+        if (wanted == this.kuramaTailCount || this.kuramaTailAge < KuramaCloakMotion.stageTicks(this.kuramaTailCount)) {
+            return;
         }
-
-        // Orange-red aura particles
-        if (player.tickCount % 2 == 0 && player.level() instanceof ServerLevel serverLevel) {
-            double angle = Math.toRadians((player.tickCount * 25) % 360);
-            double px = player.getX() + 0.7 * Math.cos(angle);
-            double pz = player.getZ() + 0.7 * Math.sin(angle);
-
-            // Orange dust
-            serverLevel.sendParticles(
-                    new DustParticleOptions(new Vector3f(1.0f, 0.4f, 0.05f), 1.3f),
-                    px, player.getY() + 0.2 + Math.random() * 1.8, pz,
-                    1, 0.05, 0.1, 0.05, 0.01);
-
-            // Flame particles
-            serverLevel.sendParticles(ParticleTypes.FLAME,
-                    player.getX() + (Math.random() - 0.5) * 0.6,
-                    player.getY() + Math.random() * 2.0,
-                    player.getZ() + (Math.random() - 0.5) * 0.6,
-                    1, 0.0, 0.03, 0.0, 0.008);
-
-            // Red core particles every 4 ticks
-            if (player.tickCount % 4 == 0) {
-                serverLevel.sendParticles(
-                        new DustParticleOptions(new Vector3f(0.9f, 0.15f, 0.05f), 1.0f),
-                        player.getX(), player.getY() + 1.0, player.getZ(),
-                        2, 0.3, 0.6, 0.3, 0.02);
+        int next = this.kuramaTailCount + Integer.signum(wanted - this.kuramaTailCount);
+        if (next == 9 && !KuramaCloakEvents.canGrow(player)) {
+            if (player.tickCount % 40 == 0) {
+                player.displayClientMessage(Component.translatable("kurama.cloak.clearance"), true);
             }
+            return;
+        }
+        this.setKuramaTailCount(next);
+        this.refreshGiantFormDimensions(player);
+        if (next == 9 || next == 4) {
+            player.level().playSound(null, player.blockPosition(), NarutoSounds.KURAMA_RISE.get(), SoundSource.PLAYERS, 0.85f,
+                    next == 9 ? 0.77f : 1.14f);
         }
     }
 
@@ -2491,11 +2455,10 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
         return this.kuramaCloakActive ? 0.45D * tailLadder(2.6D) : 0.0D;
     }
 
-    // --- Kurama Chakra Mode (KCM): no shell, just the player glowing + huge speed ---
     @Sync(minTicks = 1, syncGlobally = true)
     private boolean kcmActive = false;
-
-    private static final float KCM_BOND_ACTIVATE = 10f;
+    @Sync(minTicks = 1, syncGlobally = true)
+    private int kcmFormAge;
     // "Just a glow" is cheaper than the full tailed cloak — 30/tick base + 20/tick donated
     // to the player's own chakra = 50/tick, 1_000_000 / 50 = 20,000 ticks ≈ 16.7 minutes.
     private static final float KCM_BOND_PER_TICK = 30f;
@@ -2508,6 +2471,9 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
 
     @Override
     public void setKcmActive(boolean active) {
+        if (active != this.kcmActive) {
+            this.kcmFormAge = 0;
+        }
         this.kcmActive = active;
         if (active) {
             // Mutually exclusive with the tailed cloak — KCM is the "just a glow" alternative
@@ -2515,52 +2481,32 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
         }
     }
 
+    @Override
+    public int getKcmFormAge() {
+        return this.kcmFormAge;
+    }
+
     private void updateKCM(Player player) {
         if (!this.kcmActive) {
             return;
         }
         if (this.kuramaBond < KCM_BOND_PER_TICK) {
-            this.kcmActive = false;
-            player.displayClientMessage(Component.literal("Kurama Chakra Mode faded!")
-                    .withStyle(ChatFormatting.RED), true);
+            KuramaChakraModeAbility.standDown(player, this);
             return;
         }
-        this.useKuramaBond(KCM_BOND_PER_TICK);
-
-        // Kurama tops up Naruto's own chakra pool while KCM is active too
-        this.useKuramaBond(KCM_CHAKRA_DONATION_PER_TICK);
-        this.addChakra(KCM_CHAKRA_DONATION_PER_TICK);
-
-        // KCM is the mode a wielder reaches once Kurama actually cooperates, so it is the
-        // stronger of the two on the person: no shell, but flatly better numbers than the
-        // cloak across the board. The cloak's answer is the Full Avatar, not raw stats.
+        this.kcmFormAge = Math.min(24, this.kcmFormAge + 1);
+        float missing = Math.max(0, this.maxChakra - this.chakra);
+        float available = this.kuramaBond - KCM_BOND_PER_TICK;
+        float donation = Math.min(KCM_CHAKRA_DONATION_PER_TICK, Math.min(available, missing));
+        this.useKuramaBond(KCM_BOND_PER_TICK + donation);
+        this.addChakra(donation);
         if (player.tickCount % 20 == 0) {
-            player.addEffect(new MobEffectInstance(MobEffects.REGENERATION, 30, 2, false, false));      // Regeneration III
-            player.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 30, 1, false, false)); // Resistance II
-            player.addEffect(new MobEffectInstance(MobEffects.DAMAGE_BOOST, 30, 3, false, false));      // Strength IV
-        }
-
-        // Golden-white glow directly on the player's own body — no shell, no avatar
-        if (player.tickCount % 2 == 0 && player.level() instanceof ServerLevel serverLevel) {
-            double angle = Math.toRadians((player.tickCount * 30) % 360);
-            double px = player.getX() + 0.5 * Math.cos(angle);
-            double pz = player.getZ() + 0.5 * Math.sin(angle);
-            serverLevel.sendParticles(
-                    new DustParticleOptions(new Vector3f(1.0f, 0.85f, 0.3f), 1.1f),
-                    px, player.getY() + 0.3 + Math.random() * 1.6, pz,
-                    1, 0.05, 0.1, 0.05, 0.01);
-
-            if (player.tickCount % 8 == 0) {
-                // Dark "eye marking" hint near the head
-                serverLevel.sendParticles(
-                        new DustParticleOptions(new Vector3f(0.1f, 0.05f, 0.02f), 0.6f),
-                        player.getX(), player.getEyeY(), player.getZ(),
-                        2, 0.15, 0.05, 0.15, 0.0);
-            }
+            player.addEffect(new MobEffectInstance(MobEffects.REGENERATION, 24, 2, false, false));
+            player.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 24, 1, false, false));
+            player.addEffect(new MobEffectInstance(MobEffects.DAMAGE_BOOST, 24, 3, false, false));
         }
     }
 
-    // --- Mangekyo Sharingan / Susanoo (Uchiha) ---
     // syncGlobally because these drive what OTHER players see. Without it the capability
     // only ever reaches its owner, so a transformation was visible to the person using it
     // and to nobody else in the world - the one situation where a giant spectral avatar is
@@ -2568,8 +2514,10 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
     @Sync(minTicks = 1, syncGlobally = true)
     private boolean susanooActive = false;
 
-    @Sync(minTicks = 20, syncGlobally = true)
+    @Sync(minTicks = 1, syncGlobally = true)
     private int susanooStage = 0; // 0=inactive, 1=ribcage (Jonin), 2=full Susanoo (Kage)
+    @Sync(minTicks = 1, syncGlobally = true)
+    private int susanooStageAge;
 
     /**
      * The armour's remaining integrity. Every point of damage aimed at the wearer is spent
@@ -2581,6 +2529,7 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
      */
     @Sync(minTicks = 1, syncGlobally = true)
     private float susanooDurability = 0f;
+    private float storedSusanooIntegrity = 1f;
 
     /**
      * Ticks left before a shattered Susanoo can be raised again.
@@ -2596,7 +2545,6 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
      * a Complete Body takes about thirty clean hits to open, and that is before its own arms
      * are swatting the attacker back out of reach.
      */
-    private static final float[] SUSANOO_MAX_DURABILITY = {0f, 220f, 480f, 950f, 1800f};
 
     /** Three minutes, as specified: long enough that losing the shell decides the fight. */
     public static final int SUSANOO_BROKEN_LOCKOUT = 3 * 60 * 20;
@@ -2613,8 +2561,7 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
 
     @Override
     public float getSusanooMaxDurability() {
-        int stage = Math.min(Math.max(this.susanooStage, 0), SUSANOO_MAX_DURABILITY.length - 1);
-        return SUSANOO_MAX_DURABILITY[stage];
+        return SusanooForm.fromId(this.susanooStage).integrity();
     }
 
     @Override
@@ -2692,7 +2639,7 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
     }
 
     /**
-     * Phase 16: every non-Eternal Mangekyo cast strains the eyes — escalating blindness
+     * Every non-Eternal Mangekyo cast strains the eyes — escalating blindness
      * (2s, 4s, 8s... capped at 64s). EMS eyes never strain: that is the whole point of
      * hunting the Mangekyo bosses. Counter relaxes one step per 60s of rest (see
      * updateDataServer) and clears fully on sleep (PlayerEvents.onWakeUp).
@@ -2714,16 +2661,6 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
             player.displayClientMessage(
                     Component.translatable("jutsu.mangekyo.strain").withStyle(ChatFormatting.DARK_RED), true);
         }
-    }
-
-    @Override
-    public String getHiraishinEntityMark() {
-        return this.hiraishinEntityMark;
-    }
-
-    @Override
-    public void setHiraishinEntityMark(String entityUuid) {
-        this.hiraishinEntityMark = entityUuid == null ? "" : entityUuid;
     }
 
     @Override
@@ -2910,10 +2847,21 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
 
     @Override
     public void setSusanooActive(boolean active) {
+        if (active && !this.susanooActive) {
+            this.setSusanooStage(1);
+            this.susanooDurability = this.getSusanooMaxDurability() * this.storedSusanooIntegrity;
+        } else if (!active && this.susanooActive) {
+            this.storedSusanooIntegrity = this.susanooIntegrity();
+        }
         this.susanooActive = active;
         if (!active) {
-            this.susanooStage = 0;
+            this.setSusanooStage(0);
+            this.susanooSwingTicks = 0;
         }
+    }
+
+    private float susanooIntegrity() {
+        return Math.max(0, Math.min(1, this.susanooDurability / Math.max(1, this.getSusanooMaxDurability())));
     }
 
     @Override
@@ -2923,7 +2871,13 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
 
     @Override
     public void setSusanooStage(int stage) {
-        this.susanooStage = stage;
+        this.susanooStage = SusanooForm.fromId(stage).id();
+        this.susanooStageAge = 0;
+    }
+
+    @Override
+    public int getSusanooStageAge() {
+        return this.susanooStageAge;
     }
 
     @Override
@@ -2972,22 +2926,13 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
      */
     @Override
     public boolean isGiantForm() {
-        return (this.susanooActive && this.susanooStage >= 4)
+        return (this.susanooActive && SusanooForm.perfect(this.susanooStage))
                 || (this.kuramaCloakActive && this.kuramaTailCount >= 9);
     }
 
     private boolean wasGiantFormActive = false;
 
-    /**
-     * EntityEvent.Size only fires on Pose changes and a few hardcoded scenarios, not every
-     * tick - so entering or leaving a giant form, which changes neither Pose nor size as far
-     * as vanilla is concerned, needs an explicit refreshDimensions() to make the new hitbox
-     * and eye height take effect.
-     *
-     * Runs on both sides now. It used to be client-only, back when the giant was purely a
-     * camera trick; now the form has a real eighteen-block box and a server that never
-     * refreshed it would keep hit detection on the old player-sized one.
-     */
+    /** Refreshes the hitbox and eye height on both sides because forms do not change the vanilla pose. */
     private void refreshGiantFormDimensions(Player player) {
         boolean isGiantNow = this.isGiantForm();
         if (isGiantNow != this.wasGiantFormActive) {
@@ -2999,382 +2944,65 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
     public static final float SUSANOO_SURGE_DRAIN = 4.0f;
 
     private void updateSusanoo(Player player) {
-        // Activation/deactivation and base chakra drain are driven by SusanooAbility's
-        // TOGGLE handleCost (called every tick by the toggle framework) and
-        // handleAbilityEnded. This method handles stage progression (from transformPower,
-        // see updateTransformPower()), extra Power Surge drain, buffs, and ambient VFX.
-        // The lockout runs whether or not a shell is up - it is the wait imposed by the last
-        // one breaking, so it has to count down while the wearer has nothing.
         if (this.susanooBrokenTicks > 0) {
             this.susanooBrokenTicks--;
             if (this.susanooBrokenTicks == 0) {
-                player.displayClientMessage(Component.literal("Susanoo can be raised again.")
-                        .withStyle(ChatFormatting.LIGHT_PURPLE), true);
+                this.storedSusanooIntegrity = 1f;
             }
         }
-
         if (this.susanooSwingTicks > 0) {
             this.susanooSwingTicks--;
         }
-
         if (!this.susanooActive) {
-            if (this.susanooStage != 0) {
-                this.susanooStage = 0;
+            if (this.susanooBrokenTicks == 0) {
+                this.storedSusanooIntegrity = Math.min(1, this.storedSusanooIntegrity + 1f / 300);
             }
             return;
         }
-
-        // Rank caps the reachable stage: Jonin -> full skeleton (2), Kage -> Complete Body (4).
-        // transformPower (0-1, set via scroll wheel) decides where within that ceiling the
-        // current stage sits, so Complete Body is a deliberate push, not automatic.
-        int rankCeiling = this.ninjaRank >= 4 ? 4 : 2;
-        int targetStage = 1 + (int) Math.floor(this.transformPower * (rankCeiling - 1));
-        if (this.susanooStage != targetStage) {
-            // Carry the damage across the stage change as a FRACTION, not as a raw number.
-            // Keeping the absolute value would let a cracked ribcage be repaired by scrolling
-            // up to Complete Body, and scrolling back down would shatter a healthy one.
-            float before = this.getSusanooMaxDurability();
-            float fraction = before <= 0f ? 1f : this.susanooDurability / before;
-            this.susanooStage = targetStage;
-            this.susanooDurability = this.getSusanooMaxDurability()
-                    * net.minecraft.util.Mth.clamp(fraction, 0f, 1f);
+        this.susanooStageAge = Math.min(20, this.susanooStageAge + 1);
+        var current = SusanooForm.fromId(this.susanooStage);
+        var target = SusanooForm.forPower(this.transformPower, this.getNinjaRank() >= 4);
+        if (current != target && this.susanooStageAge >= 12) {
+            var next = current.stepToward(target);
+            if (next != SusanooForm.PERFECT || GiantForm.canRaiseSusanoo(player)) {
+                float max = this.getSusanooMaxDurability();
+                float integrity = max > 0 ? Math.min(1, this.susanooDurability / max) : 1;
+                this.setSusanooStage(next.id());
+                this.susanooDurability = this.getSusanooMaxDurability() * integrity;
+                this.refreshGiantFormDimensions(player);
+            } else if (player.tickCount % 40 == 0) {
+                player.displayClientMessage(Component.translatable("susanoo.clearance"), true);
+            }
         }
-
-        // Higher stages cost more chakra per tick — scales continuously with transformPower
-        this.useChakra(this.transformPower * SUSANOO_SURGE_DRAIN, 5);
-
-        // Buffs every second
+        this.useChakra(Math.min(this.chakra, this.transformPower * SUSANOO_SURGE_DRAIN), 5);
         if (player.tickCount % 20 == 0) {
-            int resistLevel = Math.min(this.susanooStage - 1, 3);
-            player.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 30, resistLevel, false, false));
+            int tier = SusanooForm.fromId(this.susanooStage).combatTier();
+            player.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 24, Math.max(0, tier - 1), false, false));
         }
-
-        // Canon "absolute defense": even the stage-1 ribcage swats incoming projectiles
-        // aside before they reach the user. Anything flying TOWARD the player inside the
-        // shell radius gets bounced back the way it came; already-deflected shots (moving
-        // away) are ignored so a lingering arrow isn't re-swatted every tick.
-        double shellRadius = 2.0 + this.susanooStage * 0.5;
-        for (net.minecraft.world.entity.projectile.Projectile projectile
-                : player.level().getEntitiesOfClass(net.minecraft.world.entity.projectile.Projectile.class,
-                        player.getBoundingBox().inflate(shellRadius),
-                        p -> p.getOwner() != player && !isJutsuProjectile(p))) {
-            Vec3 toPlayer = player.position().add(0, player.getBbHeight() * 0.5, 0).subtract(projectile.position());
-            Vec3 velocity = projectile.getDeltaMovement();
-            if (velocity.dot(toPlayer) <= 0) {
-                continue;
-            }
-            projectile.setDeltaMovement(velocity.scale(-0.6));
-            projectile.hurtMarked = true;
-            if (player.level() instanceof ServerLevel serverLevel) {
-                serverLevel.sendParticles(
-                        new DustParticleOptions(new Vector3f(0.55f, 0.25f, 0.85f), 1.2f),
-                        projectile.getX(), projectile.getY(), projectile.getZ(),
-                        5, 0.1, 0.1, 0.1, 0.02);
-            }
-        }
-
-        // Complete Body crush aura: at stage 4 the camera rides high above the ground, so
-        // normal melee raycasts can't reach targets — instead the giant itself is the weapon:
-        // anything standing inside its footprint is periodically crushed and thrown aside.
-        // Magic damage source on purpose: a player-attack source here would re-enter the
-        // melee-hit AoE handlers (arm swipe) every pulse.
-        //
-        // Deliberately far heavier than stage 3's shell. Complete Body used to cost the most
-        // to reach and then play almost identically to the ribcage, which is why nobody had
-        // any reason to grow it - it is now a genuinely different thing: it stamps a wide
-        // area flat, it cannot be staggered, and it flies.
-        if (this.susanooStage >= 4 && player.tickCount % 10 == 0) {
-            crushAura(player, 8.0, 14.0f * this.getRankDamageMultiplier());
-        }
-
-        // Purple/blue skeletal aura particles
-        if (player.tickCount % 2 == 0 && player.level() instanceof ServerLevel serverLevel) {
-            double angle = Math.toRadians((player.tickCount * 20) % 360);
-            double radius = 0.9 + this.susanooStage * 0.3;
-            double px = player.getX() + radius * Math.cos(angle);
-            double pz = player.getZ() + radius * Math.sin(angle);
-
-            serverLevel.sendParticles(
-                    new DustParticleOptions(new Vector3f(0.55f, 0.25f, 0.85f), 1.3f),
-                    px, player.getY() + 1.0 + Math.random() * 1.8, pz,
-                    1, 0.05, 0.1, 0.05, 0.01);
-
-            if (player.tickCount % 6 == 0) {
-                serverLevel.sendParticles(
-                        new DustParticleOptions(new Vector3f(0.3f, 0.55f, 0.95f), 1.0f),
-                        player.getX(), player.getY() + 1.4, player.getZ(),
-                        2, 0.4, 0.7, 0.4, 0.02);
-            }
+        if (player instanceof ServerPlayer actor) {
+            SusanooCombat.deflect(actor, this.susanooStage);
         }
     }
 
-    /**
-     * Melee "arm swipe" AoE — cone knockback + damage to bystanders (excluding the entity
-     * already hit by the triggering melee attack, to avoid double-damaging it), only while
-     * full Susanoo (stage 2) is active. Called externally from the melee-hit event handler.
-     */
-    /**
-     * Guards triggerSusanooArmSwipe/triggerKuramaTailLash against re-entrant recursion:
-     * both call target.hurt() on bystanders from inside a LivingHurtEvent handler, which
-     * fires a NEW LivingHurtEvent synchronously and re-enters PlayerEvents.applyTransformationMeleeHit
-     * for that bystander. Without this guard, two+ bystanders in range can ping-pong the AoE
-     * back and forth forever (StackOverflowError / game crash).
-     */
-    private boolean processingMeleeAoE = false;
-
-    /**
-     * Periodic trample damage around a giant-form player (Susanoo Complete Body / Kurama
-     * Full Avatar). This is the final forms' primary ground-level offense: the piloting
-     * camera rides near the giant's head (see getGiantEyeHeight), which puts normal melee
-     * raycasts far out of server reach — the giant's footprint does the fighting instead.
-     */
-    private void crushAura(Player player, double radius, float damage) {
-        if (!(player.level() instanceof ServerLevel serverLevel)) return;
-
-        boolean hitAnything = false;
-        for (net.minecraft.world.entity.LivingEntity target : player.level().getEntitiesOfClass(
-                net.minecraft.world.entity.LivingEntity.class,
-                player.getBoundingBox().inflate(radius, 2, radius),
-                e -> e != player && e.isAlive())) {
-            target.hurt(player.damageSources().magic(), damage);
-            Vec3 away = target.position().subtract(player.position()).normalize();
-            target.knockback(1.4, -away.x, -away.z);
-            hitAnything = true;
-        }
-        if (hitAnything) {
-            NarutoParticles.spawnRing(serverLevel, player.position().add(0, 0.15, 0),
-                    radius * 0.8, 20, this.susanooActive
-                            ? new DustParticleOptions(new Vector3f(0.55f, 0.25f, 0.85f), 1.5f)
-                            : NarutoParticles.KURAMA_ORANGE);
-        }
-    }
-
-    /**
-     * A manifested form swings when the player swings, not when vanilla melee happens to land.
-     *
-     * Both of these used to hang off LivingHurtEvent, which fires only after a normal attack
-     * has already connected — and a normal attack reaches three blocks. So a Complete Body
-     * Susanoo carrying a twenty-two-block sword could only use it on something close enough to
-     * punch, and swinging at anything further away did nothing at all: no damage, no arc, no
-     * sound. The largest thing on the battlefield had the reach of a man with a knife, and the
-     * sword was decoration.
-     *
-     * Driving them from the swing instead gives each form its own reach and, just as
-     * importantly, makes a miss visible. The old calls in PlayerEvents are gone rather than
-     * kept alongside this, so a swing that does connect cannot fire the area attack twice.
-     */
     private void updateTransformedMelee(Player player) {
-        if (!this.swingStarted(player)) {
-            return;
-        }
-        this.triggerSusanooArmSwipe(player, null);
-        this.triggerKuramaTailLash(player, null);
-    }
-
-    public void triggerSusanooArmSwipe(Player player, net.minecraft.world.entity.LivingEntity primaryTarget) {
-        if (!this.susanooActive || this.susanooStage < 2) return;
-        if (!(player.level() instanceof ServerLevel serverLevel)) return;
-        if (this.processingMeleeAoE) return;
-
-        Vec3 eye = player.getEyePosition();
-        Vec3 look = player.getLookAngle();
-
-        // The blade is the Susanoo's, so its reach is the Susanoo's. A Complete Body carries a
-        // sword longer than a house; at the flat five blocks this used, the largest thing on
-        // the battlefield swung at exactly the distance a man with a katana does, and anything
-        // standing six blocks away was safe from it.
-        boolean giant = this.susanooStage >= 4;
-        double range = giant ? 22.0 : 5.0 + this.susanooStage * 1.5;
-        double halfAngleCos = Math.cos(Math.toRadians(giant ? 70 : 45));
-        float damage = (giant ? 38.0f : 8.0f + this.susanooStage * 3f) * this.getRankDamageMultiplier();
-
-        this.processingMeleeAoE = true;
-        try {
-            AABB searchBox = player.getBoundingBox().expandTowards(look.scale(range)).inflate(range * 0.5);
-            for (net.minecraft.world.entity.LivingEntity target : player.level().getEntitiesOfClass(
-                    net.minecraft.world.entity.LivingEntity.class, searchBox,
-                    e -> e != player && e != primaryTarget && e.isAlive())) {
-                Vec3 toTarget = target.position().add(0, target.getBbHeight() * 0.5, 0).subtract(eye).normalize();
-                if (toTarget.dot(look) < halfAngleCos) continue;
-                if (eye.distanceTo(target.position()) > range) continue;
-                target.hurt(player.damageSources().playerAttack(player), damage);
-                target.knockback(giant ? 3.5 : 1.2, -look.x, -look.z);
-                target.hurtMarked = true;
+        if (this.swingStarted(player) && player instanceof ServerPlayer actor) {
+            if (SusanooCombat.start(actor, this)) {
+                this.susanooSwingTicks = SpectralSword.length(this.susanooStage);
             }
-        } finally {
-            this.processingMeleeAoE = false;
+            KuramaCloakEvents.start(actor, this);
         }
-
-        // The swing is drawn as the arc the blade actually travels through. A puff in front of
-        // the wielder tells you nothing about a twenty-two-block sword.
-        this.susanooSwingTicks = SUSANOO_SWING_TICKS;
-        double baseAngle = Math.atan2(look.z, look.x);
-        int steps = giant ? 30 : 12;
-        for (int i = 0; i <= steps; i++) {
-            double t = i / (double) steps;
-            double sweep = baseAngle + Math.toRadians(-65 + 130.0 * t);
-            double reach = range * (giant ? 0.9 : 0.75);
-            // The blade falls as it crosses, so the arc drops rather than staying level.
-            double height = (giant ? 9.0 : 1.6) * (1.0 - t) + 0.6;
-            serverLevel.sendParticles(
-                    new DustParticleOptions(new Vector3f(0.55f, 0.25f, 0.85f), giant ? 3.2f : 1.5f),
-                    player.getX() + Math.cos(sweep) * reach,
-                    player.getY() + height,
-                    player.getZ() + Math.sin(sweep) * reach,
-                    2, 0.4, 0.4, 0.4, 0.02);
-        }
-        serverLevel.playSound(null, player.blockPosition(),
-                net.minecraft.sounds.SoundEvents.PLAYER_ATTACK_SWEEP,
-                net.minecraft.sounds.SoundSource.PLAYERS, giant ? 3.0f : 1.0f, giant ? 0.4f : 0.9f);
     }
 
-    /**
-     * Ticks left in the sword swing, synced so every client can animate it.
-     *
-     * The swing has to be a pose, not just a burst of particles: the whole point of a Susanoo
-     * with a blade is watching it wind up and come down, and an avatar that damages everything
-     * in front of it while standing perfectly still reads as a bug.
-     */
     @Sync(minTicks = 1, syncGlobally = true)
-    private int susanooSwingTicks = 0;
+    private int susanooSwingTicks;
 
-    /** Long enough to read at giant scale; the pose curve fits inside it. */
-    public static final int SUSANOO_SWING_TICKS = 14;
+    public static final int SUSANOO_SWING_TICKS = SpectralSword.LENGTH;
 
     @Override
     public int getSusanooSwingTicks() {
         return this.susanooSwingTicks;
     }
 
-    /**
-     * Chakra tail lash — cone knockback + damage to bystanders (excluding the entity already
-     * hit by the triggering melee attack), only once the fox exoskeleton has grown enough
-     * tails (4+) for them to double as weapons. Called externally from the melee-hit handler.
-     */
-    /**
-     * How far away the closest thing worth hitting is, or the search range if there is nothing.
-     *
-     * Returning the range rather than infinity on an empty search means a swing at open air
-     * uses the long form, which is the right guess: you reach for something distant, and a
-     * miss that sweeps is more readable than a miss that jabs.
-     */
-    private double nearestInFront(Player player, double range) {
-        Vec3 eye = player.getEyePosition();
-        Vec3 look = player.getLookAngle();
-        double nearest = range;
-        for (net.minecraft.world.entity.LivingEntity candidate : player.level().getEntitiesOfClass(
-                net.minecraft.world.entity.LivingEntity.class,
-                player.getBoundingBox().expandTowards(look.scale(range)).inflate(range * 0.6),
-                e -> e != player && e.isAlive()
-                        && !com.sekwah.narutomod.util.Faction.sameSide(player, e))) {
-            Vec3 toTarget = candidate.position().add(0, candidate.getBbHeight() * 0.5, 0).subtract(eye);
-            if (toTarget.normalize().dot(look) < 0.0D) {
-                continue; // behind the swing
-            }
-            nearest = Math.min(nearest, toTarget.length());
-        }
-        return nearest;
-    }
-
-    public void triggerKuramaTailLash(Player player, net.minecraft.world.entity.LivingEntity primaryTarget) {
-        if (!this.kuramaCloakActive || this.kuramaTailCount < 4) return;
-        if (!(player.level() instanceof ServerLevel serverLevel)) return;
-        if (this.processingMeleeAoE) return;
-
-        Vec3 eye = player.getEyePosition();
-        Vec3 look = player.getLookAngle();
-
-        // Reach follows the form. The worn cloak swipes with chakra arms at arm's length; the
-        // Full Avatar is an eighteen-block fox whose tails are longer than most buildings, and
-        // giving it the same 4.5 blocks meant the giant could be stood next to safely - the
-        // one thing a giant must never be. At nine tails it sweeps wide enough to reach a
-        // Susanoo standing across from it, and hits like something that size should.
-        boolean fullAvatar = this.kuramaTailCount >= 9;
-
-        // Hand or tail, chosen by where the target actually is.
-        //
-        // A fox this size does not lash a tail at something standing against its chest, and it
-        // does not try to reach across a valley with a paw. Everything used to be a tail
-        // sweep at one fixed range, so the two halves of how the thing fights were collapsed
-        // into whichever number happened to be in the constant.
-        double handRange = fullAvatar ? 9.0 : 3.0;
-        double tailRange = fullAvatar ? 26.0 : 7.0;
-        boolean withinArmsReach = this.nearestInFront(player, tailRange) <= handRange;
-
-        double range = withinArmsReach ? handRange : tailRange;
-        // The paw is a focused blow and the tail is a sweep, so they do not cover the same arc.
-        double halfAngleCos = Math.cos(Math.toRadians(withinArmsReach
-                ? (fullAvatar ? 50 : 45)
-                : (fullAvatar ? 85 : 60)));
-        float damage = (withinArmsReach
-                ? (fullAvatar ? 52.0f : 9.0f)
-                : (fullAvatar ? 42.0f : 6.0f)) * this.getRankDamageMultiplier();
-
-        this.processingMeleeAoE = true;
-        try {
-            AABB searchBox = player.getBoundingBox().expandTowards(look.scale(range)).inflate(range * 0.6);
-            for (net.minecraft.world.entity.LivingEntity target : player.level().getEntitiesOfClass(
-                    net.minecraft.world.entity.LivingEntity.class, searchBox,
-                    e -> e != player && e != primaryTarget && e.isAlive())) {
-                Vec3 toTarget = target.position().add(0, target.getBbHeight() * 0.5, 0).subtract(eye).normalize();
-                if (toTarget.dot(look) < halfAngleCos) continue;
-                if (eye.distanceTo(target.position()) > range) continue;
-                target.hurt(player.damageSources().playerAttack(player), damage);
-                // A tail the size of a tower does not nudge. hurtMarked matters here or the
-                // server never sends the throw to a hit player at all.
-                target.knockback(fullAvatar ? 4.5 : 1.0, -look.x, -look.z);
-                if (fullAvatar) {
-                    target.setDeltaMovement(target.getDeltaMovement().add(0, 0.75, 0));
-                }
-                target.hurtMarked = true;
-            }
-        } finally {
-            this.processingMeleeAoE = false;
-        }
-
-        // The avatar animates off the same counter the Susanoo does - one timer meaning "a
-        // manifested giant just struck". Without this the fox swept twenty-six blocks of tail
-        // while standing perfectly still.
-        this.susanooSwingTicks = SUSANOO_SWING_TICKS;
-
-        if (withinArmsReach) {
-            // A paw comes down in a line, not an arc: the effect runs out along the blow.
-            for (int i = 0; i <= 12; i++) {
-                double t = i / 12.0;
-                Vec3 point = eye.add(look.scale(range * t)).add(0, fullAvatar ? 2.0 - 4.0 * t : 0.0, 0);
-                serverLevel.sendParticles(
-                        new DustParticleOptions(new Vector3f(1.0f, 0.4f, 0.05f), fullAvatar ? 3.0f : 1.3f),
-                        point.x, point.y, point.z, 3, 0.35, 0.35, 0.35, 0.03);
-            }
-            serverLevel.playSound(null, player.blockPosition(),
-                    net.minecraft.sounds.SoundEvents.PLAYER_ATTACK_CRIT,
-                    net.minecraft.sounds.SoundSource.PLAYERS,
-                    fullAvatar ? 3.0f : 1.0f, fullAvatar ? 0.4f : 0.8f);
-        } else if (fullAvatar) {
-            // The sweep is drawn as an arc across the front of the fox rather than a puff at
-            // its nose: the attack covers most of a half-circle, and the effect has to show
-            // where it actually reached or the range is invisible.
-            double baseAngle = Math.atan2(look.z, look.x);
-            for (int i = 0; i <= 26; i++) {
-                double sweep = baseAngle + Math.toRadians(-80 + 160.0 * i / 26.0);
-                double reach = range * 0.85;
-                serverLevel.sendParticles(
-                        new DustParticleOptions(new Vector3f(1.0f, 0.4f, 0.05f), 3.0f),
-                        player.getX() + Math.cos(sweep) * reach,
-                        player.getY() + 2.0 + Math.sin(i * 0.7) * 1.5,
-                        player.getZ() + Math.sin(sweep) * reach,
-                        2, 0.6, 0.6, 0.6, 0.02);
-            }
-            serverLevel.playSound(null, player.blockPosition(),
-                    net.minecraft.sounds.SoundEvents.ENDER_DRAGON_FLAP,
-                    net.minecraft.sounds.SoundSource.PLAYERS, 3.0f, 0.5f);
-        } else {
-            serverLevel.sendParticles(
-                    new DustParticleOptions(new Vector3f(1.0f, 0.4f, 0.05f), 1.3f),
-                    eye.x + look.x * 1.5, eye.y + look.y * 1.5, eye.z + look.z * 1.5,
-                    14, 0.5, 0.4, 0.5, 0.04);
-        }
-    }
 
     private void getConfigData() {
         int index = this.getRankIndex();
@@ -3387,14 +3015,7 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
         this.maxSubstitutions = NarutoConfig.maxSubstitutions;
     }
 
-    /**
-     * Passive chakra regeneration, per tick, derived from the pool rather than fixed.
-     *
-     * A pool that grows five hundredfold across the ladder needs a rate that grows with it,
-     * or the top of the ladder is unplayable - see RANK_REFILL_SECONDS. The config value is
-     * kept as a global speed knob by expressing it relative to the Academy rate it was
-     * originally calibrated for.
-     */
+    /** Per-tick regeneration keeps refill time and config scaling consistent across chakra pools. */
     private float getChakraRegenPerTick() {
         int index = this.getRankIndex();
         float configScale = NarutoConfig.chakraRegen / BASE_REGEN_REFERENCE;
@@ -3414,6 +3035,21 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
     }
 
     @Override
+    public ChargeFeedback chakraChargeFeedback() {
+        return this.chargeFeedback;
+    }
+
+    @Override
+    public int getChargeIntensity() {
+        return this.chargeIntensity;
+    }
+
+    @Override
+    public void setChargeIntensity(int intensity) {
+        this.chargeIntensity = Math.max(0, Math.min(intensity, 4));
+    }
+
+    @Override
     public void scheduleDelayedTickEvent(Consumer<Player> consumer, int tickDelay) {
         this.delayedTickEvents.add(new DelayedPlayerTickEvent(consumer, tickDelay));
     }
@@ -3422,6 +3058,15 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
     public void updateDataClient(Player player) {
         this.doubleJumpData.stuckCheck();
         this.refreshGiantFormDimensions(player);
+        if (player.isLocalPlayer()) {
+            if (this.wallWalkTurnTicks > 0) {
+                this.wallWalkTurnTicks--;
+            }
+            if (this.wallWalkAttached && !this.toggleAbilityData.getAbilitiesHashSet().contains(NarutoAbilities.WATER_WALK.getId())) {
+                this.setWallWalkAttached(false);
+                player.setNoGravity(false);
+            }
+        }
     }
 
     @Override
@@ -3450,9 +3095,14 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
         nbt.put(COOLDOWN_TAG, cooldownData);
         nbt.putFloat(SUBSTITUTION_TAG, this.substitutions);
         nbt.putFloat("chakraXp", this.chakraXp);
+        if (this.trainingLoadout != null) {
+            this.trainingLoadout.save(nbt);
+        }
         nbt.putInt("ninjaRank", this.ninjaRank);
         nbt.putInt("rankTier", this.rankTier);
         nbt.putInt("susanooColor", this.susanooColor);
+        nbt.putInt("susanooBrokenTicks", this.susanooBrokenTicks);
+        nbt.putFloat("susanooIntegrity", this.susanooActive ? this.susanooIntegrity() : this.storedSusanooIntegrity);
         nbt.putBoolean("sixPathsUnlocked", this.sixPathsUnlocked);
         nbt.putInt("mangekyoBossKills", this.mangekyoBossKills);
         nbt.putString("clanId", this.clanId);
@@ -3464,8 +3114,7 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
         nbt.putFloat("elementXpWind", this.elementXpWind);
         nbt.putFloat("elementXpLightning", this.elementXpLightning);
         nbt.putString("learnedJutsu", this.learnedJutsu);
-        // Phase 16: dojutsu progression. @Sync only networks a field — persistence is manual,
-        // so every eye unlock has to be written here or it is lost on relog.
+        // Dojutsu progression is persisted separately from capability sync.
         nbt.putInt("sharinganTomoe", this.sharinganTomoe);
         nbt.putBoolean("mangekyoAwakened", this.mangekyoAwakened);
         nbt.putString("mangekyoForm", this.mangekyoForm);
@@ -3478,7 +3127,7 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
         nbt.putString("rinneganPathsUnlocked", this.rinneganPathsUnlocked);
         nbt.putBoolean("rinneSharinganAwakened", this.rinneSharinganAwakened);
         nbt.putLong("phoenixSageChargeUsedDay", this.phoenixSageChargeUsedDay);
-        nbt.putString("hiraishinEntityMark", this.hiraishinEntityMark);
+        this.hiraishinFormulas.save(nbt);
         nbt.putString("kamuiReturnDimension", this.kamuiReturnDimension);
         nbt.putDouble("kamuiReturnX", this.kamuiReturnX);
         nbt.putDouble("kamuiReturnY", this.kamuiReturnY);
@@ -3489,12 +3138,8 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
         nbt.putInt("bountyRemaining", this.bountyRemaining);
         nbt.putFloat("bountyRewardXp", this.bountyRewardXp);
         nbt.putInt("sageCharge", this.sageCharge);
-        if (this.thunderGodMark != null) {
-            nbt.putInt("thunderGodX", this.thunderGodMark.getX());
-            nbt.putInt("thunderGodY", this.thunderGodMark.getY());
-            nbt.putInt("thunderGodZ", this.thunderGodMark.getZ());
-            nbt.putBoolean("hasThunderGodMark", true);
-        }
+        nbt.putLong("sageStoneUntil", this.sageStoneUntil);
+        this.gateCycle.save(nbt);
         return nbt;
     }
 
@@ -3513,6 +3158,8 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
             }
             this.substitutions = compoundTag.getFloat(SUBSTITUTION_TAG);
             this.chakraXp = compoundTag.getFloat("chakraXp");
+            this.trainingLoadout = TrainingLoadout.read(compoundTag);
+            this.trainingLoadoutEnabled = this.trainingLoadout != null;
             this.ninjaRank = compoundTag.getInt("ninjaRank");
             // Absent on saves written before the ladder existed; those players simply start
             // their current rank at Low, which is exactly where the old thresholds put them.
@@ -3520,6 +3167,9 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
             // Absent means "never picked one", which is the canon colour, not black.
             this.susanooColor = compoundTag.contains("susanooColor")
                     ? compoundTag.getInt("susanooColor") : -1;
+            this.setSusanooBrokenTicks(compoundTag.getInt("susanooBrokenTicks"));
+            float stored = compoundTag.contains("susanooIntegrity", Tag.TAG_FLOAT) ? compoundTag.getFloat("susanooIntegrity") : 1f;
+            this.storedSusanooIntegrity = Float.isFinite(stored) ? Math.max(0, Math.min(1, stored)) : 1f;
             this.sixPathsUnlocked = compoundTag.getBoolean("sixPathsUnlocked");
             this.mangekyoBossKills = compoundTag.getInt("mangekyoBossKills");
             this.clanId = compoundTag.getString("clanId");
@@ -3549,26 +3199,23 @@ public class NinjaData implements INinjaData, ICapabilityProvider {
             this.phoenixSageChargeUsedDay = compoundTag.contains("phoenixSageChargeUsedDay")
                     ? compoundTag.getLong("phoenixSageChargeUsedDay")
                     : -1L;
-            this.hiraishinEntityMark = compoundTag.getString("hiraishinEntityMark");
+            this.hiraishinFormulas = HiraishinFormula.Book.read(compoundTag);
             this.kamuiReturnDimension = compoundTag.getString("kamuiReturnDimension");
             this.kamuiReturnX = compoundTag.getDouble("kamuiReturnX");
             this.kamuiReturnY = compoundTag.getDouble("kamuiReturnY");
             this.kamuiReturnZ = compoundTag.getDouble("kamuiReturnZ");
             this.transplantedSharingan = compoundTag.getBoolean("transplantedSharingan");
-            this.copiedJutsu = compoundTag.getString("copiedJutsu");
-            // Migration for worlds saved before Phase 16: dojutsu used to be derived from rank,
-            // so bring existing Uchiha/Hyuga up to the tier their rank already earned them.
+            this.setCopiedJutsu(compoundTag.getString("copiedJutsu"));
+            // Restore rank-earned dojutsu when loading saves without explicit eye tiers.
             this.checkDojutsuPerks();
             this.bountyTargetId = compoundTag.getString("bountyTargetId");
             this.bountyRemaining = compoundTag.getInt("bountyRemaining");
             this.bountyRewardXp = compoundTag.getFloat("bountyRewardXp");
-            this.sageCharge = compoundTag.getInt("sageCharge");
-            if (compoundTag.getBoolean("hasThunderGodMark")) {
-                this.thunderGodMark = new BlockPos(
-                        compoundTag.getInt("thunderGodX"),
-                        compoundTag.getInt("thunderGodY"),
-                        compoundTag.getInt("thunderGodZ"));
-            }
+            this.setSageCharge(compoundTag.getInt("sageCharge"));
+            this.sageStoneUntil = Math.max(0, compoundTag.getLong("sageStoneUntil"));
+            this.gateCycle.load(compoundTag);
+            this.setGatesOpen(this.gateCycle.hasDeathDeadline() ? MAX_GATES : 0);
+            this.getConfigData();
         }
     }
 

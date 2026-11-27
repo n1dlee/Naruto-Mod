@@ -97,8 +97,19 @@ public class ServerAbilityActivatePacket {
                                 player.getGameProfile().getName(), msg.abilityId);
                         return;
                     }
-                    // Phase 15: scroll-taught jutsu must be learned; elemental jutsu need their
-                    // element unlocked + trained. Phase 16 adds the dojutsu gate.
+                    if (com.sekwah.narutomod.events.AdamantineChainEvents.sealed(player)
+                            || com.sekwah.narutomod.events.BoulderRollEvents.actionLocked(player)
+                            || com.sekwah.narutomod.events.GatsugaEvents.actionLocked(player)) {
+                        return;
+                    }
+                    if (com.sekwah.narutomod.events.KamuiPhaseEvents.actionLocked(player)
+                            && !(ability instanceof com.sekwah.narutomod.abilities.jutsus.KamuiPhaseAbility)) {
+                        return;
+                    }
+                    if (com.sekwah.narutomod.events.SpiritProjectionEvents.actionLocked(player)
+                            && !(ability instanceof com.sekwah.narutomod.abilities.jutsus.ByakuganScoutAbility)) {
+                        return;
+                    }
                     if (!ability.checkLearnedRequirement(player, ninjaData)
                             || !ability.checkClanRequirement(player, ninjaData)
                             || !ability.checkElementRequirement(player, ninjaData)
@@ -109,52 +120,7 @@ public class ServerAbilityActivatePacket {
                         return;
                     }
                     if (ability.activationType() == Ability.ActivationType.INSTANT) {
-                        // Gated here rather than in the prelude above: the prelude also runs
-                        // for the toggle branch, where it would refuse the packet that turns
-                        // a Rasengan OFF, since a held Rasengan is exactly what it reports as
-                        // blocking. That left no way to put the sphere away.
-                        if (!ability.checkFreeHands(player, ninjaData)) {
-                            if (ability.castingFailSound() != null) {
-                                player.playNotifySound(ability.castingFailSound(), SoundSource.PLAYERS, 0.5f, 1.0f);
-                            }
-                            return;
-                        }
-
-                        boolean canTriggerJutsu = true;
-                        if (ability  instanceof Ability.Cooldown) {
-                            canTriggerJutsu = !((Ability.Cooldown) ability).checkCooldown(player, ninjaData, ability.getTranslationKey(ninjaData));
-                        }
-
-                        if(canTriggerJutsu && ability.handleCost(player, ninjaData)) {
-                            if (ability.logInChat()) {
-                                player.displayClientMessage(Component.translatable("jutsu.cast", Component.translatable(ability.getTranslationKey(ninjaData)).withStyle(ChatFormatting.YELLOW)).withStyle(ChatFormatting.GREEN), true);
-                            }
-                            if(ability.castingSound() != null) {
-                                player.level().playSound(null,
-                                        player, ability.castingSound(), SoundSource.PLAYERS, 0.5f, 1.0f);
-                                player.level().gameEvent(player, NarutoGameEvents.JUTSU_CASTING.get(), player.position().add(0, player.getEyeHeight() * 0.7, 0));
-                            }
-                            ninjaData.setCrossSealPose(false);
-                            NarutoRegistries.ABILITIES.getResourceKey(ability).ifPresent(key -> ninjaData.setLastCastAbilityId(key.location()));
-                            ability.performServer(player, ninjaData);
-                            ability.grantCastXp(ninjaData);
-                            strainMangekyo(player, ninjaData, ability);
-                            spendCopiedJutsu(ninjaData, ability);
-                            broadcastForSharingan(player, ability);
-                            ninjaData.setCastPoseTicks(ability.castPoseTicks());
-
-                            if (ability  instanceof Ability.Cooldown cooldownAbility) {
-                               cooldownAbility.registerCooldown(ninjaData, ability.getTranslationKey(ninjaData));
-                               if (cooldownAbility.getCooldown() > 0) {
-                                   com.sekwah.narutomod.network.PacketHandler.sendToPlayer(
-                                           new com.sekwah.narutomod.network.s2c.ClientCooldownPacket(
-                                                   ability.getTranslationKey(ninjaData), cooldownAbility.getCooldown()),
-                                           player);
-                               }
-                            }
-                        } else if(ability.castingFailSound() != null) {
-                            player.playNotifySound( ability.castingFailSound(), SoundSource.PLAYERS, 0.5f, 1.0f);
-                        }
+                        activateInstant(player, ninjaData, ability);
                     } else if(ability.activationType() == Ability.ActivationType.TOGGLE) {
                         ToggleAbilityData abilityTracker = ninjaData.getToggleAbilityData();
                         HashSet<ResourceLocation> abilities = abilityTracker.getAbilitiesHashSet();
@@ -194,18 +160,58 @@ public class ServerAbilityActivatePacket {
             ctx.get().setPacketHandled(true);
         }
 
-        /**
-         * Phase 16: casting with an ordinary Mangekyo burns the eyes — each use blinds the
-         * caster for twice as long as the last. Eternal Mangekyo is immune (see
-         * NinjaData#registerMangekyoUse), which is the whole reward for hunting the bosses.
-         */
-        /**
-         * A stolen technique is good for exactly one throw — clear it the moment it is used
-         * so the Sharingan has to read a fresh one.
-         */
-        private static void spendCopiedJutsu(INinjaData ninjaData, Ability ability) {
-            if (ability.isCopiedBySharingan(ninjaData)) {
-                ninjaData.setCopiedJutsu("");
+        private static void activateInstant(ServerPlayer player, INinjaData data, Ability ability) {
+            if (ability instanceof Ability.AlternateActivation alternate && alternate.handleAlternate(player, data)) {
+                return;
+            }
+            if (!ability.checkFreeHands(player, data)
+                    || ability instanceof Ability.Cooldown cooldown
+                    && cooldown.checkCooldown(player, data, ability.getTranslationKey(data))
+                    || !ability.handleCost(player, data)) {
+                if (ability.castingFailSound() != null) {
+                    player.playNotifySound(ability.castingFailSound(), SoundSource.PLAYERS, 0.5f, 1.0f);
+                }
+                return;
+            }
+            if (ability instanceof Ability.DeferredInstant deferred) {
+                deferred.beginInstant(player, data, (actor, state) -> {
+                    prepareInstant(actor, state, ability);
+                    finishInstant(actor, state, ability);
+                });
+            } else {
+                prepareInstant(player, data, ability);
+                ability.performServer(player, data);
+                finishInstant(player, data, ability);
+            }
+        }
+
+        private static void prepareInstant(ServerPlayer player, INinjaData data, Ability ability) {
+            if (ability.logInChat()) {
+                player.displayClientMessage(Component.translatable("jutsu.cast",
+                        Component.translatable(ability.getTranslationKey(data)).withStyle(ChatFormatting.YELLOW))
+                        .withStyle(ChatFormatting.GREEN), true);
+            }
+            if (ability.castingSound() != null) {
+                player.level().playSound(null, player, ability.castingSound(), SoundSource.PLAYERS, 0.5f, 1.0f);
+                player.level().gameEvent(player, NarutoGameEvents.JUTSU_CASTING.get(),
+                        player.position().add(0, player.getEyeHeight() * 0.7, 0));
+            }
+            data.setCrossSealPose(false);
+            NarutoRegistries.ABILITIES.getResourceKey(ability).ifPresent(key -> data.setLastCastAbilityId(key.location()));
+        }
+
+        private static void finishInstant(ServerPlayer player, INinjaData data, Ability ability) {
+            ability.grantCastXp(data);
+            strainMangekyo(player, data, ability);
+            broadcastForSharingan(player, ability);
+            data.setCastPoseTicks(ability.castPoseTicks());
+            if (ability instanceof Ability.Cooldown cooldown) {
+                String key = ability.getTranslationKey(data);
+                cooldown.registerCooldown(data, key);
+                if (cooldown.getCooldown() > 0) {
+                    com.sekwah.narutomod.network.PacketHandler.sendToPlayer(
+                            new com.sekwah.narutomod.network.s2c.ClientCooldownPacket(key, cooldown.getCooldown()), player);
+                }
             }
         }
 

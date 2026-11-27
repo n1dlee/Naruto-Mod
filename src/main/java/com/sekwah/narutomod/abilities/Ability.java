@@ -73,7 +73,6 @@ public abstract class Ability {
         return true;
     }
 
-    // --- Phase 15: Nature Release ---
 
     /**
      * Element id this jutsu belongs to ("fire", "water", "earth", "wind", "lightning"),
@@ -115,35 +114,9 @@ public abstract class Ability {
         return 15f;
     }
 
-    /**
-     * How long this jutsu's cast stance holds, in ticks, before PlayerAnimHandler blends the
-     * player back to their normal animation.
-     *
-     * This used to be a flat 8 for every INSTANT ability in the mod, which made a summoning
-     * and a substitution take exactly as long to perform. Overriding it is how a technique
-     * gets weight: a slow, deliberate jutsu should hold the stance long enough to read as
-     * effort, and an escape should be over before the player registers it happened.
-     *
-     * Only the hold is set here - the ease in and ease out on either side are added by
-     * PoseBlender and are not counted in this number.
-     */
+    /** Hold duration before the cast pose blends back. */
     public int castPoseTicks() {
         return 8;
-    }
-
-    /**
-     * Phase 15 C: scroll-taught jutsu must be learned before casting. Checked centrally
-     * from the activation/channel packet handlers together with the element gate.
-     */
-    /**
-     * True when the Sharingan has this exact technique stored as a stolen copy. A copy is
-     * a one-shot pass that waives both the scroll and the nature requirement — you are
-     * mimicking what you saw, not drawing on training you never had.
-     */
-    public boolean isCopiedBySharingan(INinjaData ninjaData) {
-        var resourceKey = NarutoRegistries.ABILITIES.getResourceKey(this);
-        return resourceKey.isPresent()
-                && resourceKey.get().location().getPath().equals(ninjaData.getCopiedJutsu());
     }
 
     public boolean checkLearnedRequirement(Player player, INinjaData ninjaData) {
@@ -152,8 +125,7 @@ public abstract class Ability {
             return true;
         }
         String path = resourceKey.get().location().getPath();
-        if (!JutsuScrolls.requiresScroll(path) || ninjaData.isJutsuLearned(path)
-                || path.equals(ninjaData.getCopiedJutsu())) {
+        if (!JutsuScrolls.requiresScroll(path) || ninjaData.isJutsuLearned(path)) {
             return true;
         }
         player.displayClientMessage(Component.translatable("jutsu.fail.notlearned",
@@ -252,7 +224,7 @@ public abstract class Ability {
      */
     public boolean checkElementRequirement(Player player, INinjaData ninjaData) {
         String element = this.element();
-        if (element == null || this.isCopiedBySharingan(ninjaData)) {
+        if (element == null) {
             return true;
         }
         if (!checkOneElement(player, ninjaData, element, this.elementLevelRequired())) {
@@ -339,7 +311,6 @@ public abstract class Ability {
         return false;
     }
 
-    // --- Phase 16: Dojutsu gating ---
 
     /**
      * Eye required to cast this technique, or null for eye-agnostic jutsu. One of:
@@ -428,10 +399,6 @@ public abstract class Ability {
         return this.hasEyeOwned(ninjaData) && this.hasEyeForm(ninjaData);
     }
 
-    /**
-     * Central dojutsu gate, called from the activation/channel packet handlers. Same rule
-     * set as {@link #hasEyeAccess}, but also messages the player on failure.
-     */
     public boolean checkEyeRequirement(Player player, INinjaData ninjaData) {
         if (this.requiredEye() == null) {
             return true;
@@ -521,6 +488,11 @@ public abstract class Ability {
         this.performServer(player, ninjaData, 0);
     }
 
+    public boolean performTap(Player player, INinjaData ninjaData) {
+        this.performServer(player, ninjaData, -1);
+        return true;
+    }
+
     public interface Toggled {
 
         /**
@@ -534,8 +506,17 @@ public abstract class Ability {
 
     }
 
+    public interface DeferredInstant {
+        void beginInstant(net.minecraft.server.level.ServerPlayer player, INinjaData data,
+                          java.util.function.BiConsumer<net.minecraft.server.level.ServerPlayer, INinjaData> onSuccess);
+    }
+
     public interface ToggleStartCheck {
         boolean canStartToggle(Player player, INinjaData ninjaData);
+    }
+
+    public interface AlternateActivation {
+        boolean handleAlternate(Player player, INinjaData data);
     }
 
     /**
@@ -548,6 +529,10 @@ public abstract class Ability {
      */
     public boolean channelCommittedAt(int ticksChanneled) {
         return true;
+    }
+
+    public boolean channelCommittedAt(INinjaData data, int ticksChanneled) {
+        return this.channelCommittedAt(ticksChanneled);
     }
 
     /**

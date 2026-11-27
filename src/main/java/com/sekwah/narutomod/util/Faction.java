@@ -35,6 +35,12 @@ public final class Faction {
         if (entity instanceof Player player) {
             return Optional.of(player.getUUID());
         }
+        if (entity instanceof com.sekwah.narutomod.entity.NinkenEntity ninken) {
+            return Optional.ofNullable(ninken.getOwnerUUID());
+        }
+        if (entity instanceof com.sekwah.narutomod.entity.AnimalPathRhinoEntity rhino) {
+            return rhino.ownerId();
+        }
         if (entity instanceof com.sekwah.narutomod.entity.SummonBeastEntity summon) {
             return summon.getOwnerUUID();
         }

@@ -1,6 +1,8 @@
 package com.sekwah.narutomod.entity;
 
 import com.sekwah.narutomod.entity.goal.BossJutsuGoal;
+import com.sekwah.narutomod.events.FinalChakraEffects;
+import com.sekwah.narutomod.util.SusanooForm;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
@@ -44,6 +46,10 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
             SynchedEntityData.defineId(MangekyoBossEntity.class, EntityDataSerializers.BYTE);
     private static final EntityDataAccessor<Byte> SUSANOO_STAGE =
             SynchedEntityData.defineId(MangekyoBossEntity.class, EntityDataSerializers.BYTE);
+    private static final EntityDataAccessor<Long> SUSANOO_RISE =
+            SynchedEntityData.defineId(MangekyoBossEntity.class, EntityDataSerializers.LONG);
+    private static final EntityDataAccessor<Byte> SUSANOO_INTEGRITY =
+            SynchedEntityData.defineId(MangekyoBossEntity.class, EntityDataSerializers.BYTE);
     /**
      * Whether the boss is currently gathering a technique, and how heavy that technique is.
      *
@@ -58,23 +64,10 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
     private static final EntityDataAccessor<Byte> CAST_POSE =
             SynchedEntityData.defineId(MangekyoBossEntity.class, EntityDataSerializers.BYTE);
 
-    private static final float MAX_CHAKRA = 400f;
-    /**
-     * Per tick. The old 0.6 paid for a cast every seven seconds or so, which combined with
-     * the goal's melee-range blind spot meant a boss you had actually closed with never
-     * cast at all.
-     *
-     * 0.9 rather than a flat 1.2: at 1.2 the reserve refilled faster than any cooldown ran
-     * down, so chakra stopped being a constraint and the expensive finishers — Kirin,
-     * Kotoamatsukami, Tsukuyomi — came out as freely as a fireball. Now the cheap techniques
-     * are still effectively unlimited and the expensive ones genuinely cost a pause.
-     */
-    private static final float CHAKRA_REGEN = 0.55f;
     /**
      * Shell integrity by stage. Matched to the player's own table so the same fight reads the
      * same from either side of it - what a Kage can break, a Kage-tier boss can also lose.
      */
-    private static final float[] SUSANOO_DURABILITY = {0f, 220f, 480f, 950f, 1800f};
     /** Three minutes without a shell after it breaks, same as the player pays. */
     private static final int SUSANOO_LOCKOUT = 3 * 60 * 20;
 
@@ -87,10 +80,24 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
 
     public void setSusanooDurability(float durability) {
         this.susanooDurability = Math.max(0f, durability);
+        this.syncShellIntegrity();
+    }
+
+    private void syncShellIntegrity() {
+        this.entityData.set(SUSANOO_INTEGRITY, (byte) Math.round(100
+                * net.minecraft.util.Mth.clamp(this.susanooDurability / Math.max(1f, this.getSusanooMaxDurability()), 0, 1)));
+    }
+
+    public float getSusanooVisualIntegrity() {
+        return this.entityData.get(SUSANOO_INTEGRITY) / 100f;
+    }
+
+    public int getSusanooStageAge() {
+        return (int) Math.max(0, Math.min(20, this.level().getGameTime() - this.entityData.get(SUSANOO_RISE)));
     }
 
     public float getSusanooMaxDurability() {
-        return SUSANOO_DURABILITY[Math.min(Math.max(this.getSusanooStage(), 0), SUSANOO_DURABILITY.length - 1)];
+        return SusanooForm.fromId(this.getSusanooStage()).integrity();
     }
 
     /** True while the boss is locked out of raising a new shell. */
@@ -104,24 +111,11 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
         this.susanooBrokenTicks = SUSANOO_LOCKOUT;
     }
 
-    /** Feedback on the shell: pitch and spark count track how close it is to going. */
-    private void onSusanooStruck(boolean shattering) {
+    private void onSusanooStruck(DamageSource source, boolean shattering) {
         float max = Math.max(1f, this.getSusanooMaxDurability());
-        float integrity = this.susanooDurability / max;
-        this.level().playSound(null, this.blockPosition(),
-                shattering ? net.minecraft.sounds.SoundEvents.GLASS_BREAK
-                        : net.minecraft.sounds.SoundEvents.SHIELD_BLOCK,
-                net.minecraft.sounds.SoundSource.HOSTILE,
-                shattering ? 2.5f : 1.0f, shattering ? 0.5f : 0.5f + integrity * 0.5f);
-        if (this.level() instanceof net.minecraft.server.level.ServerLevel serverLevel) {
-            serverLevel.sendParticles(
-                    new net.minecraft.core.particles.DustParticleOptions(
-                            new org.joml.Vector3f(0.55f, 0.25f, 0.85f), shattering ? 2.2f : 1.4f),
-                    this.getX(), this.getY() + this.getBbHeight() * 0.5, this.getZ(),
-                    shattering ? 120 : (int) (8 + (1f - integrity) * 22),
-                    shattering ? 3.0 : 0.8, shattering ? 3.0 : 1.0, shattering ? 3.0 : 0.8,
-                    shattering ? 0.4 : 0.04);
-        }
+        var variant = this.getVariant();
+        int tint = FinalChakraEffects.rgb(variant.susanooRed(), variant.susanooGreen(), variant.susanooBlue());
+        FinalChakraEffects.shellImpact(this, source, this.getSusanooStage(), tint, this.susanooDurability / max, shattering);
     }
 
     /** How tall the Complete Body stands. Shared with every renderer that draws a final form. */
@@ -183,7 +177,12 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
      */
     private static final float[] PHASE_MAX_HEALTH = {1.0f, 1.2f, 1.5f, 2.0f, 3.0f};
 
-    private float chakra = MAX_CHAKRA;
+    private final BossChakraReserve chakra = new BossChakraReserve(chakraCapacity(MangekyoBossVariant.ITACHI),
+            BossChakraReserve.NINJA_CAST_FLOOR);
+    private boolean naturalEncounter;
+    private boolean spawnAdmissionPending;
+    private int highestAnnouncedStage;
+    private float suspendedShellFraction = 1f;
     private int phaseTicks = 0;
     private int phaseCooldown = 0;
     private int senjuHealsUsed = 0;
@@ -192,7 +191,7 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
 
     /** True while this wielder is standing as its thirteen-block final form. */
     public boolean isGiant() {
-        return this.getSusanooStage() >= 4 && this.getVariant().hasGiantForm();
+        return SusanooForm.perfect(this.getSusanooStage()) && this.getVariant().hasGiantForm();
     }
 
     /** Set once a player actually trades blows, so a fight in progress can't despawn. */
@@ -220,6 +219,8 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
         super.defineSynchedData();
         this.entityData.define(VARIANT, (byte) 0);
         this.entityData.define(SUSANOO_STAGE, (byte) 0);
+        this.entityData.define(SUSANOO_RISE, 0L);
+        this.entityData.define(SUSANOO_INTEGRITY, (byte) 0);
         this.entityData.define(CAST_POSE, (byte) 0);
     }
 
@@ -322,7 +323,8 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
      *         minutes - summons replenished, healing reapplied, particles poured out.
      */
     public boolean setSusanooStage(int stage) {
-        int clamped = Math.min(Math.max(stage, 0), 4);
+        int clamped = this.getVariant().hasSusanoo() ? SusanooForm.limit(stage, this.getVariant() == MangekyoBossVariant.ITACHI).id()
+                : Math.min(Math.max(stage, 0), 4);
         // A shattered shell stays down for its full lockout; the boss cannot simply put
         // another one up on the next phase transition.
         if (clamped > 0 && this.susanooBrokenTicks > 0) {
@@ -337,15 +339,16 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
         // made "previous" mean "current", so raising the first shell computed a fraction of
         // 0/220 and every boss manifested a Susanoo with zero integrity - the defensive phase
         // existed on screen and absorbed nothing.
-        float previousMax = SUSANOO_DURABILITY[Math.min(Math.max(previousStage, 0),
-                SUSANOO_DURABILITY.length - 1)];
+        float previousMax = SusanooForm.fromId(previousStage).integrity();
         float fraction = previousStage <= 0 || previousMax <= 0f
                 ? 1f                                    // raising a shell: it starts whole
                 : this.susanooDurability / previousMax; // between shells: carry the damage
 
         this.entityData.set(SUSANOO_STAGE, (byte) clamped);
+        this.entityData.set(SUSANOO_RISE, this.level().getGameTime());
         this.susanooDurability = this.getSusanooMaxDurability()
                 * net.minecraft.util.Mth.clamp(fraction, 0f, 1f);
+        this.syncShellIntegrity();
         // Stage 4 is the only one that changes the entity's actual size, but refreshing
         // unconditionally keeps the box correct when a boss is restored from NBT mid-fight.
         this.refreshDimensions();
@@ -364,6 +367,10 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
     public net.minecraft.world.entity.EntityDimensions getDimensions(net.minecraft.world.entity.Pose pose) {
         net.minecraft.world.entity.EntityDimensions base = super.getDimensions(pose);
         if (this.isGiant() && base.height > 0.01f) {
+            if (this.getVariant().hasSusanoo()) {
+                return net.minecraft.world.entity.EntityDimensions.scalable(
+                        com.sekwah.narutomod.util.GiantForm.SUSANOO_WIDTH, COMPLETE_BODY_HEIGHT);
+            }
             return base.scale(COMPLETE_BODY_HEIGHT / base.height);
         }
         return base;
@@ -387,16 +394,25 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
         super.knockback(strength, x, z);
     }
 
-    public float getChakra() {
-        return this.chakra;
+    private static int chakraCapacity(MangekyoBossVariant variant) {
+        return 200 + 12 * BossSpawnProgression.minimumRank(variant);
     }
 
-    /** Spends chakra if the reserve covers it; returns false when the boss is drained. */
+    public boolean canUseChakra(float amount) {
+        return this.chakra.canSpend(amount);
+    }
+
+    public boolean isChakraExhausted() {
+        return this.chakra.exhausted();
+    }
+
     public boolean useChakra(float amount) {
-        if (this.chakra < amount) {
+        if (!this.chakra.spend(amount)) {
             return false;
         }
-        this.chakra -= amount;
+        if (isChakraExhausted()) {
+            BossExhaustionFeedback.emit(this);
+        }
         return true;
     }
 
@@ -414,7 +430,9 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
         this.goalSelector.addGoal(6, new WaterAvoidingRandomStrollGoal(this, 0.7D));
         this.goalSelector.addGoal(7, new LookAtPlayerGoal(this, Player.class, 16.0F));
         this.targetSelector.addGoal(1, new HurtByTargetGoal(this));
-        this.targetSelector.addGoal(2, new NearestAttackableTargetGoal<>(this, Player.class, true));
+        this.targetSelector.addGoal(2, new NearestAttackableTargetGoal<>(this, Player.class, 10, true, false,
+                target -> !naturalEncounter || BossSpawnProgression.rank(target)
+                        >= BossSpawnProgression.minimumRank(getVariant())));
     }
 
     public static AttributeSupplier.Builder createAttributes() {
@@ -439,15 +457,13 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
         if (this.susanooBrokenTicks > 0) {
             this.susanooBrokenTicks--;
         }
-        if (this.chakra < MAX_CHAKRA) {
-            this.chakra = Math.min(MAX_CHAKRA, this.chakra + CHAKRA_REGEN);
-        }
+        this.chakra.tick(isFighting());
         if (this.phaseTicks > 0) {
             this.phaseTicks--;
-            if (this.level() instanceof ServerLevel serverLevel && this.tickCount % 2 == 0) {
-                serverLevel.sendParticles(ParticleTypes.PORTAL,
-                        this.getX(), this.getY() + this.getBbHeight() * 0.5, this.getZ(),
-                        4, 0.3, 0.6, 0.3, 0.05);
+            if (this.phaseTicks == 0) {
+                this.kamuiSignal(com.sekwah.narutomod.util.KamuiPhaseWindow.Stage.SEALED);
+            } else if (this.phaseTicks % 4 == 0) {
+                this.kamuiSignal(com.sekwah.narutomod.util.KamuiPhaseWindow.Stage.PHASED);
             }
         }
         if (this.phaseCooldown > 0) {
@@ -465,6 +481,21 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
         this.tickTransformation();
     }
 
+    private boolean isFighting() {
+        return this.getTarget() != null && this.getTarget().isAlive();
+    }
+
+    private void suspendChakraForm() {
+        if (this.getSusanooStage() == 0) {
+            return;
+        }
+        this.suspendedShellFraction = this.getSusanooDurability() / this.getSusanooMaxDurability();
+        this.setSusanooStage(0);
+        if (this.getVariant().hasKuramaCloak()) {
+            this.removeEffect(net.minecraft.world.effect.MobEffects.REGENERATION);
+        }
+    }
+
     /**
      * The escalation ladder every transforming boss shares.
      *
@@ -475,11 +506,21 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
      * all stay in step instead of being reimplemented per character.
      */
     private void tickTransformation() {
+        if (this.getVariant().hasSusanoo()) {
+            this.tickSusanooTransformation();
+            return;
+        }
         // The phase is what the fight has actually done to this wielder; the stage is the form
         // being shown. They are the same number except when there is no headroom for the
         // giant, where the phase runs ahead until the sky opens up.
         int stage = this.phase;
         int current = this.getSusanooStage();
+        boolean chakraForm = this.getVariant().hasSandCloak() || this.getVariant().hasKuramaCloak();
+        if (chakraForm && (!isFighting() || isChakraExhausted()
+                || current > 0 && this.tickCount % 20 == 0 && !useChakra(3 + 2 * current))) {
+            suspendChakraForm();
+            return;
+        }
         // Only the transition INTO the giant is gated on space. Once it is standing, walking
         // under a ledge must not fold it back down - that would flicker the hitbox every
         // few ticks and make the fight unreadable.
@@ -492,59 +533,93 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
         // effects anyway, twenty times a second: Naruto and the puppeteers replenished their
         // summons, Kakuzu healed, and thirty particles a tick poured out of a boss that had
         // just lost its shell. It made losing the Susanoo a reward.
-        if (stage != current && this.setSusanooStage(stage)) {
+        int entryCost = 20 + 8 * stage;
+        boolean canChange = !chakraForm || stage < current || this.susanooBrokenTicks == 0 && stage > current
+                && canUseChakra(BossChakraReserve.NINJA_CAST_FLOOR + entryCost) && useChakra(entryCost);
+        if (stage != current && canChange && this.setSusanooStage(stage)) {
+            if (chakraForm && current == 0 && stage > 0) {
+                this.setSusanooDurability(this.getSusanooMaxDurability() * this.suspendedShellFraction);
+                this.suspendedShellFraction = 1f;
+            }
             if (stage > 0 && this.level() instanceof ServerLevel serverLevel) {
                 serverLevel.sendParticles(ParticleTypes.SOUL_FIRE_FLAME,
                         this.getX(), this.getY() + this.getBbHeight() * 0.6, this.getZ(),
                         30, 0.6, 0.9, 0.6, 0.03);
             }
+        }
+        if (this.getSusanooStage() == stage && stage > this.highestAnnouncedStage
+                && (chakraForm || useChakra(entryCost))) {
+            this.highestAnnouncedStage = stage;
             this.onStageEntered(stage);
         }
 
-        if (this.isGiant() && this.tickCount % CRUSH_INTERVAL == 0) {
+        if (this.isGiant() && this.tickCount % CRUSH_INTERVAL == 0 && useChakra(4)) {
             crushUnderfoot();
         }
     }
 
-    /**
-     * Obito phasing out of a blow that had already landed.
-     *
-     * The scripted rotation could raise intangibility, but only on its own timer, which is
-     * the opposite of how the technique works: Obito is not periodically untouchable, he is
-     * untouchable exactly when you swing at him. Reacting to incoming damage instead of to a
-     * cooldown is the whole character, and it is what "using Kamui properly" means for him.
-     *
-     * Costs chakra, has its own cooldown and does not fire every time - otherwise he would
-     * simply be immortal rather than maddening.
-     */
+    private void tickSusanooTransformation() {
+        var current = SusanooForm.fromId(this.getSusanooStage());
+        if (!isFighting() || isChakraExhausted() || current != SusanooForm.NONE && this.tickCount % 20 == 0
+                && !useChakra(3 + 2 * current.combatTier())) {
+            suspendChakraForm();
+            return;
+        }
+        var target = SusanooForm.forBossPhase(this.phase, this.getVariant() == MangekyoBossVariant.ITACHI);
+        if (current != target && (current == SusanooForm.NONE || this.getSusanooStageAge() >= 14)) {
+            advanceSusanoo(current, target);
+        }
+        if (this.getSusanooStage() == target.id() && this.phase > this.highestAnnouncedStage) {
+            this.highestAnnouncedStage = this.phase;
+            this.onStageEntered(this.phase);
+        }
+    }
+
+    private void advanceSusanoo(SusanooForm current, SusanooForm target) {
+        var next = current.stepToward(target);
+        if (next.ordinal() > current.ordinal()) {
+            if (this.susanooBrokenTicks != 0 || next == SusanooForm.PERFECT && !hasRoomForCompleteBody()) return;
+            int entry = next == target ? 20 + 8 * this.phase : current == SusanooForm.NONE ? 12 : 0;
+            if (entry > 0 && (!canUseChakra(BossChakraReserve.NINJA_CAST_FLOOR + entry) || !useChakra(entry))) return;
+        }
+        if (setSusanooStage(next.id()) && current == SusanooForm.NONE && next != SusanooForm.NONE) {
+            this.setSusanooDurability(this.getSusanooMaxDurability() * this.suspendedShellFraction);
+            this.suspendedShellFraction = 1;
+        }
+    }
+
     private boolean absorbWithKamui(DamageSource source) {
-        // Obito always; Kakashi only once his own Mangekyo has opened at stage 3. He spent
-        // most of the war with a Sharingan he could not do this with, and the fight should
-        // change when that stops being true rather than starting there.
-        boolean canPhase = this.getVariant() == MangekyoBossVariant.OBITO
-                || (this.getVariant() == MangekyoBossVariant.KAKASHI && this.kamuiUnlocked);
-        if (!canPhase || source.isCreativePlayer()) {
+        if (this.getVariant() != MangekyoBossVariant.OBITO || source.isCreativePlayer()
+                || source.is(net.minecraft.tags.DamageTypeTags.BYPASSES_INVULNERABILITY)
+                || (source.getEntity() == null && !source.is(net.minecraft.tags.DamageTypeTags.IS_PROJECTILE))) {
             return false;
         }
-        if (this.phaseTicks > 0) {
-            return true; // already intangible; the whole flurry passes through
-        }
-        if (this.phaseCooldown > 0 || this.chakra < KAMUI_PHASE_COST
-                || this.random.nextFloat() > KAMUI_PHASE_CHANCE) {
+        return this.isKamuiPhased() || (this.random.nextFloat() <= KAMUI_PHASE_CHANCE && this.beginKamuiPhase());
+    }
+
+    public boolean isKamuiPhased() {
+        return this.phaseTicks > 0 && this.getVariant() == MangekyoBossVariant.OBITO;
+    }
+
+    public boolean beginKamuiPhase() {
+        if (!(this.level() instanceof ServerLevel level) || this.getVariant() != MangekyoBossVariant.OBITO
+                || this.phaseCooldown > 0 || this.phaseTicks > 0 || !this.useChakra(KAMUI_PHASE_COST)) {
             return false;
         }
-        this.chakra -= KAMUI_PHASE_COST;
         this.phaseTicks = KAMUI_PHASE_TICKS;
         this.phaseCooldown = KAMUI_PHASE_COOLDOWN;
-        if (this.level() instanceof ServerLevel serverLevel) {
-            serverLevel.sendParticles(ParticleTypes.PORTAL,
-                    this.getX(), this.getY() + this.getBbHeight() * 0.5, this.getZ(),
-                    40, 0.4, 0.8, 0.4, 0.4);
-            serverLevel.playSound(null, this.blockPosition(),
-                    net.minecraft.sounds.SoundEvents.SHULKER_TELEPORT,
-                    net.minecraft.sounds.SoundSource.HOSTILE, 1.2f, 0.7f);
-        }
+        this.kamuiSignal(com.sekwah.narutomod.util.KamuiPhaseWindow.Stage.PHASED);
+        level.playSound(null, this.blockPosition(), com.sekwah.narutomod.sounds.NarutoSounds.KAMUI_FOLD.get(),
+                net.minecraft.sounds.SoundSource.HOSTILE, 0.78f, 0.89f);
         return true;
+    }
+
+    private void kamuiSignal(com.sekwah.narutomod.util.KamuiPhaseWindow.Stage stage) {
+        if (this.level() instanceof ServerLevel level) {
+            var packet = new com.sekwah.narutomod.network.s2c.KamuiPhasePacket(level.dimension().location(),
+                    this.getId(), stage, KAMUI_PHASE_TICKS - this.phaseTicks, this.position(), net.minecraft.world.phys.Vec3.ZERO);
+            com.sekwah.narutomod.network.PacketHandler.sendNear(packet, level, this.position(), 40);
+        }
     }
 
     /**
@@ -557,7 +632,7 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
             return;
         }
         float fraction = this.getHealth() / this.getMaxHealth();
-        if (fraction > SENJU_HEAL_THRESHOLDS[this.senjuHealsUsed]) {
+        if (fraction > SENJU_HEAL_THRESHOLDS[this.senjuHealsUsed] || !this.useChakra(55)) {
             return;
         }
         this.senjuHealsUsed++;
@@ -574,8 +649,10 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
         }
     }
 
-    /** Enough clear sky for a thirteen-block avatar to stand up in. */
     private boolean hasRoomForCompleteBody() {
+        if (this.getVariant().hasSusanoo()) {
+            return com.sekwah.narutomod.util.GiantForm.canRaiseSusanoo(this);
+        }
         net.minecraft.core.BlockPos base = this.blockPosition();
         for (int dy = 2; dy <= COMPLETE_BODY_HEADROOM; dy++) {
             if (!this.level().getBlockState(base.above(dy)).isAir()) {
@@ -797,6 +874,7 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
         boolean sand = variant.hasSandCloak();
         String key = kurama ? "mangekyo.boss.kuramaavatar"
                 : sand ? "mangekyo.boss.shukaku"
+                : variant == MangekyoBossVariant.ITACHI ? "mangekyo.boss.armoredsusanoo"
                 : variant.hasSusanoo() ? "mangekyo.boss.completebody"
                 : "mangekyo.boss.finalform";
         serverLevel.playSound(null, this.blockPosition(),
@@ -916,14 +994,29 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
             net.minecraft.world.entity.MobSpawnType reason,
             @javax.annotation.Nullable net.minecraft.world.entity.SpawnGroupData data,
             @javax.annotation.Nullable CompoundTag tag) {
-        MangekyoBossVariant variant = MangekyoBossVariant.weightedRandom(level.getRandom());
+        this.naturalEncounter = BossSpawnProgression.isAmbient(reason);
+        var variantRoll = this.naturalEncounter
+                ? BossSpawnProgression.rollNinja(level.getRandom(), BossSpawnProgression.nearbyRank(level, this.blockPosition()))
+                : java.util.Optional.of(MangekyoBossVariant.weightedRandom(level.getRandom()));
+        if (variantRoll.isEmpty()) {
+            this.setSpawnCancelled(true);
+            return data;
+        }
+        MangekyoBossVariant variant = variantRoll.get();
         this.applyVariant(variant);
-        this.announceSighting(variant);
+        this.chakra.reset(chakraCapacity(variant));
+        this.spawnAdmissionPending = this.naturalEncounter;
         return super.finalizeSpawn(level, difficulty, reason, data, tag);
     }
 
+    public boolean takeSpawnAdmission() {
+        boolean pending = this.spawnAdmissionPending;
+        this.spawnAdmissionPending = false;
+        return pending;
+    }
+
     /** Everyone nearby should know an S-rank just walked into the region. */
-    private void announceSighting(MangekyoBossVariant variant) {
+    public void announceSighting(MangekyoBossVariant variant) {
         if (!(this.level() instanceof ServerLevel serverLevel)) {
             return;
         }
@@ -952,22 +1045,18 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
         if (this.absorbWithKamui(source)) {
             return false;
         }
-        // The Susanoo is a shell with its own integrity, exactly as it is for a player: the
-        // blow is spent on the armour and the wielder underneath is untouched until it breaks.
-        // It used to be a flat percentage off every hit, which meant the shell could never be
-        // destroyed - there was nothing to destroy, only a discount.
         int stage = this.getSusanooStage();
         if (stage > 0 && this.getVariant().hasSusanoo() && !source.isCreativePlayer()) {
             float durability = this.getSusanooDurability();
             if (durability > 0f) {
                 if (amount < durability) {
                     this.setSusanooDurability(durability - amount);
-                    this.onSusanooStruck(false);
+                    this.onSusanooStruck(source, false);
                     return false;
                 }
                 this.setSusanooDurability(0f);
+                this.onSusanooStruck(source, true);
                 this.shatterSusanoo();
-                this.onSusanooStruck(true);
                 amount -= durability;
                 if (amount <= 0f) {
                     return false;
@@ -1068,7 +1157,7 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
             return false;
         }
         float chance = SAND_SHIELD_CHANCE[Math.min(stage, SAND_SHIELD_CHANCE.length - 1)];
-        if (this.random.nextFloat() >= chance) {
+        if (this.random.nextFloat() >= chance || !this.useChakra(8 + 2 * stage)) {
             return false;
         }
         if (this.level() instanceof ServerLevel serverLevel) {
@@ -1085,14 +1174,6 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
             new net.minecraft.core.particles.DustParticleOptions(
                     new org.joml.Vector3f(0.85F, 0.75F, 0.45F), 1.2F);
 
-    /**
-     * Despawns like any other monster until a player actually engages it.
-     *
-     * These used to be flagged persistent forever, which quietly broke spawning: a boss the
-     * player never found would sit in the world permanently, and once a couple had piled up
-     * they filled the spawn cap and no further boss ever appeared. Letting unengaged ones
-     * despawn keeps the rotation alive; once you've hit it, it stays and the fight is real.
-     */
     @Override
     public boolean removeWhenFarAway(double distanceToClosestPlayer) {
         return !this.engagedByPlayer;
@@ -1104,7 +1185,10 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
         tag.putByte("Variant", this.getVariantId());
         tag.putByte("SusanooStage", (byte) this.getSusanooStage());
         tag.putInt("Phase", this.phase);
-        tag.putFloat("BossChakra", this.chakra);
+        this.chakra.save(tag);
+        tag.putBoolean("NaturalEncounter", this.naturalEncounter);
+        tag.putInt("HighestAnnouncedStage", this.highestAnnouncedStage);
+        tag.putFloat("SuspendedShellFraction", this.suspendedShellFraction);
         tag.putInt("SenjuHealsUsed", this.senjuHealsUsed);
         tag.putBoolean("KamuiUnlocked", this.kamuiUnlocked);
         tag.putBoolean("EngagedByPlayer", this.engagedByPlayer);
@@ -1114,7 +1198,6 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
         tag.putFloat("SusanooDurability", this.susanooDurability);
         tag.putInt("SusanooBrokenTicks", this.susanooBrokenTicks);
         tag.putInt("PhaseCooldown", this.phaseCooldown);
-        tag.putInt("PhaseTicks", this.phaseTicks);
     }
 
     @Override
@@ -1125,19 +1208,27 @@ public class MangekyoBossEntity extends PathfinderMob implements Enemy {
         // Falls back to the stage for bosses saved before phases existed, so a fight already
         // in progress in an old world does not restart from a full first bar.
         this.phase = tag.contains("Phase") ? tag.getInt("Phase") : tag.getByte("SusanooStage");
-        this.chakra = tag.contains("BossChakra") ? tag.getFloat("BossChakra") : MAX_CHAKRA;
+        this.chakra.reset(chakraCapacity(this.getVariant()));
+        this.chakra.load(tag);
+        this.naturalEncounter = tag.getBoolean("NaturalEncounter");
+        this.highestAnnouncedStage = tag.contains("HighestAnnouncedStage")
+                ? tag.getInt("HighestAnnouncedStage") : Math.min(this.phase, 4);
+        this.suspendedShellFraction = tag.contains("SuspendedShellFraction")
+                ? net.minecraft.util.Mth.clamp(tag.getFloat("SuspendedShellFraction"), 0f, 1f) : 1f;
         // Persisted so relogging mid-fight cannot hand Hashirama his heals back.
         this.senjuHealsUsed = tag.getInt("SenjuHealsUsed");
         this.kamuiUnlocked = tag.getBoolean("KamuiUnlocked");
         this.engagedByPlayer = tag.getBoolean("EngagedByPlayer");
         this.susanooBrokenTicks = tag.getInt("SusanooBrokenTicks");
         this.phaseCooldown = tag.getInt("PhaseCooldown");
-        this.phaseTicks = tag.getInt("PhaseTicks");
         // Read AFTER setSusanooStage above, which recomputes durability from the stage change
         // and would otherwise overwrite the saved value with a full shell.
-        this.susanooDurability = tag.contains("SusanooDurability")
-                ? tag.getFloat("SusanooDurability")
-                : this.getSusanooMaxDurability();
+        this.susanooDurability = this.getSusanooMaxDurability();
+        if (tag.contains("SusanooDurability")) {
+            int savedMaximum = SusanooForm.fromId(tag.getByte("SusanooStage")).integrity();
+            this.susanooDurability *= net.minecraft.util.Mth.clamp(tag.getFloat("SusanooDurability") / Math.max(1, savedMaximum), 0, 1);
+        }
+        this.syncShellIntegrity();
     }
 
     @Override

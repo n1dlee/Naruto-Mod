@@ -1,9 +1,12 @@
 package com.sekwah.narutomod.entity;
 
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientGamePacketListener;
 import net.minecraft.network.protocol.game.ClientboundAddEntityPacket;
-import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.network.syncher.EntityDataAccessor;
+import net.minecraft.network.syncher.EntityDataSerializers;
+import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
@@ -13,26 +16,52 @@ import net.minecraft.world.level.Level;
 import net.minecraftforge.network.NetworkHooks;
 
 public class SubstitutionLogEntity extends Mob {
-
+    private static final EntityDataAccessor<Integer> FLIP =
+            SynchedEntityData.defineId(SubstitutionLogEntity.class, EntityDataSerializers.INT);
     private int aliveTicks = 20 * 3;
 
     public SubstitutionLogEntity(EntityType<SubstitutionLogEntity> p_21368_, Level p_21369_) {
         super(p_21368_, p_21369_);
+        this.setNoAi(true);
+        this.setInvulnerable(true);
     }
 
-
     @Override
-    public boolean hurt(DamageSource pSource, float pAmount) {
-        this.setInvulnerable(true);
-        return super.hurt(pSource, pAmount);
+    protected void defineSynchedData() {
+        super.defineSynchedData();
+        this.entityData.define(FLIP, 0);
+    }
+
+    public int flipTicks() {
+        return this.entityData.get(FLIP);
     }
 
     @Override
     public void tick() {
         super.tick();
-        this.aliveTicks--;
-        if(this.aliveTicks <= 0) {
-            this.kill();
+        if (!this.level().isClientSide) {
+            if (this.flipTicks() < 10) {
+                this.entityData.set(FLIP, this.flipTicks() + 1);
+            }
+            if (--this.aliveTicks <= 0) {
+                this.discard();
+            }
+        }
+    }
+
+    @Override
+    public void addAdditionalSaveData(CompoundTag tag) {
+        super.addAdditionalSaveData(tag);
+        tag.putInt("LogTTL", this.aliveTicks);
+        tag.putInt("LogFlip", this.flipTicks());
+    }
+
+    @Override
+    public void readAdditionalSaveData(CompoundTag tag) {
+        super.readAdditionalSaveData(tag);
+        if (tag.contains("LogTTL")) {
+            this.aliveTicks = tag.getInt("LogTTL");
+            this.entityData.set(FLIP, tag.getInt("LogFlip"));
         }
     }
 

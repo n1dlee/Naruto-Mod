@@ -21,10 +21,16 @@ public class DragonHeadModel extends Model {
             new ResourceLocation(NarutoMod.MOD_ID, "dragon_head"), "main");
 
     private final ModelPart root;
+    private final ModelPart jaw;
 
     public DragonHeadModel(ModelPart root) {
         super(net.minecraft.client.renderer.RenderType::entityCutoutNoCull);
         this.root = root;
+        this.jaw = root.getChild("head").getChild("jaw");
+    }
+
+    public void setJawOpening(float angle) {
+        this.jaw.xRot = angle;
     }
 
     public static LayerDefinition createBodyLayer() {

@@ -880,8 +880,10 @@ public class SusanooWingedModel extends Model {
     }
 
     /** Where the wind-up ends and where the cut ends, as fractions of the whole swing. */
-    private static final float WINDUP_END = 0.30f;
-    private static final float STRIKE_END = 0.60f;
+    private static final float WINDUP_END = (float) com.sekwah.narutomod.util.SpectralSword.CUT_START
+            / com.sekwah.narutomod.util.SpectralSword.LENGTH;
+    private static final float STRIKE_END = (float) com.sekwah.narutomod.util.SpectralSword.CUT_END
+            / com.sekwah.narutomod.util.SpectralSword.LENGTH;
     /** Overhead and slightly out, at the top of the wind-up. */
     private static final float RAISED_X = -2.75f;
     private static final float RAISED_Z = 0.35f;

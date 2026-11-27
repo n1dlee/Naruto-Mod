@@ -32,6 +32,7 @@ public final class PoseBlender {
     public enum Track {
         CAST,
         CHANNEL,
+        RASENGAN,
         CHIDORI,
         WALL_CLIMB,
         SPRINT,
@@ -208,8 +209,12 @@ public final class PoseBlender {
 
         /** Blends the part's rotation toward this curve's value at the given phase. */
         public void rotate(ModelPart part, float phase, float weight) {
+            rotate(part, phase, weight, 1f);
+        }
+
+        public void rotate(ModelPart part, float phase, float weight, float side) {
             sample(phase);
-            PoseBlender.rotate(part, weight, sx, sy, sz);
+            PoseBlender.rotate(part, weight, sx, sy * side, sz * side);
         }
 
         /** Same, for the part's offset from its default position. */

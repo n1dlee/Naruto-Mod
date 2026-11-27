@@ -6,12 +6,10 @@ import org.joml.Matrix4f;
 import com.sekwah.narutomod.capabilities.NinjaCapabilityHandler;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
-import net.minecraft.core.Direction;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.client.event.RenderGuiOverlayEvent;
 import net.minecraftforge.client.event.RenderLevelStageEvent;
-import net.minecraftforge.client.event.ViewportEvent;
 import net.minecraftforge.client.gui.overlay.VanillaGuiOverlay;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.TickEvent;
@@ -44,9 +42,6 @@ public class NarutoInGameGUI {
 
     private static Matrix4f worldMatrix;
     private static Vec3 cameraPos;
-    private static final float WALL_WALK_FEEDBACK_ROLL = 6.0F;
-    private static final float WALL_WALK_ROLL_EASING = 0.18F;
-    private float wallWalkRoll = 0.0F;
 
     public NarutoInGameGUI(){
         this.minecraft = Minecraft.getInstance();
@@ -64,12 +59,13 @@ public class NarutoInGameGUI {
         this.jutsuHudOverlay = new JutsuHudGUI(this.minecraft);
         this.activeJutsuOverlay = new ActiveJutsuGUI(this.minecraft);
 
-        this.overlays = new PlayerGUI[]{this.byakuganEntityVisionOverlay, this.byakuganOverlay, this.sharinganOverlay, this.rinneganOverlay, this.sageModeOverlay, this.kuramaCloakOverlay, this.susanooOverlay, this.kcmOverlay, this.worldMarkerOverlay, this.substitutionOverlay, this.charkaOverlay, this.jutsuHudOverlay, this.activeJutsuOverlay};
+        this.overlays = new PlayerGUI[]{this.byakuganEntityVisionOverlay, this.byakuganOverlay, this.sharinganOverlay, this.rinneganOverlay,
+                this.sageModeOverlay, this.kuramaCloakOverlay, this.susanooOverlay, this.kcmOverlay, this.worldMarkerOverlay,
+                this.substitutionOverlay, this.charkaOverlay, this.jutsuHudOverlay, this.activeJutsuOverlay, new SusanooIntegrityGUI(this.minecraft)};
 
         MinecraftForge.EVENT_BUS.addListener(this::renderGameOverlay);
         MinecraftForge.EVENT_BUS.addListener(this::clientTickEvent);
         MinecraftForge.EVENT_BUS.addListener(this::renderLevelLast);
-        MinecraftForge.EVENT_BUS.addListener(this::computeCameraAngles);
     }
 
     // TODO switch over to new renderer
@@ -86,12 +82,13 @@ public class NarutoInGameGUI {
 
     @SubscribeEvent
     public void clientTickEvent(TickEvent.ClientTickEvent event) {
-        if(this.minecraft.getCameraEntity() instanceof Player player) {
+        if (event.phase != TickEvent.Phase.END) {
+            return;
+        }
+        Player player = this.minecraft.player;
+        if (player != null && !player.isSpectator()) {
             player.getCapability(NinjaCapabilityHandler.NINJA_DATA).ifPresent(ninjaData -> {
                 shouldRender = ninjaData.isNinjaModeEnabled();
-                Direction wallWalkDirection = ninjaData.getWallWalkDirection();
-                float targetRoll = getWallWalkCameraTargetRoll(ninjaData.isNinjaModeEnabled(), wallWalkDirection, ninjaData.getWallWalkTicks());
-                wallWalkRoll += (targetRoll - wallWalkRoll) * WALL_WALK_ROLL_EASING;
                 // Show clan selection screen if ninja mode enabled but no clan chosen
                 if (ninjaData.isNinjaModeEnabled() && ninjaData.getClanId().isEmpty()
                         && minecraft.screen == null) {
@@ -103,25 +100,9 @@ public class NarutoInGameGUI {
             }
         } else {
             shouldRender = false;
-            wallWalkRoll += (0.0F - wallWalkRoll) * WALL_WALK_ROLL_EASING;
+            worldMatrix = null;
+            cameraPos = null;
         }
-    }
-
-    private float getWallWalkCameraTargetRoll(boolean ninjaModeEnabled, Direction wallWalkDirection, int wallWalkTicks) {
-        if (!ninjaModeEnabled || wallWalkDirection == null || wallWalkTicks <= 0) {
-            return 0.0F;
-        }
-        // Naruto-style wall walking keeps the player's horizon mostly straight.
-        // This small roll is only contact feedback, not Spider-Man-style camera gravity.
-        return WALL_WALK_FEEDBACK_ROLL * rollSignFor(wallWalkDirection);
-    }
-
-    private float rollSignFor(Direction direction) {
-        return switch (direction) {
-            case EAST, SOUTH -> 1.0F;
-            case WEST, NORTH -> -1.0F;
-            default -> 0.0F;
-        };
     }
 
     /**
@@ -133,6 +114,7 @@ public class NarutoInGameGUI {
      * @param event
      */
     @SubscribeEvent
+    @Deprecated
     public void renderGameOverlay(RenderGuiOverlayEvent.Post event) {
         if(event.getOverlay() != VanillaGuiOverlay.HOTBAR.type()) {
             return;
@@ -169,11 +151,4 @@ public class NarutoInGameGUI {
         //MultiBufferSource multiBufferSource = mc.renderBuffers().bufferSource();
     }
 
-    @SubscribeEvent
-    public void computeCameraAngles(ViewportEvent.ComputeCameraAngles event) {
-        if (Math.abs(this.wallWalkRoll) < 0.05F) {
-            return;
-        }
-        event.setRoll(event.getRoll() + this.wallWalkRoll);
-    }
 }

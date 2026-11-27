@@ -3,8 +3,11 @@ package com.sekwah.narutomod.capabilities;
 import com.sekwah.narutomod.NarutoMod;
 import com.sekwah.narutomod.abilities.Ability;
 import com.sekwah.narutomod.registries.NarutoRegistries;
+import com.sekwah.narutomod.util.BaikaScale;
+import com.sekwah.narutomod.util.BoulderRoll;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.Pose;
 import net.minecraft.world.entity.player.Player;
 import net.minecraftforge.common.capabilities.Capability;
 import net.minecraftforge.common.capabilities.CapabilityManager;
@@ -71,6 +74,13 @@ public class NinjaCapabilityHandler {
         event.getOriginal().getCapability(NINJA_DATA).ifPresent(original -> {
             event.getEntity().getCapability(NINJA_DATA).ifPresent(future -> {
                 future.deserializeNBT(original.serializeNBT());
+                if (event.isWasDeath()) {
+                    future.setSageCharge(0);
+                    future.setSageStoneUntil(0);
+                    future.setGatesOpen(0);
+                    future.setGatesTicks(0);
+                    future.getGateCycle().clear();
+                }
             });
         });
     }
@@ -99,6 +109,15 @@ public class NinjaCapabilityHandler {
         }
         player.getCapability(NINJA_DATA).ifPresent(ninjaData -> {
             if (!ninjaData.isGiantForm()) {
+                float roll = BoulderRoll.body(player);
+                if (roll > 0 && event.getPose() != Pose.SLEEPING && event.getPose() != Pose.DYING) {
+                    event.setNewEyeHeight(roll * 1.37f);
+                    return;
+                }
+                float baika = BaikaScale.current(player);
+                if (baika > 1 && event.getPose() != Pose.SLEEPING && event.getPose() != Pose.DYING) {
+                    event.setNewEyeHeight(event.getNewEyeHeight() * baika);
+                }
                 return;
             }
             float height = com.sekwah.narutomod.util.GiantForm.HEIGHT_BLOCKS;

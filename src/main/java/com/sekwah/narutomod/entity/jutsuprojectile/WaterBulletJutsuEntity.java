@@ -5,6 +5,7 @@ import com.sekwah.narutomod.entity.NarutoEntities;
 import com.sekwah.narutomod.entity.projectile.AbstractNonGlowingHurtingProjectile;
 import com.sekwah.narutomod.sounds.NarutoSounds;
 import com.sekwah.narutomod.util.NarutoParticles;
+import com.sekwah.narutomod.util.ProjectileAxis;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.ParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
@@ -24,10 +25,7 @@ public class WaterBulletJutsuEntity extends AbstractNonGlowingHurtingProjectile 
 
     public int lifeSpan = 30;
 
-    /**
-     * This is roughly the max speed a projectile can have before going sideways or weird, if you go crazily faster it fixes again but that's too fast
-     */
-    private final double multiplier = 0.52D;
+    private static final double ACCELERATION = 0.52;
     private float damageMultiplier = 1.0F;
 
     public WaterBulletJutsuEntity(EntityType<WaterBulletJutsuEntity> entityConstructor, Level level) {
@@ -38,19 +36,29 @@ public class WaterBulletJutsuEntity extends AbstractNonGlowingHurtingProjectile 
         super(entityType, p_36824_);
         this.moveTo(posX, posY, posZ, this.getYRot(), this.getXRot());
         this.reapplyPosition();
-        double d0 = Math.sqrt(velX * velX + velY * velY + velZ * velZ);
-        if (d0 != 0.0D) {
-            this.xPower = velX / d0 * multiplier;
-            this.yPower = velY / d0 * multiplier;
-            this.zPower = velZ / d0 * multiplier;
-        }
-
+        this.launchAlong(new Vec3(velX, velY, velZ));
     }
 
     public WaterBulletJutsuEntity(LivingEntity player, double xVel, double yVel, double zVel) {
         this(NarutoEntities.WATER_BULLET_JUTSU.get(), player.getX(), player.getEyeY() - 0.15f, player.getZ(),  xVel, yVel, zVel, player.level());
         this.setOwner(player);
-        this.setRot(player.getYRot(), player.getXRot());
+    }
+
+    private void launchAlong(Vec3 direction) {
+        Vec3 axis = ProjectileAxis.direction(direction, this.getLookAngle());
+        Vec3 motion = axis.scale(ACCELERATION);
+        this.xPower = motion.x;
+        this.yPower = motion.y;
+        this.zPower = motion.z;
+        this.setDeltaMovement(motion);
+        var angles = ProjectileAxis.angles(axis);
+        this.setRot(angles.yaw(), angles.pitch());
+        this.yRotO = this.getYRot();
+        this.xRotO = this.getXRot();
+    }
+
+    public Vec3 flightHeading() {
+        return ProjectileAxis.direction(this.getDeltaMovement(), new Vec3(this.xPower, this.yPower, this.zPower));
     }
 
     public void setDamageMultiplier(float damageMultiplier) {
@@ -61,11 +69,8 @@ public class WaterBulletJutsuEntity extends AbstractNonGlowingHurtingProjectile 
     public void tick() {
         super.tick();
 
-        // Companion trail so the bolt reads as a denser water projectile instead of a bare
-        // single-particle streak — the base class already emits one getTrailParticle() per
-        // tick, this adds a sparser blue-tinted second layer alongside it.
         if (this.tickCount % 2 == 0) {
-            this.level().addParticle(NarutoParticles.WATER_BLUE, this.getX(), this.getY() + 0.1, this.getZ(), 0.0D, 0.0D, 0.0D);
+            this.level().addParticle(NarutoParticles.WATER_BLUE, this.getX(), this.getY(), this.getZ(), 0.0D, 0.0D, 0.0D);
         }
 
         if (lifeSpan-- <= 0) {
@@ -83,8 +88,7 @@ public class WaterBulletJutsuEntity extends AbstractNonGlowingHurtingProjectile 
         }
         if (this.isInWater()) {
             Vec3 vec3 = this.getDeltaMovement();
-            // To counteract the slowdown by water in super code
-            this.setDeltaMovement(vec3.add(this.xPower, this.yPower, this.zPower).scale(1f));
+            this.setDeltaMovement(vec3.add(this.xPower, this.yPower, this.zPower));
         }
     }
 
@@ -176,6 +180,11 @@ public class WaterBulletJutsuEntity extends AbstractNonGlowingHurtingProjectile 
     }
 
     @Override
+    protected double trailHeight() {
+        return 0;
+    }
+
+    @Override
     public boolean isPickable() {
         return false;
     }
@@ -186,21 +195,8 @@ public class WaterBulletJutsuEntity extends AbstractNonGlowingHurtingProjectile 
     }
 
     @Override
-    public void recreateFromPacket(ClientboundAddEntityPacket p_150128_) {
-        super.recreateFromPacket(p_150128_);
-        // To counteract weird tracking delay
-        if(this.getOwner() != null) {
-            this.setYRot(this.getOwner().getYRot() - 180);
-            this.yRotO = this.getYRot();
-        }
-        double d0 = p_150128_.getXa();
-        double d1 = p_150128_.getYa();
-        double d2 = p_150128_.getZa();
-        double d3 = Math.sqrt(d0 * d0 + d1 * d1 + d2 * d2);
-        if (d3 != 0.0D) {
-            this.xPower = d0 / d3 * multiplier;
-            this.yPower = d1 / d3 * multiplier;
-            this.zPower = d2 / d3 * multiplier;
-        }
+    public void recreateFromPacket(ClientboundAddEntityPacket packet) {
+        super.recreateFromPacket(packet);
+        this.launchAlong(new Vec3(packet.getXa(), packet.getYa(), packet.getZa()));
     }
 }

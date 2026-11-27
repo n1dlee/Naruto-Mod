@@ -1,8 +1,9 @@
 package com.sekwah.narutomod.entity.jutsuprojectile;
 
 import com.sekwah.narutomod.entity.NarutoEntities;
+import com.sekwah.narutomod.util.Faction;
+import com.sekwah.narutomod.util.MirrorRing;
 import com.sekwah.narutomod.util.NarutoParticles;
-import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientGamePacketListener;
@@ -10,91 +11,106 @@ import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.network.NetworkHooks;
 
+import javax.annotation.Nullable;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
-/**
- * One pane of Haku's Demonic Mirroring Ice Crystals.
- *
- * The mirrors are the technique, so they are entities rather than a particle flourish: each
- * one stands, each one can be broken, and breaking enough of them ends it. That is the whole
- * counterplay - the technique is not a timer you wait out, it is a structure you take apart,
- * and until you do, Haku is inside any of them.
- *
- * Twenty seconds is a long time to be surrounded, so the ring is deliberately fragile: a
- * mirror dies to a couple of solid hits and there are never more than ten.
- */
 public class IceMirrorEntity extends Entity {
-
+    public static final double HEIGHT = 2.5;
+    public static final float MAX_HEALTH = 12f;
+    public static final int RING_SIZE = MirrorRing.SECTIONS;
+    public static final double RING_RADIUS = MirrorRing.RADIUS;
+    private static final int LIFESPAN = 400;
     private static final EntityDataAccessor<Float> HEALTH =
             SynchedEntityData.defineId(IceMirrorEntity.class, EntityDataSerializers.FLOAT);
-    /** Which way the pane faces, in degrees; the renderer turns it to face the ring's centre. */
     private static final EntityDataAccessor<Float> FACING =
             SynchedEntityData.defineId(IceMirrorEntity.class, EntityDataSerializers.FLOAT);
+    private static final EntityDataAccessor<Integer> RISE =
+            SynchedEntityData.defineId(IceMirrorEntity.class, EntityDataSerializers.INT);
+    private static final EntityDataAccessor<Integer> SHATTER =
+            SynchedEntityData.defineId(IceMirrorEntity.class, EntityDataSerializers.INT);
+    private static final EntityDataAccessor<Integer> REFLECTION =
+            SynchedEntityData.defineId(IceMirrorEntity.class, EntityDataSerializers.INT);
 
-    private static final float MAX_HEALTH = 12f;
-    private static final int LIFESPAN = 20 * 20;
-
-    /** How many panes go up around a target, and how far out they stand. */
-    public static final int RING_SIZE = 8;
-    public static final double RING_RADIUS = 4.0;
-
-    private Optional<UUID> ownerUUID = Optional.empty();
+    private Optional<UUID> owner = Optional.empty();
+    private UUID ringId = UUID.randomUUID();
+    private Vec3 center = Vec3.ZERO;
     private int age;
+    private float boundFacing;
+    private Map<UUID, Vec3> nearby = new HashMap<>();
 
-    public IceMirrorEntity(EntityType<IceMirrorEntity> entityType, Level level) {
-        super(entityType, level);
+    public IceMirrorEntity(EntityType<IceMirrorEntity> type, Level level) {
+        super(type, level);
         this.noPhysics = true;
     }
 
-    public IceMirrorEntity(LivingEntity caster, Vec3 position, float facing) {
-        this(NarutoEntities.ICE_MIRROR.get(), caster.level());
-        this.setPos(position.x, position.y, position.z);
-        this.ownerUUID = Optional.of(caster.getUUID());
-        this.entityData.set(FACING, facing);
+    public static List<IceMirrorEntity> raiseRing(LivingEntity caster, Vec3 center) {
+        if (!(caster.level() instanceof ServerLevel level)) {
+            return List.of();
+        }
+        UUID ring = UUID.randomUUID();
+        List<IceMirrorEntity> panes = new ArrayList<>();
+        for (int slot = 0; slot < RING_SIZE; slot++) {
+            Vec3 outward = MirrorRing.outward(slot);
+            Vec3 point = center.add(outward.scale(RING_RADIUS));
+            Vec3 footing = safeFloor(level, caster, point, IceMirrorEntity.HEIGHT);
+            if (footing == null) {
+                continue;
+            }
+            var pane = new IceMirrorEntity(NarutoEntities.ICE_MIRROR.get(), level);
+            pane.ringId = ring;
+            pane.center = center;
+            pane.owner = Optional.of(caster.getUUID());
+            pane.entityData.set(FACING, (float) Math.toDegrees(Math.atan2(outward.z, outward.x)) + 90f);
+            pane.entityData.set(RISE, -MirrorRing.delay(slot));
+            pane.setPos(footing);
+            if (level.addFreshEntity(pane)) {
+                panes.add(pane);
+            }
+        }
+        return panes;
     }
 
-    /**
-     * Raises the full ring around a point and hands back the panes.
-     *
-     * Shared by the boss kit and the player ability so the two cannot drift: one place decides
-     * how many mirrors there are, how far out they stand and how tall they are.
-     */
-    public static List<IceMirrorEntity> raiseRing(LivingEntity caster, Vec3 centre) {
-        java.util.ArrayList<IceMirrorEntity> mirrors = new java.util.ArrayList<>();
-        for (int i = 0; i < RING_SIZE; i++) {
-            double angle = (Math.PI * 2 * i) / RING_SIZE;
-            Vec3 spot = centre.add(Math.cos(angle) * RING_RADIUS, 0.5, Math.sin(angle) * RING_RADIUS);
-            // Facing measured back toward the centre, so every pane looks inward.
-            float facing = (float) Math.toDegrees(-angle) + 90f;
-            IceMirrorEntity mirror = new IceMirrorEntity(caster, spot, facing);
-            caster.level().addFreshEntity(mirror);
-            mirrors.add(mirror);
+    @Nullable
+    static Vec3 safeFloor(Level level, LivingEntity caster, Vec3 point, double clearance) {
+        Vec3 start = point.add(0, 0.8, 0);
+        var floor = level.clip(new ClipContext(start, point.add(0, -1.50, 0),
+                ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, caster));
+        if (floor.getType() != HitResult.Type.BLOCK || floor.getDirection() != net.minecraft.core.Direction.UP) {
+            return null;
         }
-        if (caster.level() instanceof ServerLevel serverLevel) {
-            NarutoParticles.spawnRing(serverLevel, centre.add(0, 0.2, 0), RING_RADIUS, 40,
-                    NarutoParticles.ICE_PALE);
-            serverLevel.playSound(null, caster.blockPosition(), SoundEvents.GLASS_PLACE,
-                    SoundSource.HOSTILE, 2.0f, 0.7f);
-        }
-        return mirrors;
+        Vec3 feet = new Vec3(point.x, floor.getLocation().y + 0.035, point.z);
+        AABB box = new AABB(feet.x - 0.34, feet.y, feet.z - 0.34, feet.x + 0.34, feet.y + clearance, feet.z + 0.34);
+        return level.noCollision(caster, box) && level.getFluidState(net.minecraft.core.BlockPos.containing(feet)).isEmpty()
+                ? feet : null;
     }
 
     @Override
     protected void defineSynchedData() {
         this.entityData.define(HEALTH, MAX_HEALTH);
         this.entityData.define(FACING, 0f);
+        this.entityData.define(RISE, 0);
+        this.entityData.define(SHATTER, 0);
+        this.entityData.define(REFLECTION, 0);
     }
 
     public float getMirrorHealth() {
@@ -105,19 +121,77 @@ public class IceMirrorEntity extends Entity {
         return this.entityData.get(FACING);
     }
 
+    public int riseTicks() {
+        return this.entityData.get(RISE);
+    }
+
+    public int shatterTicks() {
+        return this.entityData.get(SHATTER);
+    }
+
+    public int reflectionTicks() {
+        return this.entityData.get(REFLECTION);
+    }
+
     public Optional<UUID> getOwnerUUID() {
-        return this.ownerUUID;
+        return this.owner;
+    }
+
+    public UUID ringId() {
+        return this.ringId;
+    }
+
+    public Vec3 ringCenter() {
+        return this.center;
+    }
+
+    public Vec3 inward() {
+        return Vec3.directionFromRotation(0, this.getFacing());
+    }
+
+    public boolean available() {
+        return !this.isRemoved() && this.shatterTicks() == 0 && this.riseTicks() >= MirrorRing.RISE_TICKS;
+    }
+
+    public void flash() {
+        if (this.available()) {
+            this.entityData.set(REFLECTION, 7);
+        }
+    }
+
+    @Override
+    protected AABB makeBoundingBox() {
+        return this.paneBounds();
+    }
+
+    private AABB paneBounds() {
+        Vec3 normal = Vec3.directionFromRotation(0, this.boundFacing);
+        double x = Math.abs(normal.z) * MirrorRing.WIDTH * 0.5 + 0.11;
+        double z = Math.abs(normal.x) * MirrorRing.WIDTH * 0.5 + 0.11;
+        return new AABB(this.getX() - x, this.getY(), this.getZ() - z,
+                this.getX() + x, this.getY() + HEIGHT, this.getZ() + z);
+    }
+
+    @Override
+    public void onSyncedDataUpdated(EntityDataAccessor<?> key) {
+        super.onSyncedDataUpdated(key);
+        if (FACING.equals(key)) {
+            this.boundFacing = this.getFacing();
+            this.setBoundingBox(this.paneBounds());
+        }
     }
 
     @Override
     public void tick() {
         super.tick();
-        if (this.level().isClientSide) {
-            if (this.random.nextInt(4) == 0) {
-                this.level().addParticle(ParticleTypes.SNOWFLAKE,
-                        this.getX() + (this.random.nextDouble() - 0.5),
-                        this.getY() + this.random.nextDouble() * 2.0,
-                        this.getZ() + (this.random.nextDouble() - 0.5), 0, -0.02, 0);
+        if (!(this.level() instanceof ServerLevel level)) {
+            return;
+        }
+        if (this.shatterTicks() > 0) {
+            if (this.shatterTicks() >= 6) {
+                this.discard();
+            } else {
+                this.entityData.set(SHATTER, this.shatterTicks() + 1);
             }
             return;
         }
@@ -125,127 +199,97 @@ public class IceMirrorEntity extends Entity {
             this.shatter();
             return;
         }
-        this.holdPrisoners();
-    }
-
-    /**
-     * Keeps whoever is inside the dome inside it.
-     *
-     * The technique is a cage - Haku's whole approach is that the opponent cannot leave while
-     * he moves between the panes - and the ring did not hold anyone at all. Eight thin entities
-     * have no collision worth the name, so anyone could simply walk out between two of them,
-     * which left the dome as decoration around a normal fight.
-     *
-     * Containment is done by pushing rather than by teleporting: a shove back toward the centre
-     * lets the trapped fighter still move, dodge and fight inside the ring, whereas snapping
-     * their position would fight their own movement every tick and feel broken.
-     *
-     * Only one pane needs to run this, or eight of them would each apply the full shove and
-     * launch the prisoner across the arena.
-     */
-    private void holdPrisoners() {
-        if (!this.isRingAnchor()) {
-            return;
+        int rise = this.riseTicks();
+        if (rise < MirrorRing.RISE_TICKS) {
+            this.entityData.set(RISE, rise + 1);
+            if (rise + 1 == MirrorRing.RISE_TICKS) {
+                level.playSound(null, this.blockPosition(), SoundEvents.GLASS_PLACE, SoundSource.HOSTILE, 0.48f, 1.15f);
+            }
         }
-        Vec3 centre = this.ringCentre();
-        for (LivingEntity caught : this.level().getEntitiesOfClass(LivingEntity.class,
-                new net.minecraft.world.phys.AABB(centre, centre)
-                        .inflate(RING_RADIUS + 2.5, 4.0, RING_RADIUS + 2.5),
-                e -> e.isAlive() && !this.isOwner(e))) {
-            Vec3 offset = caught.position().subtract(centre);
-            double distance = offset.horizontalDistance();
-            if (distance <= RING_RADIUS - 0.6 || distance < 1.0E-4) {
-                continue;
-            }
-            // Scales with how far past the wall they are, so brushing it nudges and charging
-            // it throws you back hard.
-            double overshoot = Math.min(distance - (RING_RADIUS - 0.6), 2.5);
-            Vec3 inward = new Vec3(-offset.x / distance, 0, -offset.z / distance)
-                    .scale(0.18 + overshoot * 0.22);
-            caught.setDeltaMovement(caught.getDeltaMovement().add(inward.x, 0, inward.z));
-            caught.hurtMarked = true;
-
-            if (this.level() instanceof ServerLevel serverLevel && this.age % 4 == 0) {
-                Vec3 wall = centre.add(offset.x / distance * RING_RADIUS, 1.0,
-                        offset.z / distance * RING_RADIUS);
-                serverLevel.sendParticles(ParticleTypes.SNOWFLAKE, wall.x, wall.y, wall.z,
-                        3, 0.2, 0.4, 0.2, 0.01);
-            }
+        if (this.reflectionTicks() > 0) {
+            this.entityData.set(REFLECTION, this.reflectionTicks() - 1);
+        }
+        if (this.available()) {
+            this.blockCrossing(level);
         }
     }
 
-    /**
-     * Whether this pane is the one that runs containment for its ring.
-     *
-     * Picked by lowest entity id among the panes sharing a centre, so exactly one runs it and
-     * the job moves to a survivor when that pane is broken.
-     */
-    private boolean isRingAnchor() {
-        Vec3 centre = this.ringCentre();
-        for (IceMirrorEntity other : this.level().getEntitiesOfClass(IceMirrorEntity.class,
-                new net.minecraft.world.phys.AABB(centre, centre).inflate(RING_RADIUS + 1.0, 3.0, RING_RADIUS + 1.0))) {
-            if (other.getId() < this.getId()) {
-                return false;
+    private void blockCrossing(ServerLevel level) {
+        Vec3 outward = this.inward().reverse();
+        Map<UUID, Vec3> observed = new HashMap<>();
+        Entity caster = this.owner.map(level::getEntity).orElse(null);
+        for (LivingEntity entity : level.getEntitiesOfClass(LivingEntity.class,
+                this.getBoundingBox().inflate(2.8, 0.2, 2.8),
+                actor -> this.blocks(caster, actor))) {
+            Vec3 current = entity.position();
+            Vec3 before = this.nearby.getOrDefault(entity.getUUID(), new Vec3(entity.xOld, entity.yOld, entity.zOld));
+            Vec3 hit = MirrorRing.clipOutward(before, current, this.position(), outward, entity.getBbWidth() * 0.44, HEIGHT);
+            if (hit != null && level.noCollision(entity, entity.getBoundingBox().move(hit.subtract(current)))) {
+                move(entity, hit);
+                Vec3 velocity = entity.getDeltaMovement();
+                entity.setDeltaMovement(velocity.subtract(outward.scale(Math.max(0, velocity.dot(outward)))));
+                entity.hurtMarked = true;
+                current = hit;
             }
+            observed.put(entity.getUUID(), current);
+        }
+        this.nearby = observed;
+    }
+
+    private boolean blocks(@Nullable Entity caster, LivingEntity actor) {
+        if (!actor.isAlive() || actor.isSpectator() || this.owner.filter(actor.getUUID()::equals).isPresent()
+                || Faction.sameSide(caster, actor)) {
+            return false;
+        }
+        if (actor instanceof Player player) {
+            return !player.isCreative() && (caster != null || this.owner.isEmpty())
+                    && (!(caster instanceof Player source) || source.canHarmPlayer(player));
         }
         return true;
     }
 
-    /** The pane faces inward, so the centre is one radius along its own facing. */
-    private Vec3 ringCentre() {
-        double radians = Math.toRadians(this.getFacing());
-        return this.position().add(-Math.sin(radians) * RING_RADIUS, 0, Math.cos(radians) * RING_RADIUS);
+    public static void move(LivingEntity entity, Vec3 point) {
+        if (entity instanceof ServerPlayer player) {
+            player.connection.teleport(point.x, point.y, point.z, player.getYRot(), player.getXRot());
+        } else {
+            entity.teleportTo(point.x, point.y, point.z);
+        }
+        entity.resetFallDistance();
     }
 
-    private boolean isOwner(LivingEntity entity) {
-        return this.ownerUUID.isPresent() && this.ownerUUID.get().equals(entity.getUUID());
-    }
-
-    /**
-     * Mirrors take damage from anything except the ninja standing inside them.
-     *
-     * Attacked rather than invulnerable on purpose: a technique that cannot be interfered
-     * with is a timer, and this one is supposed to be a structure.
-     */
     @Override
     public boolean hurt(DamageSource source, float amount) {
-        if (this.level().isClientSide || this.isRemoved()) {
+        if (!(this.level() instanceof ServerLevel level) || !this.available() || amount <= 0
+                || (source.getEntity() != null && this.owner.filter(source.getEntity().getUUID()::equals).isPresent())) {
             return false;
         }
-        if (source.getEntity() instanceof LivingEntity attacker
-                && this.ownerUUID.map(attacker.getUUID()::equals).orElse(false)) {
-            return false;
-        }
-        float left = this.getMirrorHealth() - amount;
-        this.entityData.set(HEALTH, Math.max(0f, left));
-        if (this.level() instanceof ServerLevel serverLevel) {
-            serverLevel.playSound(null, this.blockPosition(), SoundEvents.GLASS_HIT,
-                    SoundSource.HOSTILE, 1.0f, 1.2f);
-        }
-        if (left <= 0f) {
+        float health = Math.max(0, this.getMirrorHealth() - amount);
+        this.entityData.set(HEALTH, health);
+        if (health == 0) {
             this.shatter();
+        } else {
+            level.playSound(null, this.blockPosition(), SoundEvents.GLASS_HIT, SoundSource.HOSTILE, 0.9f, 1.12f);
         }
         return true;
     }
 
     public void shatter() {
-        if (this.level() instanceof ServerLevel serverLevel) {
-            NarutoParticles.spawnBurst(serverLevel, this.position().add(0, 1.0, 0), 30, 0.9,
-                    NarutoParticles.ICE_PALE);
-            serverLevel.playSound(null, this.blockPosition(), SoundEvents.GLASS_BREAK,
-                    SoundSource.HOSTILE, 1.4f, 1.0f);
+        if (this.shatterTicks() != 0 || !(this.level() instanceof ServerLevel level)) {
+            return;
         }
-        this.discard();
+        this.entityData.set(SHATTER, 1);
+        NarutoParticles.spawnBurst(level, this.position().add(0, 1.0, 0), 18, 0.9, NarutoParticles.ICE_PALE);
+        level.playSound(null, this.blockPosition(), SoundEvents.GLASS_BREAK, SoundSource.HOSTILE, 1.12f, 0.94f);
     }
 
     @Override
     public boolean isPickable() {
-        return true;
+        return this.available();
     }
 
     @Override
     public boolean isAttackable() {
-        return true;
+        return this.available();
     }
 
     @Override
@@ -253,8 +297,15 @@ public class IceMirrorEntity extends Entity {
         this.age = tag.getInt("Age");
         this.entityData.set(HEALTH, tag.getFloat("MirrorHealth"));
         this.entityData.set(FACING, tag.getFloat("Facing"));
-        this.ownerUUID = tag.hasUUID("OwnerUUID")
-                ? Optional.of(tag.getUUID("OwnerUUID")) : Optional.empty();
+        this.entityData.set(RISE, tag.getInt("MirrorRise"));
+        this.entityData.set(SHATTER, tag.getInt("MirrorShatter"));
+        this.owner = tag.hasUUID("OwnerUUID") ? Optional.of(tag.getUUID("OwnerUUID")) : Optional.empty();
+        if (!tag.hasUUID("MirrorRing")) {
+            this.age = LIFESPAN;
+            return;
+        }
+        this.ringId = tag.getUUID("MirrorRing");
+        this.center = new Vec3(tag.getDouble("RingX"), tag.getDouble("RingY"), tag.getDouble("RingZ"));
     }
 
     @Override
@@ -262,7 +313,13 @@ public class IceMirrorEntity extends Entity {
         tag.putInt("Age", this.age);
         tag.putFloat("MirrorHealth", this.getMirrorHealth());
         tag.putFloat("Facing", this.getFacing());
-        this.ownerUUID.ifPresent(uuid -> tag.putUUID("OwnerUUID", uuid));
+        tag.putInt("MirrorRise", this.riseTicks());
+        tag.putInt("MirrorShatter", this.shatterTicks());
+        this.owner.ifPresent(uuid -> tag.putUUID("OwnerUUID", uuid));
+        tag.putUUID("MirrorRing", this.ringId);
+        tag.putDouble("RingX", this.center.x);
+        tag.putDouble("RingY", this.center.y);
+        tag.putDouble("RingZ", this.center.z);
     }
 
     @Override

@@ -18,27 +18,12 @@ import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 
-/**
- * Wraps a boss in their own Susanoo once the fight has worn them down, tinted with that
- * wielder's canon colour from {@link MangekyoBossVariant} - Itachi red-orange, Madara
- * blue, and so on.
- *
- * Draws the SAME detailed bodies ported from the 1.12.2 mod that the player's Susanoo
- * uses. It used to fall back to the old blocky SusanooModel unconditionally, so an
- * Uchiha boss manifested a visibly cruder Susanoo than the player standing in front of
- * them - which read as a bug rather than as a difference. All the geometry constants
- * below are shared with SusanooRenderer for exactly that reason.
- */
+/** Renders the Complete Body using the boss variant's tint. */
 public class BossSusanooLayer extends RenderLayer<MangekyoBossEntity, HumanoidModel<MangekyoBossEntity>> {
 
     private static final ResourceLocation FALLBACK_TEXTURE =
             new ResourceLocation(NarutoMod.MOD_ID, "textures/entity/susanoo.png");
     private static final RenderType FALLBACK_TYPE = RenderType.entityTranslucent(FALLBACK_TEXTURE);
-    /**
-     * Blocky-fallback scale per stage. Bosses used to be capped at 3 here and in the entity,
-     * so no wielder ever manifested a Complete Body - and the one form of the technique
-     * everybody actually wants to see was the one nothing in the world could show you.
-     */
     private static final float[] FALLBACK_STAGE_SCALE = {0f, 1.8f, 2.4f, 3.2f, 6.5f};
     private static final float ALPHA = 0.55f;
     private static final float DETAILED_ALPHA = 0.85f;
@@ -56,17 +41,12 @@ public class BossSusanooLayer extends RenderLayer<MangekyoBossEntity, HumanoidMo
                        MangekyoBossEntity boss, float limbSwing, float limbSwingAmount, float partialTick,
                        float ageInTicks, float netHeadYaw, float headPitch) {
         MangekyoBossVariant variant = boss.getVariant();
-        // The capability, not just the counter.
-        //
-        // The stage byte used to be Susanoo-only, so "stage > 0" was a safe proxy for "has a
-        // Susanoo". Then every wielder was put on the same escalation ladder, and this layer
-        // kept reading the counter alone - so Sasori, Hidan and every other non-Uchiha grew a
-        // spectral ribcage the moment their health dropped below three quarters.
+        // The escalation stage is shared by bosses without Susanoo.
         if (!variant.hasSusanoo()) {
             return;
         }
         int stage = boss.getSusanooStage();
-        if (stage <= 0) {
+        if (stage != 4) {
             return;
         }
 

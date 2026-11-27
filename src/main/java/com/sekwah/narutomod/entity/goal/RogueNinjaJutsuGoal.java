@@ -2,25 +2,19 @@ package com.sekwah.narutomod.entity.goal;
 
 import com.sekwah.narutomod.abilities.Ability;
 import com.sekwah.narutomod.abilities.NarutoAbilities;
-import com.sekwah.narutomod.damagetypes.NarutoDamageTypes;
 import com.sekwah.narutomod.entity.RogueNinjaEntity;
-import com.sekwah.narutomod.entity.jutsuprojectile.FireballJutsuEntity;
-import com.sekwah.narutomod.entity.jutsuprojectile.WaterBulletJutsuEntity;
-import com.sekwah.narutomod.util.NarutoParticles;
+import com.sekwah.narutomod.entity.jutsuprojectile.GreatFireballEntity;
+import com.sekwah.narutomod.entity.jutsuprojectile.GianBeamEntity;
+import com.sekwah.narutomod.entity.jutsuprojectile.GustFrontEntity;
+import com.sekwah.narutomod.entity.jutsuprojectile.ShockArcEntity;
+import com.sekwah.narutomod.entity.jutsuprojectile.WaterShotEntity;
+import com.sekwah.narutomod.events.EarthSpikeCast;
+import com.sekwah.narutomod.sounds.NarutoSounds;
 import com.sekwah.narutomod.util.SharinganCopy;
 import net.minecraftforge.registries.RegistryObject;
-import net.minecraft.core.BlockPos;
-import net.minecraft.core.particles.BlockParticleOption;
-import net.minecraft.core.particles.ParticleTypes;
-import net.minecraft.server.level.ServerLevel;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
-import net.minecraft.world.damagesource.DamageSource;
-import net.minecraft.world.effect.MobEffectInstance;
-import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.goal.Goal;
-import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.EnumSet;
@@ -62,14 +56,9 @@ public class RogueNinjaJutsuGoal extends Goal {
     private static final float LIGHTNING_SHOCK_DAMAGE = 5.0f;
     private static final float FALSE_DARKNESS_DAMAGE = 6.5f;
     private static final float EARTH_SPIKE_DAMAGE = 6.0f;
-    private static final float WIND_DAMAGE = 4.0f;
 
     private static final int SPIKE_COUNT = 3;
-    private static final int SPIKE_HEIGHT = 2;
-    private static final int SPIKE_LIFESPAN = 120;
 
-    private static final double WIND_RANGE = 8.0;
-    private static final double WIND_HALF_ANGLE_COS = 0.65;
 
     private final RogueNinjaEntity ninja;
     private int cooldown;
@@ -132,99 +121,29 @@ public class RogueNinjaJutsuGoal extends Goal {
 
     /** Fire Release: Fireball. The genuine projectile, owned by the mob. */
     private RegistryObject<? extends Ability> castFireball(LivingEntity target) {
-        Vec3 aim = aimVector(target);
-        FireballJutsuEntity fireball = new FireballJutsuEntity(this.ninja, aim.x, aim.y, aim.z);
-        // Uncharged, and scaled below a player's: a chunin-grade fireball, not Madara's.
-        fireball.setChargeAmount(0, false, FIREBALL_MULTIPLIER);
-        this.ninja.level().addFreshEntity(fireball);
-        playCastSound(SoundEvents.FIRECHARGE_USE, 0.9f);
+        GreatFireballEntity.launch(this.ninja, aimVector(target), 0, FIREBALL_MULTIPLIER);
         return NarutoAbilities.FIREBALL;
     }
 
     /** Water Release: Water Bullet. Also the genuine projectile. */
     private RegistryObject<? extends Ability> castWaterBullet(LivingEntity target) {
-        Vec3 aim = aimVector(target);
-        WaterBulletJutsuEntity bullet = new WaterBulletJutsuEntity(this.ninja, aim.x, aim.y, aim.z);
-        bullet.setDamageMultiplier(WATER_BULLET_MULTIPLIER);
-        this.ninja.level().addFreshEntity(bullet);
-        playCastSound(SoundEvents.BUCKET_EMPTY, 1.1f);
+        WaterShotEntity.launch(this.ninja, aimVector(target), WATER_BULLET_MULTIPLIER, false);
         return NarutoAbilities.WATER_BULLET;
     }
 
-    /**
-     * Earth Release: Earth Spikes - a line of pillars erupting toward the target, throwing
-     * anything caught into the air. The dirt is registered with the entity so it comes back
-     * down; if mob griefing is off the hit still lands and only the blocks are skipped.
-     */
     private RegistryObject<? extends Ability> castEarthSpikes(LivingEntity target) {
         Vec3 toTarget = target.position().subtract(this.ninja.position());
         Vec3 forward = new Vec3(toTarget.x, 0, toTarget.z).normalize();
-        boolean mayPlaceBlocks = net.minecraftforge.event.ForgeEventFactory
-                .getMobGriefingEvent(this.ninja.level(), this.ninja);
-        // The mod has no earth damage type, and inventing one would need a data file plus a
-        // datagen pass for a single mob attack. A plain mob hit reads the same in game.
-        DamageSource source = this.ninja.damageSources().mobAttack(this.ninja);
-
-        for (int i = 1; i <= SPIKE_COUNT; i++) {
-            double distance = i * 2.0;
-            double x = this.ninja.getX() + forward.x * distance;
-            double z = this.ninja.getZ() + forward.z * distance;
-            BlockPos root = groundAt(x, z);
-
-            for (LivingEntity caught : this.ninja.level().getEntitiesOfClass(LivingEntity.class,
-                    new net.minecraft.world.phys.AABB(root).inflate(0.9, SPIKE_HEIGHT, 0.9),
-                    e -> e != this.ninja && e.isAlive() && !(e instanceof RogueNinjaEntity))) {
-                caught.hurt(source, EARTH_SPIKE_DAMAGE);
-                Vec3 velocity = caught.getDeltaMovement();
-                caught.setDeltaMovement(velocity.x * 0.4, Math.min(velocity.y + 0.65, 1.1), velocity.z * 0.4);
-                caught.hurtMarked = true;
-            }
-
-            if (mayPlaceBlocks && this.ninja.level() instanceof ServerLevel serverLevel) {
-                for (int h = 0; h < SPIKE_HEIGHT; h++) {
-                    BlockPos pos = root.above(h);
-                    if (serverLevel.getBlockState(pos).isAir()) {
-                        serverLevel.setBlockAndUpdate(pos, Blocks.DIRT.defaultBlockState());
-                        this.ninja.trackRaisedSpike(pos, SPIKE_LIFESPAN);
-                    }
-                }
-                BlockParticleOption debris =
-                        new BlockParticleOption(ParticleTypes.BLOCK, Blocks.DIRT.defaultBlockState());
-                serverLevel.sendParticles(debris, root.getX() + 0.5, root.getY() + 1.0, root.getZ() + 0.5,
-                        14, 0.35, 0.4, 0.35, 0.04);
-            }
+        if (forward.lengthSqr() < 1.0e-8 || !EarthSpikeCast.line(this.ninja, forward, SPIKE_COUNT, EARTH_SPIKE_DAMAGE)) {
+            return null;
         }
-        playCastSound(SoundEvents.GRAVEL_BREAK, 0.7f);
+        playCastSound(NarutoSounds.EARTH_SPIKE_CRACK.get(), 0.92f);
         return NarutoAbilities.EARTH_SPIKES;
     }
 
     /** Wind Release: Great Breakthrough - a cone that hurls everything in front away. */
     private RegistryObject<? extends Ability> castGreatBreakthrough(LivingEntity target) {
-        Vec3 eye = this.ninja.getEyePosition();
-        Vec3 look = target.getEyePosition().subtract(eye).normalize();
-
-        for (LivingEntity caught : this.ninja.level().getEntitiesOfClass(LivingEntity.class,
-                this.ninja.getBoundingBox().expandTowards(look.scale(WIND_RANGE)).inflate(WIND_RANGE * 0.5),
-                e -> e != this.ninja && e.isAlive() && !(e instanceof RogueNinjaEntity))) {
-            Vec3 toCaught = caught.position().add(0, caught.getBbHeight() * 0.5, 0).subtract(eye).normalize();
-            if (toCaught.dot(look) < WIND_HALF_ANGLE_COS || eye.distanceTo(caught.position()) > WIND_RANGE) {
-                continue;
-            }
-            caught.hurt(this.ninja.damageSources().mobAttack(this.ninja), WIND_DAMAGE);
-            caught.knockback(1.4, -look.x, -look.z);
-            caught.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 2 * 20, 0, false, true));
-        }
-        playCastSound(SoundEvents.PHANTOM_FLAP, 0.8f);
-
-        if (this.ninja.level() instanceof ServerLevel serverLevel) {
-            for (int i = 1; i <= 20; i++) {
-                Vec3 point = eye.add(look.scale(i / 20.0 * WIND_RANGE));
-                double spread = (i / 20.0) * WIND_RANGE * 0.3;
-                serverLevel.sendParticles(ParticleTypes.CLOUD,
-                        point.x, point.y, point.z, 2, spread * 0.5, spread * 0.25, spread * 0.5, 0.05);
-            }
-        }
-        return NarutoAbilities.GREAT_BREAKTHROUGH;
+        return GustFrontEntity.launch(this.ninja, aimVector(target), 1) ? NarutoAbilities.GREAT_BREAKTHROUGH : null;
     }
 
     /**
@@ -235,43 +154,13 @@ public class RogueNinjaJutsuGoal extends Goal {
      */
     private RegistryObject<? extends Ability> castLightning(LivingEntity target) {
         boolean falseDarkness = this.ninja.getRandom().nextInt(3) == 0;
-        DamageSource source = NarutoDamageTypes.getDamageSource(
-                this.ninja.level(), NarutoDamageTypes.CHIDORI, this.ninja, this.ninja);
-
         if (falseDarkness) {
-            // A beam: everything on the line between them takes it, not just the target.
-            Vec3 eye = this.ninja.getEyePosition();
-            Vec3 look = target.getEyePosition().subtract(eye).normalize();
-            for (LivingEntity caught : this.ninja.level().getEntitiesOfClass(LivingEntity.class,
-                    this.ninja.getBoundingBox().expandTowards(look.scale(MAX_RANGE)).inflate(1.5),
-                    e -> e != this.ninja && e.isAlive() && !(e instanceof RogueNinjaEntity))) {
-                Vec3 toCaught = caught.getEyePosition().subtract(eye).normalize();
-                if (toCaught.dot(look) > 0.94) {
-                    caught.hurt(source, FALSE_DARKNESS_DAMAGE);
-                }
-            }
-            drawBolt(eye, eye.add(look.scale(MAX_RANGE)));
-            playCastSound(SoundEvents.LIGHTNING_BOLT_THUNDER, 1.4f);
-            return NarutoAbilities.FALSE_DARKNESS;
+            Vec3 center = target.position().add(0, target.getBbHeight() * 0.5, 0);
+            return GianBeamEntity.launch(this.ninja, center, FALSE_DARKNESS_DAMAGE, false)
+                    ? NarutoAbilities.FALSE_DARKNESS : null;
         }
-
-        target.hurt(source, LIGHTNING_SHOCK_DAMAGE);
-        target.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 2 * 20, 2, false, true));
-        drawBolt(this.ninja.getEyePosition(), target.position().add(0, target.getBbHeight() * 0.5, 0));
-        playCastSound(SoundEvents.LIGHTNING_BOLT_IMPACT, 1.5f);
-        return NarutoAbilities.LIGHTNING_SHOCK;
-    }
-
-    private void drawBolt(Vec3 from, Vec3 to) {
-        if (!(this.ninja.level() instanceof ServerLevel serverLevel)) {
-            return;
-        }
-        int steps = Math.max(6, (int) (from.distanceTo(to) * 4));
-        for (int i = 0; i <= steps; i++) {
-            Vec3 point = from.lerp(to, i / (double) steps);
-            serverLevel.sendParticles(NarutoParticles.CHIDORI_CYAN,
-                    point.x, point.y, point.z, 1, 0.05, 0.05, 0.05, 0.0);
-        }
+        Vec3 center = target.position().add(0, target.getBbHeight() * 0.5, 0);
+        return ShockArcEntity.cast(this.ninja, center, LIGHTNING_SHOCK_DAMAGE) ? NarutoAbilities.LIGHTNING_SHOCK : null;
     }
 
     /** Leads the target slightly so a projectile at range is not trivially side-stepped. */
@@ -279,15 +168,6 @@ public class RogueNinjaJutsuGoal extends Goal {
         Vec3 aimPoint = target.position().add(0, target.getBbHeight() * 0.5, 0)
                 .add(target.getDeltaMovement().scale(2.0));
         return aimPoint.subtract(this.ninja.getEyePosition()).normalize();
-    }
-
-    private BlockPos groundAt(double x, double z) {
-        BlockPos pos = BlockPos.containing(x, this.ninja.getY(), z);
-        int minY = this.ninja.level().getMinBuildHeight();
-        while (pos.getY() > minY && this.ninja.level().getBlockState(pos.below()).isAir()) {
-            pos = pos.below();
-        }
-        return pos;
     }
 
     private void playCastSound(net.minecraft.sounds.SoundEvent sound, float pitch) {

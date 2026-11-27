@@ -57,7 +57,7 @@ public class BossRepositionGoal extends Goal {
         // A giant does not skip backwards; it stands and stamps. Asks isGiant() rather than
         // the stage number, or every non-giant wielder would also stop repositioning for the
         // last twelve percent of the fight purely because they share the counter.
-        if (this.boss.isGiant()) {
+        if (this.boss.isGiant() || this.boss.isChakraExhausted()) {
             return false;
         }
         return this.boss.distanceTo(target) < CROWDED_RANGE;
@@ -72,7 +72,7 @@ public class BossRepositionGoal extends Goal {
     @Override
     public boolean canContinueToUse() {
         LivingEntity target = this.boss.getTarget();
-        return this.remaining > 0 && target != null && target.isAlive();
+        return this.remaining > 0 && target != null && target.isAlive() && !this.boss.isChakraExhausted();
     }
 
     @Override

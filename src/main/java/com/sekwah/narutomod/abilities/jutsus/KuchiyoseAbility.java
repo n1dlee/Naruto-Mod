@@ -3,112 +3,87 @@ package com.sekwah.narutomod.abilities.jutsus;
 import com.sekwah.narutomod.abilities.Ability;
 import com.sekwah.narutomod.capabilities.INinjaData;
 import com.sekwah.narutomod.entity.NarutoEntities;
-import com.sekwah.narutomod.entity.SummonBeastEntity;
 import com.sekwah.narutomod.entity.SummonBeastVariant;
+import com.sekwah.narutomod.events.ContractSummonEvents;
+import com.sekwah.narutomod.events.SummonRitualEvents;
 import net.minecraft.ChatFormatting;
-import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.chat.Component;
-import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvent;
-import net.minecraft.sounds.SoundEvents;
-
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.phys.Vec3;
 
-/**
- * Kuchiyose no Jutsu — Summoning Technique (combo 312, INSTANT).
- * The classic blood-contract summon: slam a palm down and call a battle beast from its
- * own realm. The contract follows the clan — Uzumaki call Gamabunta of Mount Myoboku,
- * Uchiha call Manda of Ryuchi Cave, Senju and Haruno call Katsuyu of Shikkotsu Forest,
- * and everyone else calls Enma, the Monkey King. Jonin+ (a summon this size takes
- * serious chakra).
- */
-public class KuchiyoseAbility extends Ability implements Ability.Cooldown {
+import java.util.function.BiConsumer;
 
-    private static final float CHAKRA_COST = 100f;
+public class KuchiyoseAbility extends Ability implements Ability.Cooldown, Ability.DeferredInstant, Ability.AlternateActivation {
+    private static final float COST = 100;
 
     @Override
-    public ActivationType activationType() {
-        return ActivationType.INSTANT;
-    }
-
-    /** Bite the thumb, run the seals, slam the palm down. It should cost time. */
-    @Override
-    public int castPoseTicks() {
-        return 26;
-    }
+    public ActivationType activationType() { return ActivationType.INSTANT; }
 
     @Override
-    public long defaultCombo() {
-        return 312;
-    }
+    public int castPoseTicks() { return 10; }
 
     @Override
-    public int getCooldown() {
-        return 90 * 20;
-    }
+    public long defaultCombo() { return 312; }
 
     @Override
-    public SoundEvent castingSound() {
-        return SoundEvents.EVOKER_PREPARE_SUMMON;
-    }
+    public int getCooldown() { return 90 * 20; }
 
     @Override
-    public boolean handleCost(Player player, INinjaData ninjaData, int chargeAmount) {
-        if (ninjaData.getNinjaRank() < 3) {
+    public SoundEvent castingSound() { return null; }
+
+    @Override
+    public boolean handleCost(Player player, INinjaData data, int chargeAmount) {
+        if (data.getNinjaRank() < 3) {
             player.displayClientMessage(Component.translatable("jutsu.fail.rank.jonin",
-                    Component.translatable(this.getTranslationKey(ninjaData)).withStyle(ChatFormatting.YELLOW)), true);
+                    Component.translatable(this.getTranslationKey(data)).withStyle(ChatFormatting.YELLOW)), true);
             return false;
         }
-        if (ninjaData.getChakra() < CHAKRA_COST) {
+        if (data.getChakra() < COST) {
             player.displayClientMessage(Component.translatable("jutsu.fail.notenoughchakra",
-                    Component.translatable(this.getTranslationKey(ninjaData)).withStyle(ChatFormatting.YELLOW)), true);
+                    Component.translatable(this.getTranslationKey(data)).withStyle(ChatFormatting.YELLOW)), true);
             return false;
         }
-        ninjaData.useChakra(CHAKRA_COST, 40);
         return true;
     }
 
     @Override
-    public void performServer(Player player, INinjaData ninjaData, int ticksActive) {
-        if (!(player.level() instanceof ServerLevel serverLevel)) {
+    public void beginInstant(ServerPlayer player, INinjaData data, BiConsumer<ServerPlayer, INinjaData> success) {
+        if (ContractSummonEvents.occupied(player)) {
+            player.displayClientMessage(Component.translatable("jutsu.fail.summon.active"), true);
             return;
         }
-        SummonBeastEntity beast = NarutoEntities.SUMMON_BEAST.get().create(serverLevel);
-        if (beast == null) {
-            return;
+        var variant = SummonBeastVariant.forNinja(data.getSummonContract(), data.getClanId());
+        var breed = new SummonRitualEvents.Breed(COST, variant.getWidth(), variant.getHeight(), variant.sealStyle(), 9,
+                (owner, level) -> {
+                    if (ContractSummonEvents.occupied(owner)) {
+                        return null;
+                    }
+                    var mob = NarutoEntities.SUMMON_BEAST.get().create(level);
+                    if (mob == null) {
+                        return null;
+                    }
+                    mob.setOwner(owner);
+                    mob.setVariant(variant);
+                    mob.setHealth(mob.getMaxHealth());
+                    mob.setCustomName(Component.literal(variant.getDisplayName()));
+                    mob.setCustomNameVisible(true);
+                    return mob;
+                });
+        if (!SummonRitualEvents.start(player, data, success, breed)) {
+            player.displayClientMessage(Component.translatable("jutsu.fail.summon.space"), true);
         }
+    }
 
-        SummonBeastVariant variant = SummonBeastVariant.forNinja(
-                ninjaData.getSummonContract(), ninjaData.getClanId());
+    @Override
+    public boolean handleAlternate(Player player, INinjaData data) {
+        return player instanceof ServerPlayer owner && owner.isShiftKeyDown() && ContractSummonEvents.recall(owner);
+    }
 
-        Vec3 look = player.getLookAngle();
-        // Far enough out that Gamabunta does not land on top of the ninja who called him.
-        double clearance = 2.0 + variant.getWidth();
-        Vec3 spawnPos = player.position().add(new Vec3(look.x, 0, look.z).normalize().scale(clearance));
-        // Placed on ground with room for the beast's actual size. Spawning blind at the
-        // caster's own Y buried Gamabunta in a hillside or dropped him through a cliff edge -
-        // and a summon embedded in stone is stuck there for its whole duration.
-        Vec3 placed = com.sekwah.narutomod.util.SummonPlacement.findClear(
-                serverLevel, spawnPos, player.getY(), variant.getWidth(), variant.getHeight());
-        if (placed == null) {
-            player.displayClientMessage(Component.literal("No room to summon here.")
-                    .withStyle(ChatFormatting.RED), true);
-            return;
+    @Override
+    public void performServer(Player player, INinjaData data, int ticksActive) {
+        if (player instanceof ServerPlayer owner) {
+            beginInstant(owner, data, (actor, state) -> {});
         }
-        beast.setPos(placed.x, placed.y, placed.z);
-        beast.setOwner(player);
-        // Order matters: setVariant rewrites max health, so the top-up has to come after it.
-        beast.setVariant(variant);
-        beast.setHealth(beast.getMaxHealth());
-        beast.setCustomName(Component.literal(variant.getDisplayName()));
-        beast.setCustomNameVisible(true);
-        serverLevel.addFreshEntity(beast);
-
-        // Summoning smoke burst — the classic kuchiyose cloud
-        serverLevel.sendParticles(ParticleTypes.LARGE_SMOKE,
-                spawnPos.x, player.getY() + 1.0, spawnPos.z, 60, 1.5, 1.2, 1.5, 0.08);
-        serverLevel.sendParticles(ParticleTypes.POOF,
-                spawnPos.x, player.getY() + 0.5, spawnPos.z, 30, 1.2, 0.8, 1.2, 0.05);
     }
 }

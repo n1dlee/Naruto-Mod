@@ -2,30 +2,19 @@ package com.sekwah.narutomod.abilities.jutsus;
 
 import com.sekwah.narutomod.abilities.Ability;
 import com.sekwah.narutomod.capabilities.INinjaData;
-import com.sekwah.narutomod.entity.jutsuprojectile.FireballJutsuEntity;
-import com.sekwah.narutomod.sounds.NarutoSounds;
+import com.sekwah.narutomod.entity.jutsuprojectile.GreatFireballEntity;
+import com.sekwah.narutomod.util.FireballShape;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.phys.Vec3;
 
-/**
- * Fire Style: Great Fireball Jutsu — combo 121, CHANNELED.
- *
- * Tap (< 10 ticks): fires a standard fireball instantly.
- * Hold (10–60 ticks): fireball scales in size, damage and explosion radius.
- * Max charge (60 ticks): 3× size, 3× damage, 14-block explosion radius.
- *
- * Uchiha clan bonus: +30% damage at every charge level.
- */
+/** Paid charge determines the Gōkakyū projectile's size and damage. */
 public class FireballJutsuAbility extends Ability implements Ability.Channeled, Ability.Cooldown {
 
     private static final float BASE_CHAKRA = 30f;
     private static final float CHAKRA_PER_TICK = 1.5f;
-    private static final int MAX_CHARGE = 60;
 
     @Override
     public ActivationType activationType() {
@@ -53,7 +42,6 @@ public class FireballJutsuAbility extends Ability implements Ability.Channeled, 
     public int getCooldown() {
         return 2 * 20; // short enough to stay the workhorse fire technique, long enough to cost something
     }
-    // --- Phase 15: Nature Release ---
     @Override
     public String element() {
         return "fire";
@@ -100,48 +88,16 @@ public class FireballJutsuAbility extends Ability implements Ability.Channeled, 
      */
     @Override
     public void handleChannelling(Player player, INinjaData ninjaData, int ticksChanneled) {
-        if (player.level() instanceof ServerLevel serverLevel) {
-            double speed = 0.8 + (ticksChanneled / 30.0);
-            double angle = ticksChanneled * speed;
-            double radius = 0.25 + (ticksChanneled / 60.0) * 0.35;
-
-            for (int i = 0; i < 3; i++) {
-                double a = angle + (Math.PI * 2.0 / 3.0) * i;
-                double px = player.getX() + Math.cos(a) * radius;
-                double py = player.getEyeY() - 0.1;
-                double pz = player.getZ() + Math.sin(a) * radius;
-                serverLevel.sendParticles(ParticleTypes.FLAME, px, py, pz, 1, 0, 0.02, 0, 0.01);
-                if (ticksChanneled > 20) {
-                    serverLevel.sendParticles(ParticleTypes.LAVA, px, py, pz, 1, 0.02, 0.02, 0.02, 0);
-                }
-            }
-            // Rising heat-shimmer smoke as the fireball builds up
-            if (ticksChanneled % 3 == 0) {
-                serverLevel.sendParticles(ParticleTypes.LARGE_SMOKE,
-                        player.getX(), player.getEyeY() + 0.1, player.getZ(),
-                        1, 0.15, 0.05, 0.15, 0.01);
-            }
+        if (ticksChanneled % 3 == 0 && player.level() instanceof ServerLevel level) {
+            var mouth = player.getEyePosition().add(0, -0.16, 0).add(player.getLookAngle().scale(0.38));
+            float spread = 0.055f + FireballShape.charge(ticksChanneled) / 1000.0f;
+            level.sendParticles(ParticleTypes.SMALL_FLAME, mouth.x, mouth.y, mouth.z, 3, spread, spread, spread, 0.015);
         }
     }
 
     @Override
     public void performServer(Player player, INinjaData ninjaData, int ticksActive) {
-        // A cone widening away from the mouth, hottest down the middle.
-        if (player.level() instanceof net.minecraft.server.level.ServerLevel vfxLevel) {
-            com.sekwah.narutomod.util.ElementalVfx.fireCone(vfxLevel,
-                    player.getEyePosition(), player.getLookAngle(), 3.0, 1.1);
-        }
-
-        final int charge = Math.min(ticksActive, MAX_CHARGE);
-        final boolean isUchiha = "uchiha".equals(ninjaData.getClanId());
-
-        ninjaData.scheduleDelayedTickEvent((delayedPlayer) -> {
-            Vec3 shootSpeed = delayedPlayer.getLookAngle();
-            FireballJutsuEntity fireball = new FireballJutsuEntity(delayedPlayer, shootSpeed.x, shootSpeed.y, shootSpeed.z);
-            fireball.setChargeAmount(charge, isUchiha, ninjaData.getRankDamageMultiplier());
-            delayedPlayer.level().addFreshEntity(fireball);
-            delayedPlayer.level().playSound(null, delayedPlayer,
-                    NarutoSounds.FIREBALL_SHOOT.get(), SoundSource.PLAYERS, 1f + charge / 60f, 1.0f);
-        }, charge > 0 ? 5 : 10); // charged fires slightly faster (less wind-up delay)
+        float clan = "uchiha".equals(ninjaData.getClanId()) ? 1.25f : 1.0f;
+        GreatFireballEntity.launch(player, player.getLookAngle(), ticksActive, clan * ninjaData.getRankDamageMultiplier());
     }
 }

@@ -38,6 +38,14 @@ public class DoubleJumpData {
         this.diffUpdateTicksClient = 0;
     }
 
+    public boolean consumeServer() {
+        if (!this.canDoubleJumpServer) {
+            return false;
+        }
+        this.canDoubleJumpServer = false;
+        return true;
+    }
+
     /**
      * Abusing this so the server only flags for updates if its jump status is different.
      * @param o
@@ -51,5 +59,10 @@ public class DoubleJumpData {
         } else {
             return false;
         }
+    }
+
+    @Override
+    public int hashCode() {
+        return Boolean.hashCode(this.canDoubleJumpServer);
     }
 }

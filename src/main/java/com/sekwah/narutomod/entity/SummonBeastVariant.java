@@ -1,6 +1,7 @@
 package com.sekwah.narutomod.entity;
 
 import com.sekwah.narutomod.NarutoMod;
+import com.sekwah.narutomod.util.SummoningCircle.Style;
 import net.minecraft.resources.ResourceLocation;
 
 /**
@@ -121,14 +122,16 @@ public enum SummonBeastVariant {
         return this == KATSUYU;
     }
 
-    /**
-     * Which beast this ninja can call.
-     *
-     * A signed contract wins outright. The clan mapping below is only the tradition a ninja
-     * grows up around - the partner they meet first if they never sign anything else - and it
-     * is a starting point, not an identity. It used to be the whole answer, which meant the
-     * choice of clan at character creation silently decided the summon forever.
-     */
+    public Style sealStyle() {
+        return switch (this) {
+            case GAMABUNTA -> Style.TOAD;
+            case MANDA -> Style.SNAKE;
+            case KATSUYU -> Style.SLUG;
+            case ENMA -> Style.MONKEY;
+        };
+    }
+
+    /** A recognized signed contract takes precedence over the clan default. */
     public static SummonBeastVariant forNinja(String signedContract, String clanId) {
         if (signedContract != null && !signedContract.isEmpty()) {
             for (SummonBeastVariant variant : values()) {

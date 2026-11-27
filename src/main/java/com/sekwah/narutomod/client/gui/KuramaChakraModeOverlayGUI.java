@@ -1,7 +1,7 @@
 package com.sekwah.narutomod.client.gui;
 
-import com.mojang.blaze3d.systems.RenderSystem;
 import com.sekwah.narutomod.capabilities.NinjaCapabilityHandler;
+import com.sekwah.narutomod.config.NarutoConfig;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.world.entity.player.Player;
@@ -23,28 +23,13 @@ public class KuramaChakraModeOverlayGUI implements PlayerGUI {
 
     @Override
     public void render(GuiGraphics guiGraphics, Matrix4f worldMatrix, Vec3 cameraPos) {
-        if (!this.active) return;
-
-        int width = this.minecraft.getWindow().getGuiScaledWidth();
-        int height = this.minecraft.getWindow().getGuiScaledHeight();
-
-        RenderSystem.enableBlend();
-
-        int alpha = 35;
-        int vignetteColor = (alpha << 24) | 0xFFD966;
-
-        guiGraphics.fill(0, 0, width, 12, vignetteColor);
-        guiGraphics.fill(0, height - 12, width, height, vignetteColor);
-        guiGraphics.fill(0, 0, 10, height, vignetteColor);
-        guiGraphics.fill(width - 10, 0, width, height, vignetteColor);
-
-        float pulse = (float) (0.4 + 0.3 * Math.sin(System.currentTimeMillis() / 180.0));
-        int pulseAlpha = (int) (pulse * 24);
-        int pulseColor = (pulseAlpha << 24) | 0xFFFFCC;
-        guiGraphics.fill(0, 0, width, 6, pulseColor);
-        guiGraphics.fill(0, height - 6, width, height, pulseColor);
-
-        RenderSystem.disableBlend();
+        if (!this.active || NarutoConfig.reducedBodyRiteEffects || this.minecraft.getCameraEntity() != this.minecraft.player) {
+            return;
+        }
+        int width = guiGraphics.guiWidth();
+        int height = guiGraphics.guiHeight();
+        guiGraphics.fillGradient(0, 0, width, 12, 0x26FAD782, 0x00FAD782);
+        guiGraphics.fillGradient(0, height - 12, width, height, 0x00FAD782, 0x26FAD782);
     }
 
     @Override

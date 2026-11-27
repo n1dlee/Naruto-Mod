@@ -2,7 +2,12 @@ package com.sekwah.narutomod.capabilities;
 
 import com.sekwah.narutomod.abilities.Ability;
 import com.sekwah.narutomod.capabilities.toggleabilitydata.ToggleAbilityData;
-import net.minecraft.core.BlockPos;
+import com.sekwah.narutomod.util.SurfaceStride;
+import com.sekwah.narutomod.util.DashStride;
+import com.sekwah.narutomod.util.ChargeFeedback;
+import com.sekwah.narutomod.util.HiraishinFormula;
+import com.sekwah.narutomod.util.SageFocus;
+import com.sekwah.narutomod.util.EightGateCycle;
 import net.minecraft.nbt.Tag;
 import net.minecraft.core.Direction;
 import net.minecraft.resources.ResourceLocation;
@@ -32,33 +37,34 @@ public interface INinjaData extends INBTSerializable<Tag> {
     void setInvisibleTicks(int ticks);
     boolean getInvisible();
 
-    // --- Kurama's own chakra, separate from the player's chakra pool ---
+    // Kurama's own chakra, separate from the player's chakra pool.
     float getKuramaBond();
     float getMaxKuramaBond();
     void useKuramaBond(float amount);
     void addKuramaBond(float amount);
 
-    // --- Scroll-wheel size/power control for tiered transformations (Susanoo / Kurama Cloak) ---
+    // Scroll-wheel size/power control for tiered transformations (Susanoo / Kurama Cloak).
     float getTransformPower();
     void adjustTransformPower(float delta);
 
-    // --- Universal hand-seal cast-flash pose (Phase 9 Part B) ---
+    // Universal hand-seal cast-flash pose.
     int getCastPoseTicks();
     void setCastPoseTicks(int ticks);
     boolean isCrossSealPose();
     void setCrossSealPose(boolean crossSeal);
 
-    // --- Ability-specific cast pose dispatch (Phase 10 Part B) ---
+    // Ability-specific cast pose dispatch.
     ResourceLocation getLastCastAbilityId();
     void setLastCastAbilityId(ResourceLocation id);
 
-    // --- Rasengan: held in hand, toggled on/off, resized with the scroll wheel ---
+    // Rasengan: held in hand, toggled on/off, resized with the scroll wheel.
     /** The summoning contract this ninja signed, or empty to fall back to clan tradition. */
     String getSummonContract();
     void setSummonContract(String contract);
 
     boolean isRasenganHeld();
     void setRasenganHeld(boolean held);
+    boolean consumeHeldRasengan();
 
     /** True once the sphere has been spent; makes the toggle refuse to re-form it. */
     boolean isRasenganConsumed();
@@ -93,8 +99,11 @@ public interface INinjaData extends INBTSerializable<Tag> {
     void setIsNinja(boolean enableNinja);
 
     boolean isNinjaModeEnabled();
+    boolean hasTrainingLoadout();
+    void enableTrainingLoadout();
+    boolean disableTrainingLoadout();
 
-    // --- Phase 3: Progression ---
+    // Progression.
     float getChakraXp();
     void addChakraXp(float amount);
     int getNinjaRank();
@@ -115,12 +124,15 @@ public interface INinjaData extends INBTSerializable<Tag> {
     boolean recordMangekyoBossKill();
     /** Chakra restored per tick of Chakra Charge channelling at this rank. */
     float getChakraChargePerTick(boolean moving);
+    ChargeFeedback chakraChargeFeedback();
+    int getChargeIntensity();
+    void setChargeIntensity(int intensity);
     String getClanId();
     void setClanId(String clanId);
     String getNatureAffinity();
     void setNatureAffinity(String nature);
 
-    // --- Phase 15: Nature Release progression ---
+    // Nature Release progression.
     boolean isElementUnlocked(String element);
     java.util.List<String> getUnlockedElements();
     int getMaxElementSlots();
@@ -129,14 +141,14 @@ public interface INinjaData extends INBTSerializable<Tag> {
     float getElementXp(String element);
     void addElementXp(String element, float amount);
     int getElementLevel(String element);
-    // --- Operator overrides (the /ninja command); normal play never calls these ---
+    // Operator overrides (the /ninja command); normal play never calls these.
     void setElementLevel(String element, int level);
     boolean removeElement(String element);
     void grantElement(String element);
     boolean isJutsuLearned(String jutsuPath);
     void learnJutsu(String jutsuPath);
 
-    // --- Bingo Book bounty ---
+    // Bingo Book bounty.
     String getBountyTargetId();
     int getBountyRemaining();
     float getBountyRewardXp();
@@ -151,6 +163,8 @@ public interface INinjaData extends INBTSerializable<Tag> {
      */
     int getChakraSightRange();
     boolean isByakuganActive();
+
+    int getEyeVisualState();
     float getRankDamageMultiplier();
     float getClanLightningDamageMultiplier();
     float getClanJutsuRangeMultiplier();
@@ -164,47 +178,58 @@ public interface INinjaData extends INBTSerializable<Tag> {
     int getWallWalkTicks();
     int getWallWalkDetachTicks();
     void setWallWalkDetachTicks(int ticks);
+    SurfaceStride getSurfaceStride();
+    DashStride getDashStride();
+    int getWallWalkTurnTicks();
+    Direction getWallWalkTurnFrom();
+    void beginWallWalkTurn(Direction previous);
     void resetProgression();
 
-    // --- Shadow Possession (Nara clan) ---
+    // Shadow Possession (Nara clan).
     void setShadowPossessedTarget(UUID targetUUID, int ticks);
     UUID getShadowPossessedTargetUUID();
     int getShadowPossessionTicks();
     boolean hasShadowTarget();
 
-    // --- Sage Mode ---
+    // Sage Mode.
     boolean isSageModeActive();
     void setSageModeActive(boolean active);
     int getSageModeTicks();
     void setSageModeTicks(int ticks);
     int getSageCharge();
     void setSageCharge(int charge);
+    SageFocus getSageFocus();
+    long getSageStoneUntil();
+    void setSageStoneUntil(long until);
+    int getSageStoneTicks();
 
-    // --- Flying Thunder God ---
-    BlockPos getThunderGodMark();
-    void setThunderGodMark(BlockPos pos);
+    // Flying Thunder God.
+    HiraishinFormula.Book getHiraishinFormulas();
+    void setHiraishinFormulas(HiraishinFormula.Book book);
 
-    // --- Eight Gates ---
+    // Eight Gates.
     int getGatesOpen();
     void setGatesOpen(int gates);
     int getGatesTicks();
     void setGatesTicks(int ticks);
+    EightGateCycle getGateCycle();
 
-    // --- Kurama Cloak (Jinchuriki) ---
+    // Kurama Cloak (Jinchuriki).
     boolean isKuramaCloakActive();
     void setKuramaCloakActive(boolean active);
     int getKuramaCloakTicks();
     void setKuramaCloakTicks(int ticks);
     int getKuramaTailCount();
     void setKuramaTailCount(int count);
+    int getKuramaTailAge();
     float getKuramaMeleeDamageMultiplier();
-    void triggerKuramaTailLash(Player player, net.minecraft.world.entity.LivingEntity primaryTarget);
 
-    // --- Kurama Chakra Mode (KCM) ---
+    // Kurama Chakra Mode (KCM).
     boolean isKcmActive();
     void setKcmActive(boolean active);
+    int getKcmFormAge();
 
-    // --- Phase 16: Dojutsu progression (stored, not rank-derived) ---
+    // Dojutsu progression (stored, not rank-derived).
     int getSharinganTomoe();
     void setSharinganTomoe(int tomoe);
     /** Born Uchiha, or anyone carrying a transplanted eye. */
@@ -234,10 +259,8 @@ public interface INinjaData extends INBTSerializable<Tag> {
     float getMoveForward();
     void registerMangekyoUse(Player player);
     /** UUID string of the creature branded with the Flying Thunder God seal, or empty. */
-    String getHiraishinEntityMark();
-    void setHiraishinEntityMark(String entityUuid);
 
-    // --- Kamui pocket dimension: where to put the wielder back when they leave ---
+    // Kamui pocket dimension: where to put the wielder back when they leave.
     void setKamuiReturnPoint(String dimensionId, double x, double y, double z);
     void clearKamuiReturnPoint();
     String getKamuiReturnDimension();
@@ -263,7 +286,7 @@ public interface INinjaData extends INBTSerializable<Tag> {
     boolean isRinneSharinganAwakened();
     boolean tryConsumePhoenixSageCharge(long worldDay);
 
-    // --- Mangekyo Sharingan / Susanoo (Uchiha) ---
+    // Mangekyo Sharingan / Susanoo (Uchiha).
     boolean isMangekyoAwakened();
     /** Remaining integrity of the Susanoo shell; damage is spent here, not on the wearer. */
     float getSusanooDurability();
@@ -282,11 +305,11 @@ public interface INinjaData extends INBTSerializable<Tag> {
     int getSusanooStage();
     void setSusanooStage(int stage);
     float getSusanooMeleeDamageMultiplier();
-    void triggerSusanooArmSwipe(Player player, net.minecraft.world.entity.LivingEntity primaryTarget);
+    int getSusanooStageAge();
 
     /** Ticks left in the Susanoo sword swing; drives the swing pose. */
     int getSusanooSwingTicks();
 
-    // --- Giant-form camera eye height (Susanoo Complete Body / Kurama Full Avatar) ---
+    // Giant-form camera eye height (Susanoo Complete Body / Kurama Full Avatar).
     float getGiantEyeHeight();
 }

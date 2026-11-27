@@ -1,0 +1,10 @@
+{
+  "variants": {
+    "profile=post": { "model": "narutomod:block/mokuton_post" },
+    "profile=rail_x": { "model": "narutomod:block/mokuton_rail" },
+    "profile=rail_z": { "model": "narutomod:block/mokuton_rail", "y": 90 },
+    "profile=crown": { "model": "narutomod:block/mokuton_crown" },
+    "profile=root_x": { "model": "narutomod:block/mokuton_root" },
+    "profile=root_z": { "model": "narutomod:block/mokuton_root", "y": 90 }
+  }
+}

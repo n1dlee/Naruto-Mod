@@ -1,8 +1,6 @@
 package com.sekwah.narutomod.entity.goal;
 
-import com.sekwah.narutomod.util.NarutoParticles;
-import net.minecraft.server.level.ServerLevel;
-import net.minecraft.sounds.SoundSource;
+import com.sekwah.narutomod.events.LeapEvents;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.goal.Goal;
@@ -53,7 +51,7 @@ public class NinjaLeapGoal extends Goal {
             return false;
         }
         // Needs its feet under it. Leaping out of a fall just wastes the cooldown.
-        if (!this.mob.onGround()) {
+        if (!LeapEvents.canStart(this.mob)) {
             return false;
         }
         double distance = this.mob.distanceTo(target);
@@ -84,16 +82,9 @@ public class NinjaLeapGoal extends Goal {
         // Lift scales a little with the gap so a long jump actually clears the ground
         // between, rather than skimming into the first hill in the way.
         double lift = this.verticalPower + Math.min(flat.length() * 0.02, 0.25);
-        this.mob.setDeltaMovement(direction.x * this.horizontalPower, lift,
-                direction.z * this.horizontalPower);
-        this.mob.hurtMarked = true;
+        LeapEvents.start(this.mob, new Vec3(direction.x * this.horizontalPower, lift,
+                direction.z * this.horizontalPower));
         this.mob.getLookControl().setLookAt(target, 30f, 30f);
 
-        this.mob.level().playSound(null, this.mob.blockPosition(),
-                com.sekwah.narutomod.sounds.NarutoSounds.LEAP.get(), SoundSource.HOSTILE, 0.8f, 1.0f);
-        if (this.mob.level() instanceof ServerLevel serverLevel) {
-            NarutoParticles.spawnRing(serverLevel, this.mob.position(), 0.9, 16,
-                    NarutoParticles.ROTATION_WHITE);
-        }
     }
 }

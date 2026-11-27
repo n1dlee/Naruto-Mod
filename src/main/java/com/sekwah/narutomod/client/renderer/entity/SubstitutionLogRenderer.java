@@ -1,12 +1,14 @@
 package com.sekwah.narutomod.client.renderer.entity;
 
 import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.math.Axis;
 import com.sekwah.narutomod.client.model.entity.SubstitutionLogModel;
 import com.sekwah.narutomod.entity.SubstitutionLogEntity;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.MobRenderer;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.Mth;
 
 
 public class SubstitutionLogRenderer extends MobRenderer<SubstitutionLogEntity, SubstitutionLogModel<SubstitutionLogEntity>> {
@@ -17,9 +19,16 @@ public class SubstitutionLogRenderer extends MobRenderer<SubstitutionLogEntity, 
       this.shadowRadius = 0.5F;
    }
 
-   public void render(SubstitutionLogEntity p_115976_, float p_115977_, float p_115978_, PoseStack p_115979_, MultiBufferSource p_115980_, int p_115981_) {
+   @Override
+   public void render(SubstitutionLogEntity log, float yaw, float partialTick, PoseStack stack, MultiBufferSource buffers, int packedLight) {
       this.shadowRadius = 0.3F;
-      super.render(p_115976_, p_115977_, p_115978_, p_115979_, p_115980_, p_115981_);
+      float t = Mth.clamp((log.flipTicks() + partialTick) / 10.0f, 0f, 1f);
+      stack.pushPose();
+      stack.translate(0, 0.34, 0);
+      stack.mulPose(Axis.ZP.rotationDegrees(360f * (1f - (1f - t) * (1f - t))));
+      stack.translate(0, -0.34, 0);
+      super.render(log, yaw, partialTick, stack, buffers, packedLight);
+      stack.popPose();
    }
 
    @Override

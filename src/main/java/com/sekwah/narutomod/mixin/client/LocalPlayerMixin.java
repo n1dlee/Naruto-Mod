@@ -9,17 +9,11 @@ import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.chat.Component;
-import net.minecraft.world.effect.MobEffects;
-import net.minecraft.world.entity.EquipmentSlot;
-import net.minecraft.world.entity.player.ProfilePublicKey;
-import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.Vec3;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-
-import javax.annotation.Nullable;
 
 import static com.sekwah.narutomod.capabilities.NinjaCapabilityHandler.NINJA_DATA;
 
@@ -47,10 +41,9 @@ public class LocalPlayerMixin extends AbstractClientPlayer {
     @Inject(method = "aiStep", at = @At(value = "INVOKE", ordinal = 0,
             target = "Lnet/minecraft/client/player/LocalPlayer;getItemBySlot(Lnet/minecraft/world/entity/EquipmentSlot;)Lnet/minecraft/world/item/ItemStack;"))
     public void aiStep(CallbackInfo ci) {
-        ItemStack itemstack = this.getItemBySlot(EquipmentSlot.CHEST);
-        if (!itemstack.canElytraFly(this) && !this.onGround() && !this.isFallFlying() && !this.isInWater() && !this.hasEffect(MobEffects.LEVITATION)) {
+        if (DoubleJumpAbility.airWindow(this)) {
             this.getCapability(NINJA_DATA).ifPresent(ninjaData -> {
-                if(!ninjaData.isNinjaModeEnabled()) {
+                if(!ninjaData.isNinjaModeEnabled() || ninjaData.isWallWalkAttached()) {
                     return;
                 }
                 DoubleJumpData doubleJumpData = ninjaData.getDoubleJumpData();
@@ -65,8 +58,6 @@ public class LocalPlayerMixin extends AbstractClientPlayer {
                             return;
                         }
                         doubleJumpData.clientJump();
-                        Vec3 movement = this.getDeltaMovement();
-                        this.lerpMotion(movement.x, 0.5F, movement.z);
                         NarutoAbilities.triggerAbility(NarutoAbilities.DOUBLE_JUMP.getId());
                     }
                 }

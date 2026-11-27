@@ -144,6 +144,7 @@ public class BijuCloakModel extends Model {
     private final ModelPart bipedLeftLegWear;
     private final ModelPart bipedLeftLeg_r1;
     private final ModelPart bipedLeftLeg_r2;
+    private final ModelPart[][] motionTails = new ModelPart[9][8];
 
     public BijuCloakModel(ModelPart root) {
         super(RenderType::entityTranslucent);
@@ -266,6 +267,13 @@ public class BijuCloakModel extends Model {
         this.bipedRightLeg_r2 = root.getChild("bipedRightLegWear").getChild("bipedRightLeg_r2");
         this.bipedLeftLeg_r1 = root.getChild("bipedLeftLegWear").getChild("bipedLeftLeg_r1");
         this.bipedLeftLeg_r2 = root.getChild("bipedLeftLegWear").getChild("bipedLeftLeg_r2");
+        for (int tail = 0; tail < motionTails.length; tail++) {
+            ModelPart segment = this.allTails;
+            for (int joint = 0; joint < motionTails[tail].length; joint++) {
+                segment = segment.getChild("tail_" + tail + "_" + joint);
+                motionTails[tail][joint] = segment;
+            }
+        }
     }
 
     /**
@@ -277,13 +285,42 @@ public class BijuCloakModel extends Model {
      * off its own root part, so hiding the root takes the whole tail with it.
      */
     public void setVisibleTails(int count) {
-        ModelPart[] tailRoots = {
-                this.tail_0_0, this.tail_1_0, this.tail_2_0, this.tail_3_0, this.tail_4_0,
-                this.tail_5_0, this.tail_6_0, this.tail_7_0, this.tail_8_0
-        };
+        resetWearerPose();
         this.allTails.visible = count > 0;
-        for (int i = 0; i < tailRoots.length; i++) {
-            tailRoots[i].visible = i < count;
+        for (int tail = 0; tail < motionTails.length; tail++) {
+            motionTails[tail][0].visible = tail < count;
+            for (ModelPart joint : motionTails[tail]) {
+                joint.resetPose();
+            }
+        }
+    }
+
+    private void resetWearerPose() {
+        this.head.resetPose();
+        this.field_178720_f.resetPose();
+        this.body.resetPose();
+        this.bipedBodyWear.resetPose();
+        this.right_arm.resetPose();
+        this.bipedRightArmWear.resetPose();
+        this.left_arm.resetPose();
+        this.bipedLeftArmWear.resetPose();
+        this.right_leg.resetPose();
+        this.bipedRightLegWear.resetPose();
+        this.left_leg.resetPose();
+        this.bipedLeftLegWear.resetPose();
+    }
+
+    public void moveRedTails(int count, float age, float newborn, float lash) {
+        for (int tail = 0; tail < Math.min(count, motionTails.length); tail++) {
+            float reveal = tail == count - 1 ? newborn : 1;
+            for (int i = 0; i < motionTails[tail].length; i++) {
+                ModelPart joint = motionTails[tail][i];
+                float wave = age * 0.17f - tail * 0.74f - i * 0.48f;
+                joint.xRot += (float) Math.sin(wave) * (0.04f + i * 0.012f) * reveal;
+                joint.zRot += (float) Math.cos(wave * 0.74f) * (0.03f + i * 0.008f);
+                joint.xRot += (1 - reveal) * (0.15f + i * 0.045f)
+                        - lash * (0.14f + i * 0.024f);
+            }
         }
     }
 
@@ -901,15 +938,17 @@ public class BijuCloakModel extends Model {
         copy(source.body, this.body);
         copy(source.body, this.bipedBodyWear);
         copy(source.rightArm, this.right_arm);
+        copy(source.rightArm, this.bipedRightArmWear);
         copy(source.leftArm, this.left_arm);
+        copy(source.leftArm, this.bipedLeftArmWear);
         copy(source.rightLeg, this.right_leg);
+        copy(source.rightLeg, this.bipedRightLegWear);
         copy(source.leftLeg, this.left_leg);
+        copy(source.leftLeg, this.bipedLeftLegWear);
     }
 
     private static void copy(ModelPart from, ModelPart to) {
-        to.xRot = from.xRot;
-        to.yRot = from.yRot;
-        to.zRot = from.zRot;
+        to.copyFrom(from);
     }
 
     @Override

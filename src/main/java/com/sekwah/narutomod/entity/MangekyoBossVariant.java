@@ -21,24 +21,21 @@ import net.minecraft.resources.ResourceLocation;
  */
 public enum MangekyoBossVariant {
 
-    // --- Uchiha: defeating one upgrades a Mangekyo to Eternal ---
+    // Uchiha variants award the Eternal Mangekyo upgrade.
     ITACHI("itachi", 260f, 11f, 0.30f, 0.85f, 0.35f, 0.05f, 10),
     SASUKE("sasuke", 240f, 12f, 0.33f, 0.55f, 0.30f, 0.85f, 10),
     MADARA("madara", 320f, 11f, 0.31f, 0.15f, 0.35f, 0.95f, 10),
     SHISUI("shisui", 210f, 10f, 0.38f, 0.25f, 0.80f, 0.35f, 10),
     OBITO("obito", 250f, 12f, 0.32f, 0.45f, 0.20f, 0.75f, 10),
 
-    // --- Missing-nin: no Sharingan, so no Eternal Mangekyo. They drop their own blade
-    // instead, which is what actually made them famous.
+    // Missing-nin variants award their weapons instead of eye upgrades.
     KISAME("kisame", 290f, 10f, 0.31f, 0f, 0f, 0f, 6),
     ZABUZA("zabuza", 240f, 9f, 0.32f, 0f, 0f, 0f, 6),
     HIDAN("hidan", 270f, 8f, 0.33f, 0f, 0f, 0f, 6),
     DEIDARA("deidara", 220f, 10f, 0.34f, 0f, 0f, 0f, 6),
     SASORI("sasori", 235f, 11f, 0.30f, 0f, 0f, 0f, 6),
 
-    // --- Legends of the other great bloodlines. Appended, never inserted: the variant is
-    // stored in NBT as an ordinal, so reordering this enum would turn every saved boss in
-    // every existing world into somebody else.
+    // Append new variants: NBT stores the enum ordinal.
     /**
      * First Hokage. The strongest shinobi who ever lived, and the wood proves it.
      *
@@ -209,18 +206,7 @@ public enum MangekyoBossVariant {
         return this.phaseCount() > 1;
     }
 
-    /**
-     * How many health bars this wielder actually has.
-     *
-     * This used to be five for everyone, which is where the escalation idea broke down: the
-     * phase multipliers total 8.7 base health bars, so Iruka - a chunin instructor, the
-     * weakest thing on the roster at 150 health - had roughly 1300 effective, and so did
-     * Zabuza, Haku and Hidan. A character with one trick does not need four escalations to
-     * show it, and giving them one made the low tier a slog rather than a warm-up.
-     *
-     * S-rank Mangekyo wielders and the legends keep the full ladder; everyone else gets the
-     * number of acts their kit can actually fill.
-     */
+    /** Number of health bars, independent of the number of Susanoo forms. */
     public int phaseCount() {
         return switch (this) {
             // Uchiha and the legends: the full four-step climb into a Complete Body or its
@@ -236,16 +222,9 @@ public enum MangekyoBossVariant {
         };
     }
 
-    /**
-     * Whether stage 4 turns this wielder into an actual giant with a thirteen-block hitbox.
-     *
-     * Only the two who canonically have one. It has to stay separate from {@link #transforms()}
-     * because the hitbox growth, the headroom requirement and the crush aura all hang off it -
-     * letting Shikamaru reach stage 4 should sharpen his shadows, not inflate him into a
-     * building.
-     */
+    /** Whether the final transformation uses a giant hitbox. Itachi stops at Armored Susanoo. */
     public boolean hasGiantForm() {
-        return this.hasSusanoo() || this.hasKuramaCloak() || this.hasSandCloak();
+        return (this.hasSusanoo() && this != ITACHI) || this.hasKuramaCloak() || this.hasSandCloak();
     }
 
     public float maxHealth() {

@@ -6,7 +6,6 @@ import com.sekwah.narutomod.entity.jutsuprojectile.RasenshurikenEntity;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.sounds.SoundEvent;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.Vec3;
 
@@ -29,7 +28,7 @@ public class RasenshurikenAbility extends Ability implements Ability.Cooldown {
     /** Shaping it takes visibly longer than an ordinary Rasengan. */
     @Override
     public int castPoseTicks() {
-        return 18;
+        return RasenshurikenEntity.FORM_TICKS;
     }
 
     @Override
@@ -44,9 +43,8 @@ public class RasenshurikenAbility extends Ability implements Ability.Cooldown {
 
     @Override
     public SoundEvent castingSound() {
-        return SoundEvents.PHANTOM_SWOOP;
+        return null;
     }
-    // --- Phase 15: Nature Release ---
     @Override
     public String element() {
         return "wind";
@@ -92,14 +90,12 @@ public class RasenshurikenAbility extends Ability implements Ability.Cooldown {
 
     @Override
     public void performServer(Player player, INinjaData ninjaData, int ticksActive) {
-        // The held Rasengan IS the projectile — consuming it here also stops the held-mode
-        // melee/crater handlers from double-firing.
-        ninjaData.setRasenganHeld(false);
+        if (!ninjaData.consumeHeldRasengan()) {
+            return;
+        }
 
         Vec3 look = player.getLookAngle();
-        RasenshurikenEntity shuriken = new RasenshurikenEntity(player, look.x, look.y, look.z);
         float multiplier = ninjaData.getRankDamageMultiplier() * (ninjaData.isKcmActive() ? 1.5f : 1.0f);
-        shuriken.setDamageMultiplier(multiplier);
-        player.level().addFreshEntity(shuriken);
+        RasenshurikenEntity.form(player, look, multiplier, false);
     }
 }

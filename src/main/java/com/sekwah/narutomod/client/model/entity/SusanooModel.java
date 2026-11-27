@@ -88,7 +88,6 @@ public class SusanooModel extends Model {
         MeshDefinition mesh = new MeshDefinition();
         PartDefinition root = mesh.getRoot();
 
-        // --- Hovering torso group (stages 1-3 render this alone, wrapped around the player) ---
         PartDefinition torso = root.addOrReplaceChild("torso", CubeListBuilder.create(),
                 PartPose.offset(0F, 0F, 0F));
 
@@ -153,7 +152,7 @@ public class SusanooModel extends Model {
                 CubeListBuilder.create().texOffs(80, 30).addBox(-1F, -12F, -7F, 2, 20, 14),
                 PartPose.offset(-12F, -8F, 1F));
 
-        // --- Complete Body (stage 4 only): legs + waist, ground-anchored at Y=0 ---
+        // Complete-body legs use a ground-level pivot.
         root.addOrReplaceChild("left_leg",
                 CubeListBuilder.create().texOffs(80, 0).addBox(-3.5F, -20F, -3.5F, 7, 20, 7),
                 PartPose.offset(4.5F, 0F, 0F));

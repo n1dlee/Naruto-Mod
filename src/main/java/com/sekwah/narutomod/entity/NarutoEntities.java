@@ -1,13 +1,24 @@
 package com.sekwah.narutomod.entity;
 
 import com.sekwah.narutomod.NarutoMod;
+import com.sekwah.narutomod.events.BossEncounterEvents;
 import com.sekwah.narutomod.entity.item.PaperBombEntity;
 import com.sekwah.narutomod.entity.jutsuprojectile.AmaterasuFireEntity;
 import com.sekwah.narutomod.entity.jutsuprojectile.EarthWallEntity;
 import com.sekwah.narutomod.entity.jutsuprojectile.FireballJutsuEntity;
 import com.sekwah.narutomod.entity.jutsuprojectile.RasenganEntity;
 import com.sekwah.narutomod.entity.jutsuprojectile.RasenshurikenEntity;
+import com.sekwah.narutomod.entity.jutsuprojectile.KirinStrikeEntity;
+import com.sekwah.narutomod.entity.jutsuprojectile.GreatFireballEntity;
+import com.sekwah.narutomod.entity.jutsuprojectile.FireWallEntity;
+import com.sekwah.narutomod.entity.jutsuprojectile.GianBeamEntity;
+import com.sekwah.narutomod.entity.jutsuprojectile.IronSandEntity;
+import com.sekwah.narutomod.entity.jutsuprojectile.IceSpearEntity;
+import com.sekwah.narutomod.entity.jutsuprojectile.ClayBombEntity;
+import com.sekwah.narutomod.entity.jutsuprojectile.GustFrontEntity;
+import com.sekwah.narutomod.entity.jutsuprojectile.ShockArcEntity;
 import com.sekwah.narutomod.entity.jutsuprojectile.WaterBulletJutsuEntity;
+import com.sekwah.narutomod.entity.jutsuprojectile.WaterShotEntity;
 import com.sekwah.narutomod.entity.projectile.ExplosiveKunaiEntity;
 import com.sekwah.narutomod.entity.projectile.HiraishinKunaiEntity;
 import com.sekwah.narutomod.entity.projectile.FumaShurikenEntity;
@@ -56,10 +67,24 @@ public class NarutoEntities {
 
 
     public static final RegistryObject<EntityType<FireballJutsuEntity>> FIREBALL_JUTSU = register("fireball_jutsu",
-            EntityType.Builder.<FireballJutsuEntity>of(FireballJutsuEntity::new, MobCategory.MISC).sized(1.5F, 1.5F).clientTrackingRange(4).updateInterval(10));
+            EntityType.Builder.<FireballJutsuEntity>of(FireballJutsuEntity::new, MobCategory.MISC).sized(0.42F, 0.42F)
+                    .noSave().fireImmune().clientTrackingRange(8).updateInterval(1));
 
     public static final RegistryObject<EntityType<WaterBulletJutsuEntity>> WATER_BULLET_JUTSU = register("water_bullet_jutsu",
             EntityType.Builder.<WaterBulletJutsuEntity>of(WaterBulletJutsuEntity::new, MobCategory.MISC).fireImmune().sized(0.3F, 0.3F).clientTrackingRange(4).updateInterval(10));
+
+    public static final RegistryObject<EntityType<WaterShotEntity>> WATER_SHOT = register("water_shot",
+            EntityType.Builder.<WaterShotEntity>of(WaterShotEntity::new, MobCategory.MISC).fireImmune().sized(0.36F, 0.36F)
+                    .clientTrackingRange(8).updateInterval(1));
+    public static final RegistryObject<EntityType<IronSandEntity>> IRON_SAND = register("iron_sand",
+            EntityType.Builder.<IronSandEntity>of(IronSandEntity::new, MobCategory.MISC).fireImmune().sized(0.72F, 0.72F)
+                    .clientTrackingRange(9).updateInterval(1).noSave());
+    public static final RegistryObject<EntityType<IceSpearEntity>> ICE_SPEAR = register("ice_spear",
+            EntityType.Builder.<IceSpearEntity>of(IceSpearEntity::new, MobCategory.MISC).sized(0.21F, 0.21F)
+                    .clientTrackingRange(9).updateInterval(1).noSave());
+    public static final RegistryObject<EntityType<ClayBombEntity>> CLAY_CHARGE = register("clay_charge",
+            EntityType.Builder.<ClayBombEntity>of(ClayBombEntity::new, MobCategory.MISC).sized(0.47F, 0.47F)
+                    .clientTrackingRange(9).updateInterval(1).noSave());
 
 
     public static final RegistryObject<EntityType<SubstitutionLogEntity>> SUBSTITUTION_LOG = register("substitution_log",
@@ -70,6 +95,17 @@ public class NarutoEntities {
 
     public static final RegistryObject<EntityType<ShadowCloneEntity>> SHADOW_CLONE = register("shadow_clone",
             EntityType.Builder.<ShadowCloneEntity>of(ShadowCloneEntity::new, MobCategory.MISC).sized(0.6F, 1.8F).clientTrackingRange(8));
+    public static final RegistryObject<EntityType<ClayCloneEntity>> CLAY_CLONE = register("clay_clone",
+            EntityType.Builder.<ClayCloneEntity>of(ClayCloneEntity::new, MobCategory.MISC).sized(0.6F, 1.8F)
+                    .clientTrackingRange(9).updateInterval(1).noSave());
+    public static final RegistryObject<EntityType<AnimalPathRhinoEntity>> ANIMAL_RHINO = register("animal_rhino",
+            EntityType.Builder.<AnimalPathRhinoEntity>of(AnimalPathRhinoEntity::new, MobCategory.MISC)
+                    .sized(com.sekwah.narutomod.util.AnimalPathDrive.WIDTH, com.sekwah.narutomod.util.AnimalPathDrive.HEIGHT)
+                    .clientTrackingRange(10).updateInterval(1).noSave());
+
+    public static final RegistryObject<EntityType<NinkenEntity>> NINKEN = register("ninken",
+            EntityType.Builder.<NinkenEntity>of(NinkenEntity::new, MobCategory.CREATURE).sized(0.68f, 0.86f)
+                    .clientTrackingRange(8).updateInterval(2));
 
     public static final RegistryObject<EntityType<SummonBeastEntity>> SUMMON_BEAST = register("summon_beast",
             // Registered at Gamabunta's size (contract 0). Every contract overrides
@@ -80,16 +116,13 @@ public class NarutoEntities {
             EntityType.Builder.<RasenganEntity>of(RasenganEntity::new, MobCategory.MISC).sized(0.4F, 0.4F).clientTrackingRange(4).updateInterval(10));
 
     public static final RegistryObject<EntityType<RasenshurikenEntity>> RASENSHURIKEN = register("rasenshuriken",
-            EntityType.Builder.<RasenshurikenEntity>of(RasenshurikenEntity::new, MobCategory.MISC).sized(0.8F, 0.8F).clientTrackingRange(6).updateInterval(10));
+            EntityType.Builder.<RasenshurikenEntity>of(RasenshurikenEntity::new, MobCategory.MISC).sized(0.8F, 0.8F)
+                    .clientTrackingRange(12).updateInterval(1));
 
     public static final RegistryObject<EntityType<AmaterasuFireEntity>> AMATERASU_FIRE = register("amaterasu_fire",
-            EntityType.Builder.<AmaterasuFireEntity>of(AmaterasuFireEntity::new, MobCategory.MISC).fireImmune().sized(0.6F, 0.6F).clientTrackingRange(8).updateInterval(10));
+            EntityType.Builder.<AmaterasuFireEntity>of(AmaterasuFireEntity::new, MobCategory.MISC).fireImmune().sized(0.6F, 0.6F)
+                    .clientTrackingRange(12).updateInterval(1).noSummon());
 
-    /**
-     * Phase 16: an S-rank missing-nin. Spawns through ordinary vanilla mob spawning like
-     * any other monster, just at a very rare weight (see the forge biome modifier in data/),
-     * so encountering one is a genuine event rather than something on a timer.
-     */
     public static final RegistryObject<EntityType<MangekyoBossEntity>> MANGEKYO_BOSS = register("mangekyo_boss",
             EntityType.Builder.<MangekyoBossEntity>of(MangekyoBossEntity::new, MobCategory.MONSTER)
                     .sized(0.6F, 1.95F).clientTrackingRange(12));
@@ -111,11 +144,7 @@ public class NarutoEntities {
             EntityType.Builder.<UchihaRogueEntity>of(UchihaRogueEntity::new, MobCategory.MONSTER)
                     .sized(0.6F, 1.95F).clientTrackingRange(8));
 
-    /**
-     * Phase 19: the eight tailed beasts. Registered at Shukaku's size (variant 0); every
-     * species overrides getDimensions from its synced variant, so this is only the default
-     * before one is chosen.
-     */
+    /** Registered at Shukaku's size; synced variants override the dimensions. */
     public static final RegistryObject<EntityType<TailedBeastEntity>> TAILED_BEAST = register("tailed_beast",
             EntityType.Builder.<TailedBeastEntity>of(TailedBeastEntity::new, MobCategory.MONSTER)
                     .sized(2.4F, 6.6F).clientTrackingRange(24).fireImmune());
@@ -127,23 +156,36 @@ public class NarutoEntities {
                             com.sekwah.narutomod.entity.jutsuprojectile.TailedBeastBombEntity::new, MobCategory.MISC)
                     .sized(2.0F, 2.0F).clientTrackingRange(20).updateInterval(2));
 
-    /** Phase 22: the Chibaku Tensei core. Tracked far out - you are meant to see it rise. */
     public static final RegistryObject<EntityType<com.sekwah.narutomod.entity.jutsuprojectile.ChibakuTenseiEntity>>
             CHIBAKU_TENSEI = register("chibaku_tensei",
             EntityType.Builder.<com.sekwah.narutomod.entity.jutsuprojectile.ChibakuTenseiEntity>of(
                             com.sekwah.narutomod.entity.jutsuprojectile.ChibakuTenseiEntity::new, MobCategory.MISC)
                     .sized(2.0F, 2.0F).clientTrackingRange(24).updateInterval(2));
 
-    /**
-     * The serpent summoned by Water Dragon and Kirin. One entity for both: they differ in
-     * colour and approach, not in kind. Drawn as procedural geometry, so no model layer.
-     */
     public static final RegistryObject<EntityType<com.sekwah.narutomod.entity.jutsuprojectile.ChakraDragonEntity>>
             CHAKRA_DRAGON = register("chakra_dragon",
             EntityType.Builder.<com.sekwah.narutomod.entity.jutsuprojectile.ChakraDragonEntity>of(
                             com.sekwah.narutomod.entity.jutsuprojectile.ChakraDragonEntity::new, MobCategory.MISC)
                     .sized(1.2F, 1.2F).clientTrackingRange(32).updateInterval(1)
                     .noSummon());
+    public static final RegistryObject<EntityType<KirinStrikeEntity>> KIRIN_STRIKE = register("kirin_strike",
+            EntityType.Builder.of(KirinStrikeEntity::new, MobCategory.MISC)
+                    .sized(0.8f, 0.5f).clientTrackingRange(24).updateInterval(1).noSummon());
+    public static final RegistryObject<EntityType<GreatFireballEntity>> GREAT_FIREBALL = register("great_fireball",
+            EntityType.Builder.<GreatFireballEntity>of(GreatFireballEntity::new, MobCategory.MISC)
+                    .sized(1.0f, 1.0f).clientTrackingRange(12).updateInterval(1).noSummon());
+    public static final RegistryObject<EntityType<FireWallEntity>> FIRE_WALL = register("fire_wall",
+            EntityType.Builder.<FireWallEntity>of(FireWallEntity::new, MobCategory.MISC)
+                    .sized(1.0f, 1.0f).clientTrackingRange(16).updateInterval(1).noSummon());
+    public static final RegistryObject<EntityType<GianBeamEntity>> GIAN_BEAM = register("gian_beam",
+            EntityType.Builder.<GianBeamEntity>of(GianBeamEntity::new, MobCategory.MISC)
+                    .sized(0.3f, 0.3f).clientTrackingRange(12).updateInterval(1).noSave().noSummon());
+    public static final RegistryObject<EntityType<GustFrontEntity>> GUST_FRONT = register("gust_front",
+            EntityType.Builder.<GustFrontEntity>of(GustFrontEntity::new, MobCategory.MISC)
+                    .sized(0.3f, 0.3f).clientTrackingRange(12).updateInterval(1).noSave().noSummon());
+    public static final RegistryObject<EntityType<ShockArcEntity>> SHOCK_ARC = register("shock_arc",
+            EntityType.Builder.<ShockArcEntity>of(ShockArcEntity::new, MobCategory.MISC)
+                    .sized(0.24f, 0.22f).clientTrackingRange(8).updateInterval(1).noSave().noSummon());
 
     /** Susanoo's thrown seal. A billboard, like the original - there is no model to bake. */
     public static final RegistryObject<EntityType<com.sekwah.narutomod.entity.jutsuprojectile.YasakaMagatamaEntity>>
@@ -153,17 +195,13 @@ public class NarutoEntities {
                     .sized(1.0F, 1.0F).clientTrackingRange(48).updateInterval(1)
                     .noSummon());
 
-    /** Phase 22: one pane of Haku's mirrors. Attackable, which is the whole counterplay. */
     public static final RegistryObject<EntityType<com.sekwah.narutomod.entity.jutsuprojectile.IceMirrorEntity>>
             ICE_MIRROR = register("ice_mirror",
             EntityType.Builder.<com.sekwah.narutomod.entity.jutsuprojectile.IceMirrorEntity>of(
                             com.sekwah.narutomod.entity.jutsuprojectile.IceMirrorEntity::new, MobCategory.MISC)
-                    .sized(0.8F, 2.0F).clientTrackingRange(12));
+                    .sized(0.8F, 2.5F).clientTrackingRange(12).updateInterval(1));
 
-    /**
-     * Phase 20: Sasori's puppets. MobCategory.MISC - they are put on the field by a puppeteer,
-     * never by the world. Registered at Hiruko's size; each variant overrides getDimensions.
-     */
+    /** Puppets are spawned by a puppeteer; their synced variant overrides Hiruko's base dimensions. */
     public static final RegistryObject<EntityType<PuppetEntity>> PUPPET = register("puppet",
             EntityType.Builder.<PuppetEntity>of(PuppetEntity::new, MobCategory.MISC)
                     .sized(1.5F, 2.9F).clientTrackingRange(12));
@@ -174,7 +212,7 @@ public class NarutoEntities {
      */
     public static final RegistryObject<EntityType<WoodGolemEntity>> WOOD_GOLEM = register("wood_golem",
             EntityType.Builder.<WoodGolemEntity>of(WoodGolemEntity::new, MobCategory.MISC)
-                    .sized(1.8F, 4.5F).clientTrackingRange(12));
+                    .sized(1.8F, 4.5F).clientTrackingRange(12).updateInterval(1).noSave());
 
     private static <T extends Entity> RegistryObject<EntityType<T>> register(String key, EntityType.Builder<T> builder) {
         return ENTITIES.register(key, () -> builder.build(key));
@@ -193,13 +231,13 @@ public class NarutoEntities {
         event.register(ROGUE_NINJA.get(),
                 net.minecraft.world.entity.SpawnPlacements.Type.ON_GROUND,
                 net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
-                net.minecraft.world.entity.monster.Monster::checkAnyLightMonsterSpawnRules,
+                NarutoEntities::checkRogueSpawn,
                 net.minecraftforge.event.entity.SpawnPlacementRegisterEvent.Operation.REPLACE);
 
         event.register(UCHIHA_ROGUE.get(),
                 net.minecraft.world.entity.SpawnPlacements.Type.ON_GROUND,
                 net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
-                net.minecraft.world.entity.monster.Monster::checkAnyLightMonsterSpawnRules,
+                NarutoEntities::checkRogueSpawn,
                 net.minecraftforge.event.entity.SpawnPlacementRegisterEvent.Operation.REPLACE);
 
         // Bosses now ride the ordinary monster-spawning pipeline too, just at a far rarer
@@ -215,68 +253,34 @@ public class NarutoEntities {
                 // practical one: an S-rank appears rarely enough that halving its window to
                 // night only made it feel broken.
                 (type, level, spawnType, pos, random) ->
-                        com.sekwah.narutomod.config.NarutoConfig.mangekyoBossSpawnEnabled
-                                && level.getDifficulty() != net.minecraft.world.Difficulty.PEACEFUL
-                                && isNearPlayerElevation(level, pos)
-                                && isPlayerReadyForBoss(level, pos)
-                                && noRivalBossNearby(level, pos)
+                        level.getDifficulty() != net.minecraft.world.Difficulty.PEACEFUL
+                                && (!BossSpawnProgression.isAmbient(spawnType)
+                                    || com.sekwah.narutomod.config.NarutoConfig.mangekyoBossSpawnEnabled
+                                       && BossEncounterEvents.canSpawn(level, pos, BossSpawnProgression.FIRST_NINJA_RANK))
                                 && net.minecraft.world.entity.Mob.checkMobSpawnRules(
                                         type, level, spawnType, pos, random),
                 net.minecraftforge.event.entity.SpawnPlacementRegisterEvent.Operation.REPLACE);
 
-        // Tailed beasts. The same pipeline again, held behind a much higher rank gate and a
-        // much wider separation: one of these is a siege, and two in the same valley is not a
-        // harder siege, it is just the end of the save.
         event.register(TAILED_BEAST.get(),
                 net.minecraft.world.entity.SpawnPlacements.Type.ON_GROUND,
                 net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
                 (type, level, spawnType, pos, random) ->
                         level.getDifficulty() != net.minecraft.world.Difficulty.PEACEFUL
-                                && isNearPlayerElevation(level, pos)
-                                && isPlayerReadyForTailedBeast(level, pos)
-                                && noTailedBeastNearby(level, pos)
+                                && (!BossSpawnProgression.isAmbient(spawnType)
+                                    || BossEncounterEvents.canSpawn(level, pos, BossSpawnProgression.FIRST_BEAST_RANK))
                                 && hasRoomForTailedBeast(level, pos)
                                 && net.minecraft.world.entity.Mob.checkMobSpawnRules(
                                         type, level, spawnType, pos, random),
                 net.minecraftforge.event.entity.SpawnPlacementRegisterEvent.Operation.REPLACE);
     }
 
-    /** Ladder step before the world starts putting tailed beasts in front of a player. */
-    private static final int BIJU_MIN_RANK_INDEX = 10; // Low Kage
-
-    /**
-     * Tailed beasts are the last content in the mod, so they wait for the last rank band.
-     *
-     * The Mangekyo bosses open at Mid Chunin because they are a duel a trained genin can lose
-     * and learn from. A tailed beast has four to eight hundred health, cannot be knocked back
-     * and throws a technique that does not care about cover; there is no version of that fight
-     * a Chunin learns anything from.
-     */
-    private static boolean isPlayerReadyForTailedBeast(net.minecraft.world.level.ServerLevelAccessor level,
-                                                       net.minecraft.core.BlockPos pos) {
-        net.minecraft.world.entity.player.Player nearest = nearestPlayer(level, pos);
-        if (nearest == null) {
-            return false;
-        }
-        return nearest.getCapability(
-                        com.sekwah.narutomod.capabilities.NinjaCapabilityHandler.NINJA_DATA)
-                .map(data -> data.isNinjaModeEnabled() && data.getRankIndex() >= BIJU_MIN_RANK_INDEX)
-                .orElse(false);
-    }
-
-    /** No second tailed beast within this many blocks. Wider than the boss rule on purpose. */
-    private static final double BIJU_MIN_SEPARATION = 2000.0;
-
-    private static boolean noTailedBeastNearby(net.minecraft.world.level.ServerLevelAccessor level,
-                                               net.minecraft.core.BlockPos pos) {
-        net.minecraft.server.level.ServerLevel serverLevel = level.getLevel();
-        double limitSqr = BIJU_MIN_SEPARATION * BIJU_MIN_SEPARATION;
-        for (TailedBeastEntity existing : serverLevel.getEntities(TAILED_BEAST.get(), beast -> true)) {
-            if (existing.blockPosition().distSqr(pos) < limitSqr) {
-                return false;
-            }
-        }
-        return true;
+    private static boolean checkRogueSpawn(EntityType<? extends net.minecraft.world.entity.monster.Monster> type,
+                                           net.minecraft.world.level.ServerLevelAccessor level,
+                                           net.minecraft.world.entity.MobSpawnType reason, net.minecraft.core.BlockPos pos,
+                                           net.minecraft.util.RandomSource random) {
+        return (!BossSpawnProgression.isAmbient(reason)
+                || !com.sekwah.narutomod.world.KamuiDimension.isKamui(level.getLevel()))
+                && net.minecraft.world.entity.monster.Monster.checkAnyLightMonsterSpawnRules(type, level, reason, pos, random);
     }
 
     /** Headroom the largest beast needs; anything shorter and it spawns inside the ceiling. */
@@ -297,88 +301,13 @@ public class NarutoEntities {
         return true;
     }
 
-    /** How far above or below the player a boss may appear. */
-    private static final int BOSS_MAX_Y_OFFSET = 20;
-
-    /**
-     * Keeps a boss on roughly the player's own layer of the world.
-     *
-     * Natural spawning is happy to place one in a cave at Y 23 while the player is on the
-     * surface at Y 80. The sighting announcement then points at somewhere unreachable, and
-     * the boss despawns unfound long before anyone digs down to it. Restricting the vertical
-     * offset makes the announcement mean something.
-     *
-     * Only the bosses get this. Rogue ninja are the zombie substitute and are supposed to
-     * fill caves, so narrowing their spawn band would gut their spawn rate.
-     */
-    private static boolean isNearPlayerElevation(net.minecraft.world.level.ServerLevelAccessor level,
-                                                 net.minecraft.core.BlockPos pos) {
-        net.minecraft.world.entity.player.Player nearest = nearestPlayer(level, pos);
-        return nearest != null && Math.abs(nearest.getY() - pos.getY()) <= BOSS_MAX_Y_OFFSET;
-    }
-
-    /** Ladder step a player must reach before the world starts sending S-ranks at them. */
-    private static final int BOSS_MIN_RANK_INDEX = 5; // Mid Chunin
-
-    /**
-     * Holds the bosses back until the nearest player can plausibly fight one.
-     *
-     * They were gated on distance and elevation but not on the player, so a brand new
-     * Academy student with no natures and twenty health could have Sasuke and Deidara walk
-     * out of the treeline in their first few minutes. That is not difficulty, it is a wall:
-     * nothing at that stage can hurt a 240-health wielder, and the boss simply farms them.
-     *
-     * Mid Chunin is where the kit starts to exist - two nature slots, real health, a damage
-     * multiplier above 1. Before that the rogue ninja are the content.
-     */
-    private static boolean isPlayerReadyForBoss(net.minecraft.world.level.ServerLevelAccessor level,
-                                                net.minecraft.core.BlockPos pos) {
-        net.minecraft.world.entity.player.Player nearest = nearestPlayer(level, pos);
-        if (nearest == null) {
-            return false;
-        }
-        return nearest.getCapability(
-                        com.sekwah.narutomod.capabilities.NinjaCapabilityHandler.NINJA_DATA)
-                .map(data -> data.isNinjaModeEnabled() && data.getRankIndex() >= BOSS_MIN_RANK_INDEX)
-                .orElse(false);
-    }
-
-    /** No second S-rank may exist within this many blocks of a new one. */
-    private static final double BOSS_MIN_SEPARATION = 850.0;
-
-    /**
-     * One boss at a time, per region.
-     *
-     * Nothing stopped two, three or four of them accumulating in the same stretch of world -
-     * and a fight against Madara is a fight, while a fight against Madara and Hashirama and
-     * Sasuke at once is just a death. Each of these is designed as a duel, so the world only
-     * ever offers one at a time within a day's walk.
-     *
-     * The scan is by entity type rather than by area: there are only ever a handful of bosses
-     * loaded, so walking that list is far cheaper than an 850-block bounding box would be.
-     */
-    private static boolean noRivalBossNearby(net.minecraft.world.level.ServerLevelAccessor level,
-                                             net.minecraft.core.BlockPos pos) {
-        net.minecraft.server.level.ServerLevel serverLevel = level.getLevel();
-        double limitSqr = BOSS_MIN_SEPARATION * BOSS_MIN_SEPARATION;
-        for (MangekyoBossEntity existing : serverLevel.getEntities(MANGEKYO_BOSS.get(), boss -> true)) {
-            if (existing.blockPosition().distSqr(pos) < limitSqr) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    private static net.minecraft.world.entity.player.Player nearestPlayer(
-            net.minecraft.world.level.ServerLevelAccessor level, net.minecraft.core.BlockPos pos) {
-        return level.getNearestPlayer(
-                pos.getX() + 0.5D, pos.getY() + 0.5D, pos.getZ() + 0.5D, -1.0D, false);
-    }
-
     @SubscribeEvent
     public static void entityAttributeCreation(EntityAttributeCreationEvent event) {
         event.put(SUBSTITUTION_LOG.get(), SubstitutionLogEntity.createAttributes().build());
         event.put(SHADOW_CLONE.get(), ShadowCloneEntity.createAttributes().build());
+        event.put(CLAY_CLONE.get(), ShadowCloneEntity.createAttributes().build());
+        event.put(ANIMAL_RHINO.get(), AnimalPathRhinoEntity.createAttributes().build());
+        event.put(NINKEN.get(), net.minecraft.world.entity.animal.Wolf.createAttributes().build());
         event.put(SUMMON_BEAST.get(), SummonBeastEntity.createAttributes().build());
         event.put(MANGEKYO_BOSS.get(), MangekyoBossEntity.createAttributes().build());
         event.put(ROGUE_NINJA.get(), RogueNinjaEntity.createAttributes().build());

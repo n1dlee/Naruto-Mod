@@ -2,11 +2,11 @@ package com.sekwah.narutomod.abilities.utility;
 
 import com.sekwah.narutomod.abilities.Ability;
 import com.sekwah.narutomod.capabilities.INinjaData;
+import com.sekwah.narutomod.sounds.NarutoSounds;
 import net.minecraft.ChatFormatting;
-import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.chat.Component;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.phys.Vec3;
 
 public class ChakraDashAbility extends Ability implements Ability.Toggled {
 
@@ -31,8 +31,7 @@ public class ChakraDashAbility extends Ability implements Ability.Toggled {
 
     @Override
     public boolean handleCost(Player player, INinjaData ninjaData, int chargeAmount) {
-        Vec3 movement = player.getDeltaMovement();
-        boolean isMoving = movement.x * movement.x + movement.z * movement.z > 0.001;
+        boolean isMoving = ninjaData.getDashStride().moving();
         float cost = isMoving ? 0.25f : 0.05f;
         if (ninjaData.getChakra() < cost) {
             player.displayClientMessage(Component.translatable("jutsu.fail.notenoughchakra",
@@ -53,15 +52,12 @@ public class ChakraDashAbility extends Ability implements Ability.Toggled {
 
     @Override
     public void performServer(Player player, INinjaData ninjaData, int ticksActive) {
-        // Movement speed is handled centrally in NinjaData through an attribute modifier.
+        if (ninjaData.getDashStride().starts()) {
+            player.level().playSound(null, player, NarutoSounds.CHAKRA_DASH.get(), SoundSource.PLAYERS, 0.65f, 1.0f);
+        }
     }
 
     @Override
     public void performToggleClient(Player player, INinjaData ninjaData) {
-        Vec3 movement = player.getDeltaMovement();
-        if (movement.x * movement.x + movement.z * movement.z > 0.001) {
-            player.level().addParticle(ParticleTypes.CLOUD,
-                    player.getX(), player.getY() + 0.1, player.getZ(), 0, 0, 0);
-        }
     }
 }

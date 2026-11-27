@@ -66,6 +66,7 @@ public class NarutoMod {
         NarutoEntities.register(eventBus);
         NarutoAbilities.register(eventBus);
         NarutoGameEvents.register(eventBus);
+        com.sekwah.narutomod.world.NinjaPopulation.register(eventBus);
         NarutoCreativeTabs.register(eventBus);
 
         DistExecutor.safeCallWhenOn(Dist.CLIENT, () -> NarutoInGameGUI::new);

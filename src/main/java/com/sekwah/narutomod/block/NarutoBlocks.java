@@ -5,7 +5,9 @@ import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.SoundType;
+import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockBehaviour;
+import net.minecraft.world.level.material.PushReaction;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.registries.DeferredRegister;
 import net.minecraftforge.registries.ForgeRegistries;
@@ -17,6 +19,29 @@ public class NarutoBlocks {
 
     public static final DeferredRegister<Block> BLOCKS = DeferredRegister.create(ForgeRegistries.BLOCKS, MOD_ID);
     public static final DeferredRegister<Item> BLOCK_ITEMS = DeferredRegister.create(ForgeRegistries.ITEMS, MOD_ID);
+    private static final DeferredRegister<BlockEntityType<?>> BLOCK_ENTITIES =
+            DeferredRegister.create(ForgeRegistries.BLOCK_ENTITY_TYPES, MOD_ID);
+
+    public static final RegistryObject<Block> DORYUHEKI = BLOCKS.register("doryuheki",
+            () -> new DoryuhekiBlock(BlockBehaviour.Properties.of().strength(1.4F, 5F).sound(SoundType.TUFF)
+                    .noOcclusion().noLootTable().pushReaction(PushReaction.BLOCK)));
+
+    public static final RegistryObject<BlockEntityType<DoryuhekiBlockEntity>> DORYUHEKI_ENTITY =
+            BLOCK_ENTITIES.register("doryuheki", () -> BlockEntityType.Builder.of(DoryuhekiBlockEntity::new, DORYUHEKI.get()).build(null));
+
+    public static final RegistryObject<Block> EARTH_SPIKE = BLOCKS.register("earth_spike",
+            () -> new EarthSpikeBlock(BlockBehaviour.Properties.of().strength(1.1F, 4F).sound(SoundType.TUFF)
+                    .noOcclusion().noLootTable().pushReaction(PushReaction.BLOCK)));
+
+    public static final RegistryObject<BlockEntityType<EarthSpikeBlockEntity>> EARTH_SPIKE_ENTITY =
+            BLOCK_ENTITIES.register("earth_spike", () -> BlockEntityType.Builder.of(EarthSpikeBlockEntity::new, EARTH_SPIKE.get()).build(null));
+
+    public static final RegistryObject<Block> MOKUTON_TIMBER = BLOCKS.register("mokuton_timber",
+            () -> new MokutonTimberBlock(BlockBehaviour.Properties.of().strength(0.65f, 2f).sound(SoundType.WOOD)
+                    .noOcclusion().noLootTable().pushReaction(PushReaction.BLOCK)));
+
+    public static final RegistryObject<BlockEntityType<MokutonTimberBlockEntity>> MOKUTON_TIMBER_ENTITY = BLOCK_ENTITIES.register("mokuton_timber",
+            () -> BlockEntityType.Builder.of(MokutonTimberBlockEntity::new, MOKUTON_TIMBER.get()).build(null));
 
     // TODO find a way to apply these to the paper bomb
     //public static final Material UNSTABLE_EXPLOSIVE = (new Material.Builder(MaterialColor.FIRE)).noCollider().flammable().notSolidBlocking().nonSolid().destroyOnPush().build();
@@ -82,10 +107,15 @@ public class NarutoBlocks {
                     .lightLevel(state -> 2)
                     .noOcclusion()
                     .noLootTable()
+                    .pushReaction(PushReaction.BLOCK)
                     .isValidSpawn((state, level, pos, type) -> false)));
+
+    public static final RegistryObject<BlockEntityType<IceSpikeBlockEntity>> ICE_SPIKE_ENTITY =
+            BLOCK_ENTITIES.register("ice_spike", () -> BlockEntityType.Builder.of(IceSpikeBlockEntity::new, ICE_SPIKE.get()).build(null));
 
     public static void register(IEventBus eventBus) {
         BLOCKS.register(eventBus);
         BLOCK_ITEMS.register(eventBus);
+        BLOCK_ENTITIES.register(eventBus);
     }
 }

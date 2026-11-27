@@ -3,11 +3,18 @@ package com.sekwah.narutomod.block;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.BlockGetter;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.BaseEntityBlock;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.RenderShape;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.entity.BlockEntityTicker;
+import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.StateDefinition;
 import net.minecraft.world.level.block.state.properties.DripstoneThickness;
+import net.minecraft.world.level.block.state.properties.BooleanProperty;
 import net.minecraft.world.level.block.state.properties.EnumProperty;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.Shapes;
@@ -23,10 +30,12 @@ import net.minecraft.world.phys.shapes.VoxelShape;
  * What is borrowed is only the silhouette: the same four thickness stages, so the spear
  * tapers from a wide base to an actual point instead of being a stack of cubes.
  */
-public class IceSpikeBlock extends Block {
+public class IceSpikeBlock extends BaseEntityBlock {
 
     public static final EnumProperty<DripstoneThickness> THICKNESS =
             EnumProperty.create("thickness", DripstoneThickness.class);
+    public static final BooleanProperty MANAGED = BooleanProperty.create("managed");
+    public static final BooleanProperty RAISED = BooleanProperty.create("raised");
 
     /** Narrowing collision boxes, one per stage, so the taper is solid as well as visible. */
     private static final VoxelShape SHAPE_BASE = Block.box(3.0, 0.0, 3.0, 13.0, 16.0, 13.0);
@@ -37,22 +46,44 @@ public class IceSpikeBlock extends Block {
     public IceSpikeBlock(BlockBehaviour.Properties properties) {
         super(properties);
         this.registerDefaultState(this.stateDefinition.any()
-                .setValue(THICKNESS, DripstoneThickness.TIP));
+                .setValue(THICKNESS, DripstoneThickness.TIP).setValue(MANAGED, false).setValue(RAISED, true));
     }
 
     @Override
     protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
-        builder.add(THICKNESS);
+        builder.add(THICKNESS, MANAGED, RAISED);
     }
 
     @Override
     public VoxelShape getShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context) {
-        return switch (state.getValue(THICKNESS)) {
+        return isDormant(state) ? Shapes.empty() : shape(state.getValue(THICKNESS));
+    }
+
+    public static VoxelShape shape(DripstoneThickness thickness) {
+        return switch (thickness) {
             case BASE -> SHAPE_BASE;
             case FRUSTUM -> SHAPE_FRUSTUM;
             case MIDDLE -> SHAPE_MIDDLE;
             default -> SHAPE_TIP;
         };
+    }
+
+    public static boolean isDormant(BlockState state) { return state.getValue(MANAGED) && !state.getValue(RAISED); }
+
+    @Override
+    public RenderShape getRenderShape(BlockState state) {
+        return state.getValue(MANAGED) ? RenderShape.INVISIBLE : RenderShape.MODEL;
+    }
+
+    @Override
+    public BlockEntity newBlockEntity(BlockPos pos, BlockState state) {
+        return state.getValue(MANAGED) ? new IceSpikeBlockEntity(pos, state) : null;
+    }
+
+    @Override
+    public <T extends BlockEntity> BlockEntityTicker<T> getTicker(Level level, BlockState state, BlockEntityType<T> type) {
+        return level.isClientSide || !state.getValue(MANAGED) ? null
+                : createTickerHelper(type, NarutoBlocks.ICE_SPIKE_ENTITY.get(), IceSpikeBlockEntity::tick);
     }
 
     /**

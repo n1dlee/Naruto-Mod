@@ -35,12 +35,14 @@ public class KunaiItem extends Item {
         playerIn.getCooldowns().addCooldown(this, 10);
         worldIn.playSound(null, playerIn.getX(), playerIn.getY(), playerIn.getZ(), SoundEvents.ARROW_SHOOT, SoundSource.PLAYERS, 1.0F, 1.0F / (worldIn.random.nextFloat() * 0.4F + 1.2F) + 0.5F);
         if (!worldIn.isClientSide) {
-            AbstractArrow kunaiEntity = createShootingEntity(worldIn, playerIn);
+            AbstractArrow kunaiEntity = createShootingEntity(worldIn, playerIn, usedItem);
 
             kunaiEntity.shootFromRotation(playerIn, playerIn.getXRot(), playerIn.getYRot(), 0.0F, 3.0F, 1.0F);
             kunaiEntity.setBaseDamage(2);
 
-            worldIn.addFreshEntity(kunaiEntity);
+            if (!worldIn.addFreshEntity(kunaiEntity)) {
+                return InteractionResultHolder.fail(usedItem);
+            }
         }
 
 
@@ -60,6 +62,10 @@ public class KunaiItem extends Item {
                 AbstractArrow.Pickup.CREATIVE_ONLY: AbstractArrow.Pickup.ALLOWED;
 
         return entity;
+    }
+
+    protected AbstractArrow createShootingEntity(Level level, Player player, ItemStack stack) {
+        return createShootingEntity(level, player);
     }
 
     @Override

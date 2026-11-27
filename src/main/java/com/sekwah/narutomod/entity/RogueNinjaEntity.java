@@ -299,6 +299,19 @@ public class RogueNinjaEntity extends Monster {
         if (random.nextFloat() < 0.05f) {
             this.spawnAtLocation(new ItemStack(NarutoItems.SOLDIER_PILL.get()));
         }
+        if (recentlyHit && !com.sekwah.narutomod.config.NarutoConfig.allowOtherHostiles) {
+            dropPortalMaterials();
+        }
+    }
+
+    private void dropPortalMaterials() {
+        if (this.level().dimension().equals(Level.NETHER)) {
+            if (this.random.nextFloat() < 0.4f) {
+                this.spawnAtLocation(net.minecraft.world.item.Items.BLAZE_ROD);
+            }
+        } else if (this instanceof UchihaRogueEntity && this.random.nextFloat() < 0.5f) {
+            this.spawnAtLocation(net.minecraft.world.item.Items.ENDER_PEARL);
+        }
     }
 
     @Override

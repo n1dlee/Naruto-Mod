@@ -71,7 +71,7 @@ public class SusanooAbility extends Ability implements Ability.Toggled, Ability.
 
     @Override
     public boolean handleCost(Player player, INinjaData ninjaData, int chargeAmount) {
-        if (!validateAccess(player, ninjaData) || !validateChakra(player, ninjaData)) {
+        if (ninjaData.getSusanooBrokenTicks() > 0 || !validateAccess(player, ninjaData) || !validateChakra(player, ninjaData)) {
             return false;
         }
         ninjaData.useChakra(CHAKRA_COST, 5);
@@ -82,10 +82,6 @@ public class SusanooAbility extends Ability implements Ability.Toggled, Ability.
     public void performServer(Player player, INinjaData ninjaData, int ticksActive) {
         if (!ninjaData.isSusanooActive()) {
             ninjaData.setSusanooActive(true);
-            // A freshly raised shell is whole. Integrity is not carried over between
-            // manifestations - dropping the technique to dodge a hit and putting it straight
-            // back up would otherwise be strictly better than holding it.
-            ninjaData.setSusanooDurability(ninjaData.getSusanooMaxDurability());
             player.displayClientMessage(
                     Component.literal("Susanoo manifests!").withStyle(ChatFormatting.LIGHT_PURPLE), true);
         }
@@ -113,6 +109,10 @@ public class SusanooAbility extends Ability implements Ability.Toggled, Ability.
     }
 
     private boolean validateAccess(Player player, INinjaData ninjaData) {
+        if (!player.isAlive() || player.isSpectator() || !ninjaData.isNinjaModeEnabled()
+                || ninjaData.isKuramaCloakActive() || ninjaData.isKcmActive() || !this.hasEyeAccess(ninjaData)) {
+            return false;
+        }
         // Clan + Mangekyo tier are enforced centrally via requiredEye(); only the rank
         // floor for manifesting the avatar is specific to Susanoo.
         if (ninjaData.getNinjaRank() < 3) {

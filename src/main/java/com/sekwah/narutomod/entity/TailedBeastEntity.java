@@ -62,6 +62,8 @@ public class TailedBeastEntity extends PathfinderMob implements Enemy {
      */
     private static final EntityDataAccessor<Float> BIJUDAMA_CHARGE =
             SynchedEntityData.defineId(TailedBeastEntity.class, EntityDataSerializers.FLOAT);
+    private static final EntityDataAccessor<Integer> BIJUDAMA_RECOIL =
+            SynchedEntityData.defineId(TailedBeastEntity.class, EntityDataSerializers.INT);
 
     private static final EntityDataAccessor<Integer> RAGE =
             SynchedEntityData.defineId(TailedBeastEntity.class, EntityDataSerializers.INT);
@@ -74,6 +76,10 @@ public class TailedBeastEntity extends PathfinderMob implements Enemy {
     private int roarCooldown = 60;
     /** Monotonic count of landed hits; never persisted, only compared within a fight. */
     private int hurtCount;
+    private final BossChakraReserve chakra = new BossChakraReserve(chakraCapacity(TailedBeastVariant.SHUKAKU),
+            BossChakraReserve.BEAST_CAST_FLOOR);
+    private boolean naturalEncounter;
+    private boolean spawnAdmissionPending;
 
     public TailedBeastEntity(EntityType<TailedBeastEntity> entityType, Level level) {
         super(entityType, level);
@@ -91,6 +97,7 @@ public class TailedBeastEntity extends PathfinderMob implements Enemy {
         this.entityData.define(VARIANT, (byte) 0);
         this.entityData.define(RAGE, 0);
         this.entityData.define(BIJUDAMA_CHARGE, 0f);
+        this.entityData.define(BIJUDAMA_RECOIL, 0);
     }
 
     public TailedBeastVariant getVariant() {
@@ -105,6 +112,24 @@ public class TailedBeastEntity extends PathfinderMob implements Enemy {
 
     public int getRage() {
         return this.entityData.get(RAGE);
+    }
+
+    private static int chakraCapacity(TailedBeastVariant variant) {
+        return 210 + 30 * variant.getTails();
+    }
+
+    public boolean canUseChakra(float amount) {
+        return this.chakra.canSpend(amount);
+    }
+
+    public boolean useChakra(float amount) {
+        if (!this.chakra.spend(amount)) {
+            return false;
+        }
+        if (this.chakra.exhausted()) {
+            BossExhaustionFeedback.emit(this);
+        }
+        return true;
     }
 
     private void applyVariantAttributes(TailedBeastVariant variant) {
@@ -127,6 +152,14 @@ public class TailedBeastEntity extends PathfinderMob implements Enemy {
 
     public void setBijudamaCharge(float charge) {
         this.entityData.set(BIJUDAMA_CHARGE, Math.max(0f, Math.min(1f, charge)));
+    }
+
+    public int getBijudamaRecoil() {
+        return this.entityData.get(BIJUDAMA_RECOIL);
+    }
+
+    public void kickBijudama() {
+        this.entityData.set(BIJUDAMA_RECOIL, 8);
     }
 
     @Override
@@ -154,7 +187,9 @@ public class TailedBeastEntity extends PathfinderMob implements Enemy {
         this.goalSelector.addGoal(8, new RandomLookAroundGoal(this));
 
         this.targetSelector.addGoal(1, new HurtByTargetGoal(this));
-        this.targetSelector.addGoal(2, new NearestAttackableTargetGoal<>(this, Player.class, true));
+        this.targetSelector.addGoal(2, new NearestAttackableTargetGoal<>(this, Player.class, 10, true, false,
+                target -> !naturalEncounter || BossSpawnProgression.rank(target)
+                        >= BossSpawnProgression.minimumRank(getVariant())));
         // Not each other, and not the ninja's summons: a beast has no quarrel with a toad.
         this.targetSelector.addGoal(3, new NearestAttackableTargetGoal<>(this, Monster.class,
                 10, true, false, target -> !(target instanceof TailedBeastEntity)));
@@ -174,10 +209,14 @@ public class TailedBeastEntity extends PathfinderMob implements Enemy {
     @Override
     public void tick() {
         super.tick();
+        if (!this.level().isClientSide && this.getBijudamaRecoil() > 0) {
+            this.entityData.set(BIJUDAMA_RECOIL, this.getBijudamaRecoil() - 1);
+        }
         if (this.level().isClientSide) {
             return;
         }
         NinjaMobMovement.tickWaterWalk(this);
+        this.chakra.tick(this.getTarget() != null && this.getTarget().isAlive());
         this.updateRage();
         if (--this.roarCooldown <= 0 && this.getTarget() != null) {
             this.roarCooldown = ROAR_INTERVAL + this.random.nextInt(120);
@@ -302,6 +341,8 @@ public class TailedBeastEntity extends PathfinderMob implements Enemy {
         super.addAdditionalSaveData(tag);
         tag.putByte("Variant", this.entityData.get(VARIANT));
         tag.putInt("Rage", this.getRage());
+        this.chakra.save(tag);
+        tag.putBoolean("NaturalEncounter", this.naturalEncounter);
     }
 
     @Override
@@ -309,6 +350,9 @@ public class TailedBeastEntity extends PathfinderMob implements Enemy {
         super.readAdditionalSaveData(tag);
         this.setVariant(TailedBeastVariant.byId(tag.getByte("Variant")));
         this.entityData.set(RAGE, tag.getInt("Rage"));
+        this.chakra.reset(chakraCapacity(this.getVariant()));
+        this.chakra.load(tag);
+        this.naturalEncounter = tag.getBoolean("NaturalEncounter");
     }
 
     @Override
@@ -317,15 +361,29 @@ public class TailedBeastEntity extends PathfinderMob implements Enemy {
                                         MobSpawnType spawnType,
                                         SpawnGroupData spawnData,
                                         CompoundTag tag) {
+        this.naturalEncounter = BossSpawnProgression.isAmbient(spawnType);
+        var variantRoll = this.naturalEncounter
+                ? BossSpawnProgression.rollBeast(this.random, BossSpawnProgression.nearbyRank(level, this.blockPosition()))
+                : java.util.Optional.of(TailedBeastVariant.random(this.random));
+        if (variantRoll.isEmpty()) {
+            this.setSpawnCancelled(true);
+            return spawnData;
+        }
         SpawnGroupData data = super.finalizeSpawn(level, difficulty, spawnType, spawnData, tag);
-        // Which of the eight this is gets decided here, for every way one can appear. Anything
-        // that wants a specific beast calls setVariant afterwards and tops the health up again.
-        this.setVariant(TailedBeastVariant.random(this.random));
+        this.setVariant(variantRoll.get());
+        this.chakra.reset(chakraCapacity(this.getVariant()));
+        this.spawnAdmissionPending = this.naturalEncounter;
         this.setHealth(this.getMaxHealth());
         this.setCustomName(net.minecraft.network.chat.Component.literal(this.getVariant().getDisplayName()));
         this.setCustomNameVisible(true);
         this.playSound(this.getVariant().getRoar(), 5.0f, 1.0f);
         return data;
+    }
+
+    public boolean takeSpawnAdmission() {
+        boolean pending = this.spawnAdmissionPending;
+        this.spawnAdmissionPending = false;
+        return pending;
     }
 
     @Override

@@ -4,29 +4,19 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
 import com.sekwah.narutomod.NarutoMod;
+import com.sekwah.narutomod.client.renderer.NarutoRenderTypes;
 import com.sekwah.narutomod.entity.jutsuprojectile.YasakaMagatamaEntity;
 import net.minecraft.client.renderer.MultiBufferSource;
-import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
-import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
+import org.joml.Quaternionf;
+import org.joml.Vector3f;
 
-/**
- * The magatama seal: a spinning billboard, exactly as the 1.12.2 renderer drew it.
- *
- * There is no model to bake - the original has no model class either. The whole effect is one
- * textured quad turned to face the camera and spun about its own axis as it travels, which at
- * the speed these move reads as a seal tumbling through the air.
- */
-public class YasakaMagatamaRenderer extends EntityRenderer<YasakaMagatamaEntity> {
-
-    private static final ResourceLocation TEXTURE =
-            new ResourceLocation(NarutoMod.MOD_ID, "textures/yasaka_magatama.png");
-
-    /** Turns per second in flight. Fast enough to blur, slow enough to read as a shape. */
-    private static final float SPIN_DEGREES_PER_TICK = 17.0f;
+public final class YasakaMagatamaRenderer extends EntityRenderer<YasakaMagatamaEntity> {
+    private static final ResourceLocation LEGACY_TEXTURE = new ResourceLocation(NarutoMod.MOD_ID, "textures/yasaka_magatama.png");
 
     public YasakaMagatamaRenderer(EntityRendererProvider.Context context) {
         super(context);
@@ -34,53 +24,72 @@ public class YasakaMagatamaRenderer extends EntityRenderer<YasakaMagatamaEntity>
 
     @Override
     public ResourceLocation getTextureLocation(YasakaMagatamaEntity entity) {
-        return TEXTURE;
+        return LEGACY_TEXTURE;
     }
 
     @Override
-    public void render(YasakaMagatamaEntity magatama, float entityYaw, float partialTick,
-                       PoseStack poseStack, MultiBufferSource bufferSource, int packedLight) {
-        float size = magatama.getScale();
-        int tint = magatama.getTint();
-        float red = ((tint >> 16) & 0xFF) / 255f;
-        float green = ((tint >> 8) & 0xFF) / 255f;
-        float blue = (tint & 0xFF) / 255f;
-
-        poseStack.pushPose();
-        // Face the camera, then spin in the plane of the billboard so the seal tumbles rather
-        // than sliding along flat.
-        poseStack.mulPose(this.entityRenderDispatcher.cameraOrientation());
-        poseStack.mulPose(Axis.ZP.rotationDegrees((magatama.tickCount + partialTick) * SPIN_DEGREES_PER_TICK));
-        poseStack.scale(size, size, size);
-
-        VertexConsumer consumer = bufferSource.getBuffer(RenderType.entityTranslucent(TEXTURE));
-        Matrix4f matrix = poseStack.last().pose();
-        // Fullbright: the seal is made of chakra and should not be dimmed by the cave it is
-        // flying through.
-        int light = net.minecraft.client.renderer.LightTexture.FULL_BRIGHT;
-
-        quad(matrix, consumer, red, green, blue, light);
-        poseStack.popPose();
-
-        super.render(magatama, entityYaw, partialTick, poseStack, bufferSource, packedLight);
+    public void render(YasakaMagatamaEntity seal, float yaw, float partial, PoseStack poses, MultiBufferSource buffers, int light) {
+        Vec3 direction = seal.getDeltaMovement().normalize();
+        poses.pushPose();
+        try {
+            if (direction.lengthSqr() > 0.1) {
+                poses.mulPose(new Quaternionf().rotationTo(new Vector3f(0, 0, 1), new Vector3f((float) direction.x, (float) direction.y, (float) direction.z)));
+            }
+            poses.mulPose(Axis.ZP.rotationDegrees((seal.tickCount + partial) * 12.5f));
+            float scale = seal.getScale();
+            poses.scale(scale, scale, scale);
+            renderSeal(poses.last().pose(), buffers.getBuffer(NarutoRenderTypes.WATER_SURFACE), seal.getTint());
+        } finally {
+            poses.popPose();
+        }
+        super.render(seal, yaw, partial, poses, buffers, light);
     }
 
-    private static void quad(Matrix4f matrix, VertexConsumer consumer,
-                             float red, float green, float blue, int light) {
-        put(matrix, consumer, -0.5f, -0.5f, 0f, 1f, red, green, blue, light);
-        put(matrix, consumer, 0.5f, -0.5f, 1f, 1f, red, green, blue, light);
-        put(matrix, consumer, 0.5f, 0.5f, 1f, 0f, red, green, blue, light);
-        put(matrix, consumer, -0.5f, 0.5f, 0f, 0f, red, green, blue, light);
+    public static void renderSeal(Matrix4f pose, VertexConsumer sink, int tint) {
+        profile(new Mesh(pose, sink), tint);
     }
 
-    private static void put(Matrix4f matrix, VertexConsumer consumer, float x, float y,
-                            float u, float v, float red, float green, float blue, int light) {
-        consumer.vertex(matrix, x, y, 0f)
-                .color(red, green, blue, 0.95f)
-                .uv(u, v)
-                .overlayCoords(OverlayTexture.NO_OVERLAY)
-                .uv2(light)
-                .normal(0f, 0f, 1f)
-                .endVertex();
+    private static void profile(Mesh mesh, int tint) {
+        for (int i = 0; i < 15; i++) {
+            double a = i / 15.0;
+            double b = (i + 1) / 15.0;
+            for (int side = 0; side < 8; side++) {
+                double c = side * Math.PI / 4;
+                double d = (side + 1) * Math.PI / 4;
+                int tone = side % 4 < 2 ? tint : tint >>> 1 & 0x7F7F7F;
+                mesh.quad(point(a, c), point(a, d), point(b, d), point(b, c), tone);
+            }
+        }
+        for (int side : new int[]{-1, 1}) {
+            double z = side * 0.18;
+            for (int i = 0; i < 12; i++) {
+                double a = i * Math.PI / 6;
+                double b = (i + 1) * Math.PI / 6;
+                Vec3 center = new Vec3(0.08, 0.30, z);
+                mesh.quad(center, center.add(Math.cos(a) * 0.091, Math.sin(a) * 0.091, 0),
+                        center.add(Math.cos(b) * 0.091, Math.sin(b) * 0.091, 0), center, 0x140C25);
+            }
+        }
+    }
+
+    private static Vec3 point(double t, double face) {
+        double angle = 1.25 + t * 3.95;
+        double thick = 0.23 * Math.pow(1 - t, 0.83);
+        double distance = 0.30 + Math.cos(face) * thick;
+        return new Vec3(Math.cos(angle) * distance, Math.sin(angle) * distance, Math.sin(face) * thick * 0.70);
+    }
+
+    private record Mesh(Matrix4f pose, VertexConsumer vertices) {
+        private void quad(Vec3 a, Vec3 b, Vec3 c, Vec3 d, int color) {
+            put(a, color);
+            put(b, color);
+            put(c, color);
+            put(d, color);
+        }
+
+        private void put(Vec3 v, int color) {
+            vertices.vertex(pose, (float) v.x, (float) v.y, (float) v.z)
+                    .color((color >>> 16) & 255, (color >>> 8) & 255, color & 255, 233).endVertex();
+        }
     }
 }

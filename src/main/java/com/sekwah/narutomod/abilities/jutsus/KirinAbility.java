@@ -2,68 +2,20 @@ package com.sekwah.narutomod.abilities.jutsus;
 
 import com.sekwah.narutomod.abilities.Ability;
 import com.sekwah.narutomod.capabilities.INinjaData;
-import com.sekwah.narutomod.damagetypes.NarutoDamageTypes;
+import com.sekwah.narutomod.entity.jutsuprojectile.KirinStrikeEntity;
 import com.sekwah.narutomod.util.EyeTargeting;
-import com.sekwah.narutomod.util.NarutoParticles;
 import net.minecraft.ChatFormatting;
-import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvent;
-import net.minecraft.sounds.SoundEvents;
-import net.minecraft.sounds.SoundSource;
-import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.phys.Vec3;
 
-/**
- * Kirin - Sasuke's signature Mangekyo technique (combo 1121).
- *
- * Canon Kirin is not a spell you fire, it is a thunderstorm you spend time building and
- * then aim. So this is CHANNELED: hold the cast and the sky above you fills with static
- * discharge, the weather turns, and only after a full three seconds does the bolt come
- * down. Let go early and the charge simply dissipates - the whole point of the technique
- * is that it is devastating precisely because it is slow and telegraphed.
- *
- * Requires open sky over the target, as before: the bolt rides a real thunderhead.
- */
 public class KirinAbility extends Ability implements Ability.Cooldown, Ability.Channeled {
-
     private static final float CHARGE_TICK_COST = 1.5f;
-    private static final double RANGE = 24.0;
-    private static final float DIRECT_DAMAGE = 34f;
-    private static final float SPLASH_DAMAGE = 10f;
-    /**
-     * What the landing actually covers.
-     *
-     * Kirin is not a sniper shot. Four blocks made it a point strike you could stand next to;
-     * the thing in the source flattens an area, and everything caught inside it goes with the
-     * target.
-     */
-    private static final double SPLASH_RADIUS = 6.0;
-
-    /** Three seconds, matching the legacy mod's own wind-up exactly. */
     private static final int CHARGE_TICKS = 60;
-    /** Where the thunderhead sits. The bolt is drawn down from here. */
-    private static final int CLOUD_HEIGHT = 40;
-
-    /**
-     * How far above the target the dragon forms, and how fast it comes down.
-     *
-     * It used to form twenty-six blocks up and descend at 2.6 blocks a tick: ten ticks, half a
-     * second, entirely above the field of view of somebody looking at the target they had just
-     * marked. The technique was invisible in the most literal sense — the dragon existed, flew
-     * and detonated without ever crossing the screen.
-     *
-     * Fifty-five blocks at 1.15 a tick is roughly two and a half seconds of visible descent
-     * out of the cloud layer, which is the part of this technique everybody remembers.
-     */
-    private static final double DESCENT_HEIGHT = 55.0;
-    private static final double DESCENT_SPEED = 1.15;
-    /** Kirin is the largest thing on the field while it is coming down. */
-    private static final float BODY_SCALE = 3.4f;
+    private static final double RANGE = 24.0;
 
     @Override
     public ActivationType activationType() {
@@ -76,13 +28,13 @@ public class KirinAbility extends Ability implements Ability.Cooldown, Ability.C
     }
 
     @Override
-    public String requiredEye() {
-        return "sharingan_ms";
+    public String element() {
+        return "lightning";
     }
 
     @Override
-    public String requiredEyeForm() {
-        return "sasuke";
+    public int elementLevelRequired() {
+        return 15;
     }
 
     @Override
@@ -92,16 +44,14 @@ public class KirinAbility extends Ability implements Ability.Cooldown, Ability.C
 
     @Override
     public SoundEvent castingSound() {
-        return SoundEvents.LIGHTNING_BOLT_THUNDER;
+        return null;
     }
 
-    /** Tapping the combo does nothing but tell you to hold it - there is no quick Kirin. */
     @Override
     public boolean canActivateBelowMinCharge() {
         return false;
     }
 
-    /** A charge released early never became a strike, so it must not burn the cooldown. */
     @Override
     public boolean channelCommittedAt(int ticksChanneled) {
         return ticksChanneled >= CHARGE_TICKS;
@@ -109,8 +59,6 @@ public class KirinAbility extends Ability implements Ability.Cooldown, Ability.C
 
     @Override
     public boolean handleCost(Player player, INinjaData ninjaData, int chargeAmount) {
-        // Billed per tick of channelling rather than as a lump sum, so an interrupted
-        // charge costs you only what you actually spent holding it.
         if (ninjaData.getChakra() < CHARGE_TICK_COST) {
             player.displayClientMessage(Component.translatable("jutsu.fail.notenoughchakra",
                     Component.translatable(this.getTranslationKey(ninjaData)).withStyle(ChatFormatting.YELLOW)), true);
@@ -120,122 +68,34 @@ public class KirinAbility extends Ability implements Ability.Cooldown, Ability.C
         return true;
     }
 
-    /**
-     * The wind-up. Static discharge gathers in a dome overhead that widens and intensifies
-     * as the charge builds, and at four-fifths the storm actually breaks.
-     */
     @Override
     public void handleChannelling(Player player, INinjaData ninjaData, int ticksChanneled) {
-        if (!(player.level() instanceof ServerLevel serverLevel)) {
-            return;
-        }
-        float progress = Math.min(1.0f, ticksChanneled / (float) CHARGE_TICKS);
-
-        // A couple of arcs per tick, more as it builds, scattered across a widening dome.
-        int arcs = 1 + (int) (progress * 3);
-        double spread = 6.0 + progress * 22.0;
-        for (int i = 0; i < arcs; i++) {
-            Vec3 base = player.position().add(
-                    (serverLevel.getRandom().nextDouble() - 0.5) * spread,
-                    CLOUD_HEIGHT + serverLevel.getRandom().nextDouble() * 8.0,
-                    (serverLevel.getRandom().nextDouble() - 0.5) * spread);
-            Vec3 end = base.add(
-                    (serverLevel.getRandom().nextDouble() - 0.5) * 10.0,
-                    -serverLevel.getRandom().nextDouble() * 6.0,
-                    (serverLevel.getRandom().nextDouble() - 0.5) * 10.0);
-            NarutoParticles.spawnBolt(serverLevel, base, end, 3, 1.5, NarutoParticles.CHIDORI_CYAN);
-        }
-
-        // Sparks gathering on the caster themselves, so the charge is visible from the ground.
-        if (ticksChanneled % 4 == 0) {
-            NarutoParticles.spawnRing(serverLevel, player.position().add(0, 1.0, 0),
-                    0.8 + progress, 12, NarutoParticles.CHIDORI_CYAN);
-        }
-
-        if (ticksChanneled == (int) (CHARGE_TICKS * 0.8f)) {
-            // The storm breaks. Brief, and only a nudge - permanently reshaping the
-            // player's weather because they charged a jutsu would be obnoxious.
-            serverLevel.setWeatherParameters(0, 600, true, true);
-            serverLevel.playSound(null, player.blockPosition(), SoundEvents.LIGHTNING_BOLT_THUNDER,
-                    SoundSource.WEATHER, 4.0f, 0.6f);
+        if (ticksChanneled % 6 == 0 && player.level() instanceof ServerLevel level) {
+            level.sendParticles(ParticleTypes.ELECTRIC_SPARK, player.getX(), player.getEyeY(),
+                    player.getZ(), 4 + Math.min(6, ticksChanneled / 10), 0.37, 0.38, 0.37, 0.055);
         }
     }
 
     @Override
     public void performServer(Player player, INinjaData ninjaData, int ticksActive) {
         if (ticksActive < CHARGE_TICKS) {
-            player.displayClientMessage(Component.translatable("jutsu.kirin.uncharged")
-                    .withStyle(ChatFormatting.GRAY), true);
+            player.displayClientMessage(Component.translatable("jutsu.kirin.uncharged").withStyle(ChatFormatting.GRAY), true);
             return;
         }
         LivingEntity target = EyeTargeting.raycastLiving(player, RANGE);
         if (target == null) {
-            player.displayClientMessage(Component.translatable("jutsu.fail.notarget",
-                    Component.translatable(this.getTranslationKey(ninjaData)).withStyle(ChatFormatting.YELLOW))
-                    .withStyle(ChatFormatting.RED), true);
+            this.failure(player, ninjaData, "jutsu.fail.notarget");
             return;
         }
-        // Kirin rides a thunderhead - it needs sky above the target to come down.
-        BlockPos targetPos = target.blockPosition();
-        if (!player.level().canSeeSky(targetPos)) {
-            player.displayClientMessage(Component.translatable("jutsu.fail.nosky",
-                    Component.translatable(this.getTranslationKey(ninjaData)).withStyle(ChatFormatting.YELLOW))
-                    .withStyle(ChatFormatting.RED), true);
-            return;
-        }
-
-        float multiplier = ninjaData.getRankDamageMultiplier();
-        // No damage here. The bolt is what hits, and it hits when it arrives.
-        //
-        // This used to deal the full direct damage the instant the cast resolved, and THEN
-        // send a dragon down which could hit again on contact and once more on detonation.
-        // The target was already dead before the thing that supposedly killed them had left
-        // the cloud, so the wind-up and the descent were decoration - there was no moment to
-        // react to, and on a bad frame the same cast landed twice.
-
-        // Kirin is a lightning dragon that comes down out of the cloud. It was a bare
-        // vanilla bolt plus damage numbers, which is the one thing this technique is not.
-        // Out of the cloud layer, not out of thin air just overhead. Clamped to the build
-        // height so this still works on a mountain top rather than forming inside the ceiling.
-        double crownY = Math.min(target.getY() + DESCENT_HEIGHT,
-                player.level().getMaxBuildHeight() - 2);
-        Vec3 crown = new Vec3(target.getX(), crownY, target.getZ());
-        com.sekwah.narutomod.entity.jutsuprojectile.ChakraDragonEntity dragon =
-                new com.sekwah.narutomod.entity.jutsuprojectile.ChakraDragonEntity(
-                        player, crown, target.position().add(0, target.getBbHeight() * 0.5, 0),
-                        com.sekwah.narutomod.entity.jutsuprojectile.ChakraDragonEntity.Kind.LIGHTNING)
-                        .speed(DESCENT_SPEED)
-                        .scale(BODY_SCALE)
-                        .damage(DIRECT_DAMAGE * multiplier, SPLASH_RADIUS);
-        player.level().addFreshEntity(dragon);
-
-        if (player.level() instanceof ServerLevel serverLevel) {
-            // The thunderhead lighting up, drawn where the thunderhead is. This used to fire
-            // at the target's feet on the tick of the cast, which announced the impact
-            // several seconds before anything arrived there.
-            strike(serverLevel, crown);
-            serverLevel.playSound(null, targetPos, SoundEvents.LIGHTNING_BOLT_THUNDER,
-                    SoundSource.PLAYERS, 4.0f, 0.7f);
+        float scale = ninjaData.getRankDamageMultiplier();
+        if (!KirinStrikeEntity.mark(player, target, new KirinStrikeEntity.Profile(34f * scale, 10f * scale, 6))) {
+            this.failure(player, ninjaData, "jutsu.fail.nosky");
         }
     }
 
-    /**
-     * The strike itself: several branching bolts torn down out of the cloud onto the
-     * target, all converging on the same point so they read as one enormous fork rather
-     * than as separate hits.
-     */
-    private void strike(ServerLevel level, Vec3 impact) {
-        Vec3 cloud = impact.add(0, CLOUD_HEIGHT, 0);
-        for (int i = 0; i < 3; i++) {
-            Vec3 start = cloud.add(
-                    (level.getRandom().nextDouble() - 0.5) * 8.0,
-                    level.getRandom().nextDouble() * 6.0,
-                    (level.getRandom().nextDouble() - 0.5) * 8.0);
-            NarutoParticles.spawnBolt(level, start, impact, 6, 5.0, NarutoParticles.CHIDORI_CYAN);
-        }
-        NarutoParticles.spawnBurst(level, impact.add(0, 0.5, 0), 60, 1.2, NarutoParticles.CHIDORI_CYAN);
-        NarutoParticles.spawnRing(level, impact.add(0, 0.2, 0), SPLASH_RADIUS, 48,
-                NarutoParticles.CHIDORI_CYAN);
-        level.sendParticles(ParticleTypes.EXPLOSION, impact.x, impact.y + 1.0, impact.z, 4, 1.0, 0.6, 1.0, 0.0);
+    private void failure(Player player, INinjaData ninjaData, String key) {
+        player.displayClientMessage(Component.translatable(key,
+                Component.translatable(this.getTranslationKey(ninjaData)).withStyle(ChatFormatting.YELLOW))
+                .withStyle(ChatFormatting.RED), true);
     }
 }

@@ -3,10 +3,17 @@ package com.sekwah.narutomod.anims;
 import com.sekwah.narutomod.abilities.NarutoAbilities;
 import com.sekwah.narutomod.capabilities.INinjaData;
 import com.sekwah.narutomod.capabilities.NinjaCapabilityHandler;
+import com.sekwah.narutomod.client.renderer.ChidoriDashRenderer;
+import com.sekwah.narutomod.client.renderer.NagashiRenderer;
+import com.sekwah.narutomod.client.renderer.ChakraChargeRenderer;
+import com.sekwah.narutomod.client.renderer.MedicalPalmRenderer;
+import com.sekwah.narutomod.client.renderer.ScalpelRenderer;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
+import net.minecraft.world.entity.HumanoidArm;
 
 /**
  * Poses the player's own arm in first person.
@@ -47,6 +54,10 @@ public final class FirstPersonAnimHandler {
         renderingRightHand = right;
     }
 
+    public static boolean isRenderingMainHand(AbstractClientPlayer player) {
+        return renderingRightHand == (player.getMainArm() == HumanoidArm.RIGHT);
+    }
+
     /**
      * True only while PlayerRenderer is drawing a first-person hand.
      *
@@ -75,11 +86,46 @@ public final class FirstPersonAnimHandler {
             if (!ninjaData.isNinjaModeEnabled()) {
                 return;
             }
-            apply(ninjaData, part, player.tickCount);
+            boolean mainHand = isRenderingMainHand(player);
+            float heal = MedicalPalmRenderer.weight(player, Minecraft.getInstance().getFrameTime());
+            if (heal > PoseBlender.EPSILON) {
+                part.xRot -= (mainHand ? 0.31f : 0.16f) * heal;
+                part.zRot += (renderingRightHand ? 0.12f : -0.12f) * heal;
+                return;
+            }
+            float scalpel = ScalpelRenderer.weight(player, Minecraft.getInstance().getFrameTime());
+            if (mainHand && scalpel > PoseBlender.EPSILON) {
+                part.xRot -= 0.34f * scalpel;
+                part.yRot += (renderingRightHand ? -0.14f : 0.14f) * scalpel;
+                return;
+            }
+            var dash = ChidoriDashRenderer.pose(player, Minecraft.getInstance().getFrameTime());
+            if (dash != null) {
+                float pitch = switch (dash.phase()) {
+                    case BRACE -> mainHand ? 0.34f : -0.61f;
+                    case TRAVEL -> mainHand ? -1.21f : 0.67f;
+                    default -> mainHand ? -0.43f : -0.15f;
+                };
+                part.xRot += pitch * dash.weight() * SCALE;
+                return;
+            }
+            float discharge = NagashiRenderer.pose(player, Minecraft.getInstance().getFrameTime());
+            if (discharge > PoseBlender.EPSILON) {
+                part.xRot -= 0.23f * discharge;
+                part.zRot += (renderingRightHand ? 0.23f : -0.23f) * discharge;
+                return;
+            }
+            if (NarutoAbilities.CHAKRA_CHARGE.getId().equals(ninjaData.getCurrentlyChanneledAbility())) {
+                float breath = ChakraChargeRenderer.weight(player, Minecraft.getInstance().getFrameTime());
+                part.xRot -= 0.37f * breath;
+                part.yRot += (renderingRightHand ? -0.27f : 0.27f) * breath;
+                return;
+            }
+            apply(ninjaData, part, player.tickCount, mainHand);
         });
     }
 
-    private static void apply(INinjaData ninjaData, ModelPart part, int tickCount) {
+    private static void apply(INinjaData ninjaData, ModelPart part, int tickCount, boolean mainHand) {
         ResourceLocation channelled = ninjaData.getCurrentlyChanneledAbility();
 
         if (ninjaData.isChidoriActive() && renderingRightHand) {
@@ -91,12 +137,13 @@ public final class FirstPersonAnimHandler {
             return;
         }
 
-        if (ninjaData.isRasenganHeld() && renderingRightHand) {
+        if (ninjaData.isRasenganHeld() && mainHand) {
             // Palm turned up and out, carrying the sphere clear of the body.
             float wobble = Mth.sin(tickCount * 0.55f) * 0.05f;
             part.xRot += (-0.55f + wobble) * SCALE;
-            part.yRot += -0.55f * SCALE;
-            part.zRot += -0.30f * SCALE;
+            float side = renderingRightHand ? 1f : -1f;
+            part.yRot += -0.55f * SCALE * side;
+            part.zRot += -0.30f * SCALE * side;
             return;
         }
 
@@ -112,6 +159,11 @@ public final class FirstPersonAnimHandler {
         }
 
         if (ninjaData.getCastPoseTicks() > 0) {
+            if (NarutoAbilities.LIGHTNING_SHOCK.getId().equals(ninjaData.getLastCastAbilityId())) {
+                part.xRot -= (mainHand ? 0.84f : 0.14f) * SCALE;
+                part.yRot += (renderingRightHand ? -0.12f : 0.12f) * SCALE;
+                return;
+            }
             // The seal snap, at the scale the viewport can hold.
             part.xRot += -1.05f * SCALE;
             part.yRot += (renderingRightHand ? -0.30f : 0.30f) * SCALE;

@@ -1,81 +1,26 @@
 package com.sekwah.narutomod.abilities.jutsus;
 
 import com.sekwah.narutomod.abilities.Ability;
+import com.sekwah.narutomod.abilities.NarutoAbilities;
 import com.sekwah.narutomod.capabilities.INinjaData;
+import com.sekwah.narutomod.events.BodyRiteEffects;
+import com.sekwah.narutomod.network.s2c.BodyRitePacket.Phase;
+import com.sekwah.narutomod.util.EightGateCycle;
+import com.sekwah.narutomod.util.SageFocus;
 import net.minecraft.ChatFormatting;
-import net.minecraft.core.particles.DustParticleOptions;
-import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.chat.Component;
-import net.minecraft.server.level.ServerLevel;
+import net.minecraft.sounds.SoundEvent;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.player.Player;
-import org.joml.Vector3f;
 
-/**
- * Sage Mode — CHANNELED ability (combo 1231).
- *
- * HOLD the combo keys to gather natural energy (sageCharge increases each tick).
- * RELEASE when you have enough charge (>=50) to activate Sage Mode.
- * If you hold too long past max charge (100), overcharge ticks accumulate
- * and you risk petrification.
- *
- * Cost: 1.0 chakra/tick while channeling, 80 upfront on activation.
- * Cooldown: 60 seconds (only after successful activation).
- */
-public class SageModeAbility extends Ability implements Ability.Channeled, Ability.Cooldown {
+public class SageModeAbility extends Ability implements Ability.Channeled, Ability.Cooldown, Ability.AlternateActivation {
+    private static final float GATHER_COST = 1;
+    private static final float ACTIVATION_COST = 80;
 
-    /** Exempt from the free-hands gate: this is a transformation being worn, not a hand-cast technique. */
     @Override
     public boolean requiresFreeHands() {
         return false;
-    }
-
-    private static final float CHAKRA_PER_TICK = 1.0f;
-    private static final float ACTIVATION_COST = 80f;
-    private static final int MIN_CHARGE_FOR_ACTIVATION = 50;
-    private static final int SAGE_MAX_CHARGE = 100;
-    private static final int PETRIFY_THRESHOLD = 300; // ticks spent sitting at max charge
-
-    /**
-     * Ticks held at a hundred charge. Reset the moment the gather drops below it.
-     *
-     * Per-ability rather than per-player because only one Sage Mode can be gathered at a time
-     * and the value is meaningless outside a live channel.
-     */
-    private int ticksAtMaxCharge = 0;
-
-    /**
-     * Whether the last release actually turned Sage Mode on.
-     *
-     * Sixty seconds of cooldown used to be charged for a release that failed on insufficient
-     * charge or chakra - the two most likely ways for a new player to get this wrong - so
-     * fumbling the technique locked them out of it for a minute.
-     */
-    private boolean lastActivationSucceeded = false;
-
-    /** Charge lost per tick spent moving while gathering. */
-    private static final int MOVING_CHARGE_LOSS = 2;
-
-    /**
-     * Whether the gatherer is moving enough to spoil the balance.
-     *
-     * Deliberately generous about small drift - being nudged by a mob or sliding a fraction
-     * off a slab should not undo a gather - but any deliberate travel counts.
-     */
-    private static boolean isMoving(Player player) {
-        if (player.isSprinting() || player.isPassenger()) {
-            return true;
-        }
-        net.minecraft.world.phys.Vec3 motion = player.getDeltaMovement();
-        double horizontal = motion.x * motion.x + motion.z * motion.z;
-        return horizontal > 0.0025;
-    }
-
-    /** Only a release that actually activated Sage Mode is a cast worth paying for. */
-    @Override
-    public boolean channelCommittedAt(int ticksChanneled) {
-        return this.lastActivationSucceeded;
     }
 
     @Override
@@ -90,144 +35,146 @@ public class SageModeAbility extends Ability implements Ability.Channeled, Abili
 
     @Override
     public int getCooldown() {
-        return 60 * 20;
+        return 1200;
     }
 
-    /**
-     * Allow releasing below min charge — it just won't activate sage mode,
-     * but won't error either (charge is saved for next attempt).
-     */
+    @Override
+    public SoundEvent castingSound() {
+        return null;
+    }
+
     @Override
     public boolean canActivateBelowMinCharge() {
+        return false;
+    }
+
+    @Override
+    public boolean hideChannelMessages() {
         return true;
     }
 
     @Override
-    public boolean useChargedMessages() {
-        return false; // We send custom messages
-    }
-
-    @Override
-    public boolean handleCost(Player player, INinjaData ninjaData, int chargeAmount) {
-        // If sage mode already active — toggle off
-        if (ninjaData.isSageModeActive()) {
-            ninjaData.setSageModeActive(false);
-            player.displayClientMessage(Component.translatable("sage.deactivate").withStyle(ChatFormatting.RED), true);
+    public boolean handleAlternate(Player player, INinjaData data) {
+        if (!data.isSageModeActive()) {
             return false;
         }
-        if (ninjaData.getNinjaRank() < 2) {
-            player.displayClientMessage(Component.translatable("jutsu.fail.rank.chunin",
-                    Component.translatable(this.getTranslationKey(ninjaData)).withStyle(ChatFormatting.YELLOW)), true);
-            return false;
-        }
-        if (ninjaData.getChakra() < CHAKRA_PER_TICK) {
-            player.displayClientMessage(Component.translatable("jutsu.fail.notenoughchakra",
-                    Component.translatable(this.getTranslationKey(ninjaData)).withStyle(ChatFormatting.YELLOW)), true);
-            return false;
-        }
-        ninjaData.useChakra(CHAKRA_PER_TICK, 5);
+        endActive(player, data);
         return true;
     }
 
-    /**
-     * Called every tick while holding the combo keys.
-     * Gathers natural energy — increments sageCharge.
-     * If overcharging past max, warns and eventually petrifies.
-     */
     @Override
-    public void handleChannelling(Player player, INinjaData ninjaData, int ticksChanneled) {
-        int currentCharge = ninjaData.getSageCharge();
+    public boolean handleCost(Player player, INinjaData data, int ticksActive) {
+        if (!compatible(player, data)) {
+            interrupt(player, data);
+            player.displayClientMessage(Component.translatable("sage.fail.unavailable").withStyle(ChatFormatting.YELLOW), true);
+            return false;
+        }
+        if (data.getNinjaRank() < 2 || data.getChakra() < GATHER_COST) {
+            interrupt(player, data);
+            String key = data.getNinjaRank() < 2 ? "jutsu.fail.rank.chunin" : "jutsu.fail.notenoughchakra";
+            player.displayClientMessage(Component.translatable(key, Component.translatable(getTranslationKey(data)))
+                    .withStyle(ChatFormatting.YELLOW), true);
+            return false;
+        }
+        data.useChakra(GATHER_COST, 5);
+        return true;
+    }
 
-        if (currentCharge < SAGE_MAX_CHARGE) {
-            // Natural energy only comes to someone who stops moving.
-            //
-            // It gathered at full rate while sprinting, which removed the entire cost of the
-            // technique: Sage Mode is supposed to be the thing you cannot do in the middle of
-            // a fight without a partner or a clone holding still for you. Moving now bleeds
-            // the charge instead of building it, so a gather has to be committed to.
-            if (isMoving(player)) {
-                ninjaData.setSageCharge(Math.max(0, currentCharge - MOVING_CHARGE_LOSS));
-                if (ticksChanneled % 20 == 0) {
-                    player.displayClientMessage(Component.translatable("sage.fail.moving")
-                            .withStyle(ChatFormatting.YELLOW), true);
-                }
-                return;
-            }
-            // Gather natural energy: 1 charge per tick
-            ninjaData.setSageCharge(currentCharge + 1);
-
-            // Gathering particles every 5 ticks
-            this.ticksAtMaxCharge = 0;
-            if (ticksChanneled % 5 == 0 && player.level() instanceof ServerLevel serverLevel) {
-                serverLevel.sendParticles(
-                        new DustParticleOptions(new Vector3f(1.0f, 0.7f, 0.1f), 1.2f),
-                        player.getX(), player.getY() + 1.0, player.getZ(),
-                        3, 0.3, 0.5, 0.3, 0.02);
-                serverLevel.sendParticles(ParticleTypes.END_ROD,
-                        player.getX(), player.getY() + 0.5, player.getZ(),
-                        1, 0.2, 0.3, 0.2, 0.01);
-            }
-        } else {
-            // Overcharging. The clock that matters is how long the gatherer has been sitting
-            // AT full, not how long they have been channelling: a slow gather that only just
-            // reached a hundred was being petrified on arrival, because the old test compared
-            // total channel time against the threshold. The expression that was supposed to
-            // correct for that was computed into a local and then never read.
-            this.ticksAtMaxCharge++;
-
-            if (ticksChanneled % 20 == 0) {
-                player.displayClientMessage(
-                        Component.translatable("sage.overcharge.warning").withStyle(ChatFormatting.GOLD), true);
-            }
-
-            // Petrification after holding too long at max
-            if (this.ticksAtMaxCharge > PETRIFY_THRESHOLD && currentCharge >= SAGE_MAX_CHARGE) {
-                player.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 10 * 20, 9, false, true));
-                player.addEffect(new MobEffectInstance(MobEffects.DIG_SLOWDOWN, 10 * 20, 9, false, true));
-                player.hurt(player.damageSources().magic(), 6.0f);
-                ninjaData.setSageCharge(0);
-                player.displayClientMessage(
-                        Component.translatable("sage.petrify").withStyle(ChatFormatting.DARK_RED), true);
-            }
+    @Override
+    public void handleChannelling(Player player, INinjaData data, int age) {
+        var focus = data.getSageFocus();
+        if (age == 0) {
+            focus.reset();
+        }
+        var sample = focus.advance(data.getSageCharge(), player.position(), stable(player, data));
+        data.setSageCharge(sample.charge());
+        if (sample.beat() == SageFocus.Beat.PETRIFY) {
+            petrify(player, data);
+            return;
+        }
+        if (focus.publish(sample.beat(), age)) {
+            drawFocus(player, sample, age);
         }
     }
 
-    /**
-     * Called when the player releases the combo keys.
-     * If enough charge accumulated, activate Sage Mode.
-     */
+    private static void drawFocus(Player actor, SageFocus.Sample sample, int age) {
+        Phase phase = switch (sample.beat()) {
+            case DRAW -> Phase.SAGE_DRAW;
+            case BALANCED -> Phase.SAGE_BALANCE;
+            case OVERFLOW -> Phase.SAGE_OVERFLOW;
+            case FRACTURE -> Phase.SAGE_BREAK;
+            case PETRIFY -> Phase.SAGE_STONE;
+        };
+        boolean accent = age == 0 || age % 40 == 0;
+        BodyRiteEffects.emit(actor, phase, sample.intensity(), accent);
+        if (accent && phase == Phase.SAGE_OVERFLOW) {
+            actor.displayClientMessage(Component.translatable("sage.overcharge.warning").withStyle(ChatFormatting.GOLD), true);
+        }
+    }
+
     @Override
-    public void performServer(Player player, INinjaData ninjaData, int ticksActive) {
-        this.lastActivationSucceeded = false;
-        this.ticksAtMaxCharge = 0;
-        int charge = ninjaData.getSageCharge();
-
-        if (charge < MIN_CHARGE_FOR_ACTIVATION) {
-            // Not enough charge — just stop gathering, keep what they have
-            player.displayClientMessage(
-                    Component.translatable("sage.fail.notenoughcharge").withStyle(ChatFormatting.YELLOW), true);
+    public void performServer(Player player, INinjaData data, int age) {
+        if (age <= 0 || !compatible(player, data)
+                || !data.getSageFocus().canRelease(data.getSageCharge(), player.position(), stable(player, data))) {
+            BodyRiteEffects.emit(player, Phase.SAGE_BREAK, 0, true);
+            player.displayClientMessage(Component.translatable(data.getSageCharge() < SageFocus.MINIMUM
+                    ? "sage.fail.notenoughcharge" : "sage.fail.moving").withStyle(ChatFormatting.YELLOW), true);
             return;
         }
-
-        // Check activation chakra cost
-        if (ninjaData.getChakra() < ACTIVATION_COST) {
+        if (data.getChakra() < ACTIVATION_COST) {
+            BodyRiteEffects.emit(player, Phase.SAGE_BREAK, 0, true);
             player.displayClientMessage(Component.translatable("jutsu.fail.notenoughchakra",
-                    Component.translatable(this.getTranslationKey(ninjaData)).withStyle(ChatFormatting.YELLOW)), true);
+                    Component.translatable(getTranslationKey(data))).withStyle(ChatFormatting.YELLOW), true);
             return;
         }
+        int charge = data.getSageCharge();
+        int duration = SageFocus.duration(charge);
+        data.useChakra(ACTIVATION_COST, 40);
+        data.setSageModeTicks(duration);
+        data.setSageModeActive(true);
+        data.setSageCharge(0);
+        data.getSageFocus().commit();
+        BodyRiteEffects.emit(player, Phase.SAGE_ENTER, charge, true);
+        player.displayClientMessage(Component.translatable("sage.activate", duration / 20).withStyle(ChatFormatting.GREEN), true);
+    }
 
-        ninjaData.useChakra(ACTIVATION_COST, 40);
+    @Override
+    public boolean channelCommittedAt(INinjaData data, int age) {
+        return data.getSageFocus().committed();
+    }
 
-        // Convert charge to duration: charge * 12 ticks (100 charge = 60 seconds)
-        int duration = charge * 12;
-        ninjaData.setSageModeTicks(duration);
-        ninjaData.setSageModeActive(true);
-        ninjaData.setSageCharge(0);
-        this.lastActivationSucceeded = true;
+    public static boolean compatible(Player actor, INinjaData data) {
+        return actor.isAlive() && !actor.isSpectator() && data.isNinjaModeEnabled() && !data.isGiantForm()
+                && data.getGatesOpen() < EightGateCycle.LAST && BodyRiteEffects.clock(actor) >= data.getSageStoneUntil();
+    }
 
-        player.displayClientMessage(
-                Component.translatable("sage.activate",
-                        Component.literal(String.valueOf(duration / 20)).withStyle(ChatFormatting.GOLD))
-                        .withStyle(ChatFormatting.GREEN), true);
+    public static void endActive(Player actor, INinjaData data) {
+        data.setSageModeActive(false);
+        BodyRiteEffects.emit(actor, Phase.SAGE_EXIT, 0, true);
+        actor.displayClientMessage(Component.translatable("sage.deactivate").withStyle(ChatFormatting.GRAY), true);
+    }
+
+    public static void interrupt(Player actor, INinjaData data) {
+        if (NarutoAbilities.SAGE_MODE.getId().equals(data.getCurrentlyChanneledAbility())) {
+            data.setCurrentlyChanneledAbility(actor, null);
+            BodyRiteEffects.emit(actor, Phase.SAGE_BREAK, 0, true);
+        }
+        data.getSageFocus().reset();
+    }
+
+    private static boolean stable(Player actor, INinjaData data) {
+        return actor.onGround() && !actor.isSprinting() && !actor.isPassenger() && !actor.isFallFlying()
+                && !actor.isInWaterOrBubble() && !data.isWallWalkAttached();
+    }
+
+    private static void petrify(Player actor, INinjaData data) {
+        data.setCurrentlyChanneledAbility(actor, null);
+        data.getSageFocus().reset();
+        data.setSageStoneUntil(BodyRiteEffects.clock(actor) + SageFocus.STONE_TICKS);
+        actor.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, SageFocus.STONE_TICKS, 9, false, false));
+        actor.addEffect(new MobEffectInstance(MobEffects.DIG_SLOWDOWN, SageFocus.STONE_TICKS, 9, false, false));
+        actor.hurt(actor.damageSources().magic(), 6.0f);
+        BodyRiteEffects.emit(actor, Phase.SAGE_STONE, 100, true);
+        actor.displayClientMessage(Component.translatable("sage.petrify").withStyle(ChatFormatting.DARK_RED), true);
     }
 }

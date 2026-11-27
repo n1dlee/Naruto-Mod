@@ -2,22 +2,27 @@ package com.sekwah.narutomod.entity.projectile;
 
 import com.sekwah.narutomod.entity.NarutoEntities;
 import com.sekwah.narutomod.item.NarutoItems;
-import com.sekwah.narutomod.util.NarutoParticles;
-import net.minecraft.server.level.ServerLevel;
+import com.sekwah.narutomod.util.HiraishinFormula;
+import net.minecraft.core.Direction;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.BlockHitResult;
+
+import java.util.UUID;
 
 /**
  * A thrown Hiraishin kunai. Behaves like a normal kunai in flight and sticks where it
  * lands, but carries the Flying Thunder God seal — HiraishinTeleportAbility looks for
  * these to decide where the caster snaps to.
  *
- * It stays put once thrown (no despawn) because the whole point is placing a waypoint on
- * the battlefield and using it later.
+ * An embedded blade remains an anchor for its normal projectile lifetime.
  */
 public class HiraishinKunaiEntity extends KunaiEntity {
+    private UUID formulaOwner;
+    private Direction impactFace = Direction.UP;
 
     public HiraishinKunaiEntity(EntityType<? extends HiraishinKunaiEntity> type, Level level) {
         super(type, level);
@@ -25,21 +30,59 @@ public class HiraishinKunaiEntity extends KunaiEntity {
 
     public HiraishinKunaiEntity(Level level, LivingEntity shooter) {
         super(NarutoEntities.HIRAISHIN_KUNAI.get(), shooter, level);
+        this.formulaOwner = shooter.getUUID();
     }
 
     @Override
     protected ItemStack getPickupItem() {
-        return new ItemStack(NarutoItems.HIRAISHIN_KUNAI.get());
+        ItemStack stack = new ItemStack(NarutoItems.HIRAISHIN_KUNAI.get());
+        UUID owner = this.formulaOwner;
+        if (owner == null && this.getOwner() != null) {
+            owner = this.getOwner().getUUID();
+        }
+        if (owner != null) {
+            stack.getOrCreateTag().putUUID(HiraishinFormula.KUNAI_OWNER, owner);
+        }
+        return stack;
+    }
+
+    public void bindFormula(UUID owner) {
+        this.formulaOwner = owner;
+    }
+
+    public boolean isFormulaFor(LivingEntity actor) {
+        return this.getOwner() == actor && (this.formulaOwner == null || this.formulaOwner.equals(actor.getUUID()));
+    }
+
+    public boolean isPlanted() {
+        return this.inGround;
+    }
+
+    public Direction impactFace() {
+        return this.impactFace;
     }
 
     @Override
-    public void tick() {
-        super.tick();
-        // A faint marker glow so a planted kunai is findable in a fight.
-        if (!this.level().isClientSide && this.inGround && this.tickCount % 10 == 0
-                && this.level() instanceof ServerLevel serverLevel) {
-            serverLevel.sendParticles(NarutoParticles.TELEPORT_GOLD,
-                    this.getX(), this.getY() + 0.2, this.getZ(), 2, 0.08, 0.08, 0.08, 0.0);
+    protected void onHitBlock(BlockHitResult hit) {
+        super.onHitBlock(hit);
+        this.impactFace = hit.getDirection();
+    }
+
+    @Override
+    public void addAdditionalSaveData(CompoundTag tag) {
+        super.addAdditionalSaveData(tag);
+        if (this.formulaOwner != null) {
+            tag.putUUID(HiraishinFormula.KUNAI_OWNER, this.formulaOwner);
         }
+        tag.putByte("HiraishinImpactFace", (byte) this.impactFace.get3DDataValue());
+    }
+
+    @Override
+    public void readAdditionalSaveData(CompoundTag tag) {
+        super.readAdditionalSaveData(tag);
+        this.formulaOwner = tag.hasUUID(HiraishinFormula.KUNAI_OWNER)
+                ? tag.getUUID(HiraishinFormula.KUNAI_OWNER) : null;
+        this.impactFace = tag.contains("HiraishinImpactFace")
+                ? Direction.from3DDataValue(tag.getByte("HiraishinImpactFace")) : Direction.UP;
     }
 }

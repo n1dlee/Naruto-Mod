@@ -1,0 +1,14 @@
+{
+  "parent": "minecraft:block/block",
+  "textures": { "top": "minecraft:block/stripped_dark_oak_log", "bark": "minecraft:block/dark_oak_log", "cap": "minecraft:block/dark_oak_log_top", "particle": "#bark" },
+  "elements": [
+    {
+      "from": [0, 3, 4], "to": [16, 10, 12],
+      "faces": {
+        "down": { "texture": "#bark", "rotation": 90 }, "up": { "texture": "#top", "rotation": 90 },
+        "north": { "texture": "#bark", "rotation": 90 }, "south": { "texture": "#bark", "rotation": 90 },
+        "west": { "texture": "#cap" }, "east": { "texture": "#cap" }
+      }
+    }
+  ]
+}

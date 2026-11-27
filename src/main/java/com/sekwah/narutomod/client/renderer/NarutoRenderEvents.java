@@ -6,18 +6,30 @@ import com.sekwah.narutomod.client.model.entity.KuramaAvatarModel;
 import com.sekwah.narutomod.client.model.entity.KuramaTailModel;
 import com.sekwah.narutomod.client.model.entity.SubstitutionLogModel;
 import com.sekwah.narutomod.client.model.entity.SusanooModel;
+import com.sekwah.narutomod.client.model.entity.WoodGolemModel;
 import com.sekwah.narutomod.client.model.item.model.*;
 import com.sekwah.narutomod.client.model.jutsu.FireballJutsuModel;
 import com.sekwah.narutomod.client.model.jutsu.RasenganJutsuModel;
 import com.sekwah.narutomod.client.model.jutsu.WaterBulletModel;
 import com.sekwah.narutomod.client.renderer.entity.*;
 import com.sekwah.narutomod.client.renderer.entity.jutsuprojectile.FireballJutsuRenderer;
+import com.sekwah.narutomod.client.renderer.entity.jutsuprojectile.AmaterasuFlameRenderer;
+import com.sekwah.narutomod.client.renderer.entity.jutsuprojectile.GianBeamRenderer;
+import com.sekwah.narutomod.client.renderer.entity.jutsuprojectile.IronSandRenderer;
+import com.sekwah.narutomod.client.renderer.entity.jutsuprojectile.IceSpearRenderer;
+import com.sekwah.narutomod.client.renderer.entity.jutsuprojectile.ClayBombRenderer;
+import com.sekwah.narutomod.client.renderer.entity.jutsuprojectile.GustFrontRenderer;
+import com.sekwah.narutomod.client.renderer.entity.jutsuprojectile.ShockArcRenderer;
 import com.sekwah.narutomod.client.renderer.entity.jutsuprojectile.RasenganRenderer;
 import com.sekwah.narutomod.client.renderer.entity.jutsuprojectile.WaterBulletJutsuRenderer;
+import com.sekwah.narutomod.client.renderer.entity.jutsuprojectile.WaterShotRenderer;
 import com.sekwah.narutomod.entity.NarutoEntities;
+import com.sekwah.narutomod.item.NarutoItems;
 import net.minecraft.client.renderer.BlockEntityWithoutLevelRenderer;
 import net.minecraft.client.renderer.ItemBlockRenderTypes;
 import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.renderer.item.ItemProperties;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.resources.ResourceManagerReloadListener;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraftforge.api.distmarker.Dist;
@@ -25,6 +37,7 @@ import net.minecraftforge.client.event.EntityRenderersEvent;
 import net.minecraftforge.client.event.RegisterClientReloadListenersEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
+import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
 
 /**
  * Example of new entity render events
@@ -36,7 +49,16 @@ public class NarutoRenderEvents {
     public static final BlockEntityWithoutLevelRenderer NARUTO_RENDERER = new NarutoResourceManager();
 
     @SubscribeEvent
+    public static void gunbaiModel(FMLClientSetupEvent event) {
+        event.enqueueWork(() -> ItemProperties.register(NarutoItems.GUNBAI.get(),
+                new ResourceLocation(NarutoMod.MOD_ID, "gunbai_blocking"),
+                (stack, level, actor, seed) -> actor != null && actor.isUsingItem() && actor.getUseItem() == stack ? 1 : 0));
+    }
+
+    @SubscribeEvent
     public static void entityRenderers(EntityRenderersEvent.RegisterRenderers event) {
+        event.registerBlockEntityRenderer(com.sekwah.narutomod.block.NarutoBlocks.MOKUTON_TIMBER_ENTITY.get(), MokutonTimberRenderer::new);
+        event.registerBlockEntityRenderer(NarutoBlocks.ICE_SPIKE_ENTITY.get(), IceSpikeRenderer::new);
         event.registerEntityRenderer(NarutoEntities.KUNAI.get(), KunaiRenderer::new);
         event.registerEntityRenderer(NarutoEntities.EXPLOSIVE_KUNAI.get(), ExplosiveKunaiRenderer::new);
         event.registerEntityRenderer(NarutoEntities.SENBON.get(), SenbonRenderer::new);
@@ -47,16 +69,32 @@ public class NarutoRenderEvents {
         event.registerEntityRenderer(NarutoEntities.PAPER_BOMB.get(), PaperBombRenderer::new);
 
         event.registerEntityRenderer(NarutoEntities.FIREBALL_JUTSU.get(), FireballJutsuRenderer::new);
+        event.registerEntityRenderer(NarutoEntities.GREAT_FIREBALL.get(),
+                com.sekwah.narutomod.client.renderer.entity.jutsuprojectile.GreatFireballRenderer::new);
+        event.registerEntityRenderer(NarutoEntities.FIRE_WALL.get(),
+                com.sekwah.narutomod.client.renderer.entity.jutsuprojectile.FireWallRenderer::new);
         event.registerEntityRenderer(NarutoEntities.WATER_BULLET_JUTSU.get(), WaterBulletJutsuRenderer::new);
+        event.registerEntityRenderer(NarutoEntities.WATER_SHOT.get(), WaterShotRenderer::new);
+        event.registerEntityRenderer(NarutoEntities.IRON_SAND.get(), IronSandRenderer::new);
+        event.registerEntityRenderer(NarutoEntities.ICE_SPEAR.get(), IceSpearRenderer::new);
+        event.registerEntityRenderer(NarutoEntities.CLAY_CHARGE.get(), ClayBombRenderer::new);
+        event.registerEntityRenderer(NarutoEntities.GIAN_BEAM.get(), GianBeamRenderer::new);
+        event.registerEntityRenderer(NarutoEntities.GUST_FRONT.get(), GustFrontRenderer::new);
+        event.registerEntityRenderer(NarutoEntities.SHOCK_ARC.get(), ShockArcRenderer::new);
 
         event.registerEntityRenderer(NarutoEntities.SUBSTITUTION_LOG.get(), SubstitutionLogRenderer::new);
 
         event.registerEntityRenderer(NarutoEntities.EARTH_WALL.get(), NoopRenderer::new);
         event.registerEntityRenderer(NarutoEntities.SHADOW_CLONE.get(), ShadowCloneRenderer::new);
+        event.registerEntityRenderer(NarutoEntities.CLAY_CLONE.get(), ShadowCloneRenderer::new);
+        event.registerEntityRenderer(NarutoEntities.ANIMAL_RHINO.get(), AnimalPathRhinoRenderer::new);
+        event.registerEntityRenderer(NarutoEntities.NINKEN.get(), net.minecraft.client.renderer.entity.WolfRenderer::new);
         event.registerEntityRenderer(NarutoEntities.RASENGAN.get(), RasenganRenderer::new);
-        event.registerEntityRenderer(NarutoEntities.AMATERASU_FIRE.get(), NoopRenderer::new);
+        event.registerEntityRenderer(NarutoEntities.AMATERASU_FIRE.get(), AmaterasuFlameRenderer::new);
         event.registerEntityRenderer(NarutoEntities.RASENSHURIKEN.get(),
                 com.sekwah.narutomod.client.renderer.entity.RasenshurikenRenderer::new);
+        event.registerEntityRenderer(NarutoEntities.KIRIN_STRIKE.get(),
+                com.sekwah.narutomod.client.renderer.entity.KirinStrikeRenderer::new);
         event.registerEntityRenderer(NarutoEntities.SUMMON_BEAST.get(), SummonBeastRenderer::new);
         event.registerEntityRenderer(NarutoEntities.ROGUE_NINJA.get(),
                 com.sekwah.narutomod.client.renderer.entity.RogueNinjaRenderer::new);
@@ -108,6 +146,7 @@ public class NarutoRenderEvents {
 
         // Entity
         event.registerLayerDefinition(SubstitutionLogModel.LAYER_LOCATION, SubstitutionLogModel::createBodyLayer);
+        event.registerLayerDefinition(WoodGolemModel.LAYER, WoodGolemModel::createLayer);
         event.registerLayerDefinition(KuramaTailModel.LAYER_LOCATION, KuramaTailModel::createLayer);
         event.registerLayerDefinition(KuramaAvatarModel.LAYER_LOCATION, KuramaAvatarModel::createLayer);
         event.registerLayerDefinition(com.sekwah.narutomod.client.model.entity.KuramaFoxModel.LAYER_LOCATION,
@@ -117,14 +156,12 @@ public class NarutoRenderEvents {
                 com.sekwah.narutomod.client.model.entity.DragonHeadModel::createBodyLayer);
         event.registerLayerDefinition(com.sekwah.narutomod.client.model.entity.BijuCloakModel.LAYER_LOCATION,
                 com.sekwah.narutomod.client.model.entity.BijuCloakModel::createBodyLayer);
-        // Phase 18: the three detailed Susanoo bodies (skeleton / clothed / winged)
         event.registerLayerDefinition(com.sekwah.narutomod.client.model.entity.SusanooSkeletonModel.LAYER_LOCATION,
                 com.sekwah.narutomod.client.model.entity.SusanooSkeletonModel::createBodyLayer);
         event.registerLayerDefinition(com.sekwah.narutomod.client.model.entity.SusanooClothedModel.LAYER_LOCATION,
                 com.sekwah.narutomod.client.model.entity.SusanooClothedModel::createBodyLayer);
         event.registerLayerDefinition(com.sekwah.narutomod.client.model.entity.SusanooWingedModel.LAYER_LOCATION,
                 com.sekwah.narutomod.client.model.entity.SusanooWingedModel::createBodyLayer);
-        // Phase 18: the four named Kuchiyose contracts, geometry imported from 1.12.2
         event.registerLayerDefinition(com.sekwah.narutomod.client.model.entity.GiantToadModel.LAYER_LOCATION,
                 com.sekwah.narutomod.client.model.entity.GiantToadModel::createBodyLayer);
         event.registerLayerDefinition(com.sekwah.narutomod.client.model.entity.GiantSnakeModel.LAYER_LOCATION,
@@ -134,7 +171,6 @@ public class NarutoRenderEvents {
         event.registerLayerDefinition(com.sekwah.narutomod.client.model.entity.EnmaModel.LAYER_LOCATION,
                 com.sekwah.narutomod.client.model.entity.EnmaModel::createBodyLayer);
 
-        // Phase 19: the eight tailed beasts and the Bijudama, geometry imported from 1.12.2
         event.registerLayerDefinition(com.sekwah.narutomod.client.model.entity.OneTailModel.LAYER_LOCATION,
                 com.sekwah.narutomod.client.model.entity.OneTailModel::createBodyLayer);
         event.registerLayerDefinition(com.sekwah.narutomod.client.model.entity.TwoTailsModel.LAYER_LOCATION,
@@ -154,7 +190,6 @@ public class NarutoRenderEvents {
         event.registerLayerDefinition(com.sekwah.narutomod.client.model.entity.BijudamaModel.LAYER_LOCATION,
                 com.sekwah.narutomod.client.model.entity.BijudamaModel::createBodyLayer);
 
-        // Phase 20: Sasori's puppets, geometry imported from 1.12.2
         event.registerLayerDefinition(com.sekwah.narutomod.client.model.entity.HirukoModel.LAYER_LOCATION,
                 com.sekwah.narutomod.client.model.entity.HirukoModel::createBodyLayer);
         event.registerLayerDefinition(com.sekwah.narutomod.client.model.entity.KarasuModel.LAYER_LOCATION,
@@ -166,7 +201,6 @@ public class NarutoRenderEvents {
         event.registerLayerDefinition(com.sekwah.narutomod.client.model.entity.HundredPuppetModel.LAYER_LOCATION,
                 com.sekwah.narutomod.client.model.entity.HundredPuppetModel::createBodyLayer);
 
-        // Phase 22: the Chibaku Tensei core and Haku's mirrors
         event.registerLayerDefinition(com.sekwah.narutomod.client.model.entity.ChibakuCoreModel.LAYER_LOCATION,
                 com.sekwah.narutomod.client.model.entity.ChibakuCoreModel::createBodyLayer);
         event.registerLayerDefinition(com.sekwah.narutomod.client.model.entity.IceMirrorModel.LAYER_LOCATION,
@@ -175,11 +209,11 @@ public class NarutoRenderEvents {
 
     @SubscribeEvent
     public static void entityLayers(EntityRenderersEvent.AddLayers event) {
-        KuramaTailRenderer.setModel(new KuramaTailModel(event.getEntityModels().bakeLayer(KuramaTailModel.LAYER_LOCATION)));
-        KuramaTailRenderer.setAvatarModel(new KuramaAvatarModel(event.getEntityModels().bakeLayer(KuramaAvatarModel.LAYER_LOCATION)));
         KuramaTailRenderer.setFoxModel(new com.sekwah.narutomod.client.model.entity.KuramaFoxModel(
                 event.getEntityModels().bakeLayer(com.sekwah.narutomod.client.model.entity.KuramaFoxModel.LAYER_LOCATION)));
         SusanooRenderer.setModel(new SusanooModel(event.getEntityModels().bakeLayer(SusanooModel.LAYER_LOCATION)));
+        SusanooRenderer.setBossWingedModel(new com.sekwah.narutomod.client.model.entity.SusanooWingedModel(
+                event.getEntityModels().bakeLayer(com.sekwah.narutomod.client.model.entity.SusanooWingedModel.LAYER_LOCATION)));
         com.sekwah.narutomod.client.renderer.entity.BijuCloakRenderer.setModel(
                 new com.sekwah.narutomod.client.model.entity.BijuCloakModel(event.getEntityModels()
                         .bakeLayer(com.sekwah.narutomod.client.model.entity.BijuCloakModel.LAYER_LOCATION)));
@@ -191,7 +225,7 @@ public class NarutoRenderEvents {
                 new com.sekwah.narutomod.client.model.entity.SusanooWingedModel(event.getEntityModels()
                         .bakeLayer(com.sekwah.narutomod.client.model.entity.SusanooWingedModel.LAYER_LOCATION)));
 
-        addEyeLayerToPlayers(event);
+        addLayersToPlayers(event);
     }
 
     /**
@@ -201,11 +235,15 @@ public class NarutoRenderEvents {
      * one would simply never show eyes if only the first were patched - which is the usual way
      * this particular registration goes wrong.
      */
-    private static void addEyeLayerToPlayers(EntityRenderersEvent.AddLayers event) {
+    private static void addLayersToPlayers(EntityRenderersEvent.AddLayers event) {
         for (String skin : event.getSkins()) {
             net.minecraft.client.renderer.entity.player.PlayerRenderer renderer = event.getSkin(skin);
             if (renderer != null) {
                 renderer.addLayer(new com.sekwah.narutomod.client.renderer.entity.PlayerEyeLayer(renderer));
+                renderer.addLayer(new com.sekwah.narutomod.client.renderer.entity.SageStoneLayer(renderer));
+                renderer.addLayer(new com.sekwah.narutomod.client.renderer.entity.GoldenChakraLayer(renderer));
+                renderer.addLayer(new com.sekwah.narutomod.client.renderer.RasenganHandRenderer(renderer));
+                renderer.addLayer(new LightningArmorRenderer(renderer));
             }
         }
     }

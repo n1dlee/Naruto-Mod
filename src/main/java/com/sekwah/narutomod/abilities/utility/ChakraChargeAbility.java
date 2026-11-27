@@ -1,12 +1,12 @@
 package com.sekwah.narutomod.abilities.utility;
 
 import com.sekwah.narutomod.abilities.Ability;
+import com.sekwah.narutomod.abilities.ChannelCompletion;
 import com.sekwah.narutomod.capabilities.INinjaData;
+import com.sekwah.narutomod.sounds.NarutoSounds;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.entity.player.Player;
 
-/**
- * More of a slight speed boost than an actual dash
- */
 public class ChakraChargeAbility extends Ability implements Ability.Channeled {
 
     /** Exempt from the free-hands gate: this is gathering chakra, not shaping a technique. */
@@ -27,30 +27,32 @@ public class ChakraChargeAbility extends Ability implements Ability.Channeled {
 
     @Override
     public boolean handleCost(Player player, INinjaData ninjaData, int chargeAmount) {
-        // This jutsu can always be cast
         return true;
     }
 
     @Override
     public void performServer(Player player, INinjaData ninjaData, int ticksActive) {
-        // Add particle effects n stuff
     }
 
-
-    /**
-     * The rate is no longer a constant. It used to be a flat 4 per tick at every rank, which
-     * filled an Academy pool in a second and a quarter and a Kage pool in three minutes of
-     * standing perfectly still - the same technique being pointless at one end of the game
-     * and unusable at the other.
-     *
-     * INinjaData derives it from the pool and shortens the fill time as rank climbs, so a
-     * full charge is a comparable commitment at every rank and a Kage genuinely channels
-     * faster rather than merely channelling more.
-     */
     @Override
     public void handleChannelling(Player player, INinjaData ninjaData, int ticksChanneled) {
         boolean moving = player.isSprinting() || !player.onGround();
+        float before = ninjaData.getChakra();
         ninjaData.addChakra(ninjaData.getChakraChargePerTick(moving));
+        var pulse = ninjaData.chakraChargeFeedback().accept(before, ninjaData.getChakra(),
+                ninjaData.getMaxChakra(), ninjaData.getChakraChargePerTick(false));
+        ninjaData.setChargeIntensity(pulse.strength());
+        if (pulse.completed()) {
+            player.level().playSound(null, player, NarutoSounds.CHAKRA_CHARGE_FULL.get(), SoundSource.PLAYERS, 0.64f, 1.0f);
+        }
+        if (ninjaData.getChakra() >= ninjaData.getMaxChakra()) {
+            ChannelCompletion.finish(player, ninjaData, this, ticksChanneled + 1, ChannelCompletion.Reason.FULL);
+        }
+    }
+
+    @Override
+    public boolean channelCommittedAt(INinjaData data, int ticksChanneled) {
+        return data.chakraChargeFeedback().earned(data.getMaxChakra());
     }
 
     @Override

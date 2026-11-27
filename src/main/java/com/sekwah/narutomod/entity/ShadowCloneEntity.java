@@ -1,6 +1,9 @@
 package com.sekwah.narutomod.entity;
 
-import com.sekwah.narutomod.capabilities.NinjaCapabilityHandler;
+import com.sekwah.narutomod.entity.goal.ShadowCloneJutsuGoal;
+import com.sekwah.narutomod.events.ShadowCloneEffects;
+import com.sekwah.narutomod.util.ShadowCloneFormation;
+import com.sekwah.narutomod.util.ShadowCloneChakra;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.protocol.Packet;
@@ -10,7 +13,9 @@ import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.PathfinderMob;
@@ -44,11 +49,16 @@ public class ShadowCloneEntity extends PathfinderMob {
      */
     private static final EntityDataAccessor<Byte> BOSS_VARIANT =
             SynchedEntityData.defineId(ShadowCloneEntity.class, EntityDataSerializers.BYTE);
+    private static final EntityDataAccessor<Long> FORMATION_BORN =
+            SynchedEntityData.defineId(ShadowCloneEntity.class, EntityDataSerializers.LONG);
 
     private int aliveTicks = 0;
     private boolean dispelled = false;
+    private boolean restoredVessel;
+    private boolean replicaEquipment;
+    private int ownerMissing;
 
-    public ShadowCloneEntity(EntityType<ShadowCloneEntity> entityType, Level level) {
+    public ShadowCloneEntity(EntityType<? extends ShadowCloneEntity> entityType, Level level) {
         super(entityType, level);
     }
 
@@ -57,6 +67,7 @@ public class ShadowCloneEntity extends PathfinderMob {
         super.defineSynchedData();
         this.entityData.define(OWNER_UUID, Optional.empty());
         this.entityData.define(BOSS_VARIANT, (byte) -1);
+        this.entityData.define(FORMATION_BORN, -1L);
     }
 
     public Optional<UUID> getOwnerUUID() {
@@ -75,6 +86,7 @@ public class ShadowCloneEntity extends PathfinderMob {
     @Override
     protected void registerGoals() {
         this.goalSelector.addGoal(0, new FloatGoal(this));
+        this.goalSelector.addGoal(1, new ShadowCloneJutsuGoal(this));
         this.goalSelector.addGoal(2, new MeleeAttackGoal(this, 1.0D, false));
         this.goalSelector.addGoal(5, new WaterAvoidingRandomStrollGoal(this, 0.6D));
         this.goalSelector.addGoal(6, new LookAtPlayerGoal(this, Player.class, 6.0F));
@@ -124,6 +136,9 @@ public class ShadowCloneEntity extends PathfinderMob {
 
     @Override
     public void tick() {
+        if (level() instanceof ServerLevel serverLevel && isPlayerFormation() && retirePlayerFormation(serverLevel)) {
+            return;
+        }
         super.tick();
         if (!level().isClientSide) {
             if (++aliveTicks >= LIFESPAN) {
@@ -133,42 +148,71 @@ public class ShadowCloneEntity extends PathfinderMob {
         }
     }
 
-    /** Set when the clone is destroyed by its own owner — dispelling your own clones for
-     *  chakra would otherwise be a free "cast 20 clones, punch them all" chakra pump. */
-    private boolean killedByOwner = false;
-
-    /** Minimum lifetime before a dispelling clone returns chakra — pairs with the
-     *  owner-kill check above to close the summon-and-instantly-harvest loop. */
-    private static final int MIN_TICKS_FOR_REFUND = 100;
-
-    /**
-     * What this clone hands back when it dispels, set by whoever made it.
-     *
-     * It used to be a flat eight per clone regardless of what the technique cost, which made
-     * both clone jutsu chakra PRINTERS: the basic one paid twenty for three clones and gave
-     * twenty-four back, and Multiple Shadow Clone paid eighty for twenty and returned a
-     * hundred and sixty. Standing in a field spawning and waiting was strictly better than
-     * meditating.
-     */
-    private float refundValue = 0f;
-
-    /** Splits the technique's cost across its clones and keeps a share for the caster. */
-    public void setRefundShare(float paidCost, int cloneCount) {
-        this.refundValue = cloneCount <= 0 ? 0f : (paidCost / cloneCount) * REFUND_FRACTION;
+    public void configurePlayerFormation(long now) {
+        this.entityData.set(FORMATION_BORN, now);
+        this.replicaEquipment = true;
+        this.xpReward = 0;
     }
 
-    /**
-     * How much of a clone's share comes back. Below one on purpose - the technique has to
-     * cost something even when every clone survives, or it is free.
-     */
-    private static final float REFUND_FRACTION = 0.6f;
+    public ServerPlayer playerOwner() {
+        if (!(level() instanceof ServerLevel level) || !isPlayerFormation()) {
+            return null;
+        }
+        return getOwnerUUID().map(level.getServer().getPlayerList()::getPlayer).orElse(null);
+    }
+
+    @Override
+    public boolean isAlliedTo(Entity target) {
+        var owner = playerOwner();
+        return super.isAlliedTo(target) || isPlayerFormation()
+                && (target instanceof Player || owner != null && owner.isAlliedTo(target));
+    }
+
+    public boolean isPlayerFormation() {
+        return formationBorn() >= 0;
+    }
+
+    public long formationBorn() {
+        return this.entityData.get(FORMATION_BORN);
+    }
+
+    public boolean playerFormationExpired(long now) {
+        return now - formationBorn() >= ShadowCloneFormation.LIFETIME;
+    }
+
+    private boolean retirePlayerFormation(ServerLevel level) {
+        var owner = playerOwner();
+        if (owner == null) {
+            if (++this.ownerMissing <= 40) {
+                return false;
+            }
+        } else if (owner.level() == level && owner.isAlive()) {
+            this.ownerMissing = 0;
+            if (!playerFormationExpired(level.getGameTime())) {
+                return false;
+            }
+        }
+        poof();
+        discard();
+        return true;
+    }
+
+    @Override
+    protected void dropEquipment() {
+        if (!this.replicaEquipment) {
+            super.dropEquipment();
+        }
+    }
+
+    public void markRestoredVessel() {
+        this.restoredVessel = true;
+        this.aliveTicks = LIFESPAN - 200;
+    }
+
+    public boolean isRestorationVessel() { return this.restoredVessel; }
 
     @Override
     public boolean hurt(DamageSource source, float amount) {
-        if (!level().isClientSide && source.getEntity() != null
-                && this.getOwnerUUID().map(id -> id.equals(source.getEntity().getUUID())).orElse(false)) {
-            this.killedByOwner = true;
-        }
         boolean result = super.hurt(source, amount);
         if (!level().isClientSide && !isAlive()) {
             poof();
@@ -182,23 +226,13 @@ public class ShadowCloneEntity extends PathfinderMob {
         }
         this.dispelled = true;
         if (level() instanceof ServerLevel serverLevel) {
-            serverLevel.sendParticles(ParticleTypes.CLOUD,
-                    getX(), getY() + getBbHeight() / 2, getZ(),
-                    30, 0.3, 0.4, 0.3, 0.05);
-
-            // Canon: when a shadow clone dispels, everything it gathered flows back to the
-            // original — translated here as a small chakra refund to the owner per clone.
-            // No refund for clones the owner destroyed themselves or that barely existed,
-            // so the mechanic rewards clones that actually fought, not chakra farming.
-            if (this.killedByOwner || this.aliveTicks < MIN_TICKS_FOR_REFUND) {
-                return;
+            if (isPlayerFormation()) {
+                ShadowCloneEffects.dispel(serverLevel, this);
+                ShadowCloneChakra.of(serverLevel.getServer()).release(getUUID());
+            } else {
+                serverLevel.sendParticles(ParticleTypes.CLOUD, getX(), getY() + getBbHeight() / 2, getZ(),
+                        30, 0.3, 0.4, 0.3, 0.05);
             }
-            this.getOwnerUUID().ifPresent(ownerId -> {
-                if (serverLevel.getEntity(ownerId) instanceof Player owner && owner.isAlive()) {
-                    owner.getCapability(NinjaCapabilityHandler.NINJA_DATA)
-                            .ifPresent(ownerData -> ownerData.addChakra(this.refundValue));
-                }
-            });
         }
     }
 
@@ -208,13 +242,25 @@ public class ShadowCloneEntity extends PathfinderMob {
         tag.putInt("AliveTicks", aliveTicks);
         tag.putByte("BossVariant", this.getBossVariant());
         this.getOwnerUUID().ifPresent(uuid -> tag.putUUID("OwnerUUID", uuid));
-        tag.putFloat("RefundValue", this.refundValue);
+        tag.putBoolean("NarakaVessel", this.restoredVessel);
+        tag.putBoolean("CloneDispelled", this.dispelled);
+        tag.putBoolean("ReplicaEquipment", this.replicaEquipment);
+        if (isPlayerFormation()) {
+            tag.putLong("FormationBorn", formationBorn());
+        }
     }
 
     @Override
     public void readAdditionalSaveData(CompoundTag tag) {
         super.readAdditionalSaveData(tag);
         aliveTicks = tag.getInt("AliveTicks");
+        this.restoredVessel = tag.getBoolean("NarakaVessel");
+        this.dispelled = tag.getBoolean("CloneDispelled");
+        this.entityData.set(FORMATION_BORN, tag.contains("FormationBorn") ? tag.getLong("FormationBorn") : -1L);
+        this.replicaEquipment = tag.getBoolean("ReplicaEquipment") || isPlayerFormation();
+        if (this.replicaEquipment) {
+            this.xpReward = 0;
+        }
         this.entityData.set(BOSS_VARIANT, tag.contains("BossVariant") ? tag.getByte("BossVariant") : (byte) -1);
         if (tag.hasUUID("OwnerUUID")) {
             this.entityData.set(OWNER_UUID, Optional.of(tag.getUUID("OwnerUUID")));

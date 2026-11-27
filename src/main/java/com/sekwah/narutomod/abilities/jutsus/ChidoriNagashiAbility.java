@@ -2,20 +2,11 @@ package com.sekwah.narutomod.abilities.jutsus;
 
 import com.sekwah.narutomod.abilities.Ability;
 import com.sekwah.narutomod.capabilities.INinjaData;
-import com.sekwah.narutomod.damagetypes.NarutoDamageTypes;
-import com.sekwah.narutomod.sounds.NarutoSounds;
-import com.sekwah.narutomod.util.NarutoParticles;
+import com.sekwah.narutomod.events.NagashiEvents;
 import net.minecraft.ChatFormatting;
-import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.chat.Component;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvent;
-import net.minecraft.world.damagesource.DamageSource;
-import net.minecraft.world.effect.MobEffectInstance;
-import net.minecraft.world.effect.MobEffects;
-import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.phys.Vec3;
 
 /**
  * Lightning Style: Chidori Nagashi (combo 221) — Sasuke's omnidirectional release:
@@ -43,15 +34,20 @@ public class ChidoriNagashiAbility extends Ability implements Ability.Cooldown {
     }
 
     @Override
+    public int castPoseTicks() {
+        return NagashiEvents.BRACE_TICKS;
+    }
+
+    @Override
     public int getCooldown() {
         return 15 * 20;
     }
 
     @Override
     public SoundEvent castingSound() {
-        return NarutoSounds.CHIDORI.get();
+        return null;
     }
-    // --- Phase 15: Nature Release ---
+
     @Override
     public String element() {
         return "lightning";
@@ -76,10 +72,8 @@ public class ChidoriNagashiAbility extends Ability implements Ability.Cooldown {
 
     @Override
     public boolean handleCost(Player player, INinjaData ninjaData, int chargeAmount) {
-        // Phase 15: lightning-nature mastery gates this now (was Uchiha only)
-        // Canon: Nagashi is the body-wide release of an already-formed Chidori
         if (!ninjaData.isChidoriActive()) {
-            player.displayClientMessage(Component.literal("Form a Chidori first - Nagashi releases its current!")
+            player.displayClientMessage(Component.translatable("jutsu.chidori_nagashi.needs_chidori")
                     .withStyle(ChatFormatting.RED), true);
             return false;
         }
@@ -94,27 +88,11 @@ public class ChidoriNagashiAbility extends Ability implements Ability.Cooldown {
 
     @Override
     public void performServer(Player player, INinjaData ninjaData, int ticksActive) {
-        // Discharging the current through the body consumes the formed Chidori
+        if (!ninjaData.isChidoriActive()) {
+            return;
+        }
         ninjaData.setChidoriTicks(0);
-
         float damage = DAMAGE * ninjaData.getRankDamageMultiplier() * ninjaData.getClanLightningDamageMultiplier();
-        DamageSource source = NarutoDamageTypes.getDamageSource(player.level(), NarutoDamageTypes.CHIDORI, player, player);
-
-        for (LivingEntity target : player.level().getEntitiesOfClass(LivingEntity.class,
-                player.getBoundingBox().inflate(RADIUS, 1.5, RADIUS), e -> e != player && e.isAlive())) {
-            target.hurt(source, damage);
-            // Lightning paralysis — the current locks up the muscles of anyone it runs through
-            target.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, PARALYSIS_TICKS, 3, false, true));
-            Vec3 away = target.position().subtract(player.position()).normalize();
-            target.knockback(1.2, -away.x, -away.z);
-        }
-
-        if (player.level() instanceof ServerLevel serverLevel) {
-            Vec3 center = player.position().add(0, player.getBbHeight() * 0.5, 0);
-            NarutoParticles.spawnRing(serverLevel, center, RADIUS * 0.6, 20, NarutoParticles.CHIDORI_CYAN);
-            NarutoParticles.spawnRing(serverLevel, center.add(0, -0.6, 0), RADIUS, 26, NarutoParticles.CHIDORI_CYAN);
-            serverLevel.sendParticles(ParticleTypes.ELECTRIC_SPARK,
-                    center.x, center.y, center.z, 50, RADIUS * 0.5, 1.0, RADIUS * 0.5, 0.15);
-        }
+        NagashiEvents.start(player, new NagashiEvents.Profile(RADIUS, damage, PARALYSIS_TICKS, 3, true));
     }
 }

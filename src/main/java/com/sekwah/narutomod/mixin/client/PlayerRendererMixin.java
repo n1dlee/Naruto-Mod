@@ -2,13 +2,20 @@ package com.sekwah.narutomod.mixin.client;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.sekwah.narutomod.anims.FirstPersonAnimHandler;
+import com.sekwah.narutomod.client.renderer.LightningArmorRenderer;
+import com.sekwah.narutomod.client.renderer.KamuiPhaseRenderer;
+import com.sekwah.narutomod.client.renderer.RasenganHandRenderer;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.client.renderer.RenderType;
+import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.renderer.entity.player.PlayerRenderer;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
@@ -29,6 +36,19 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  */
 @Mixin(PlayerRenderer.class)
 public class PlayerRendererMixin {
+
+    @Redirect(method = "renderHand", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/model/geom/ModelPart;render(Lcom/mojang/blaze3d/vertex/PoseStack;Lcom/mojang/blaze3d/vertex/VertexConsumer;II)V"))
+    private void narutomod$phaseHand(ModelPart part, PoseStack pose, VertexConsumer mesh, int light, int overlay,
+                                    PoseStack outerPose, MultiBufferSource buffers, int outerLight,
+                                    AbstractClientPlayer player, ModelPart arm, ModelPart sleeve) {
+        float veil = KamuiPhaseRenderer.veil(player, Minecraft.getInstance().getFrameTime());
+        if (veil > 0.01f) {
+            VertexConsumer translucent = buffers.getBuffer(RenderType.entityTranslucent(player.getSkinTextureLocation()));
+            part.render(pose, translucent, light, overlay, 0.92f, 0.95f, 1, 1 - veil);
+        } else {
+            part.render(pose, mesh, light, overlay);
+        }
+    }
 
     @Inject(method = "renderRightHand", at = @At("HEAD"), require = 0)
     private void narutomod$markRightHand(PoseStack poseStack, MultiBufferSource bufferSource, int light,
@@ -70,6 +90,10 @@ public class PlayerRendererMixin {
     private void narutomod$endHandRender(PoseStack poseStack, MultiBufferSource bufferSource, int light,
                                          AbstractClientPlayer player, ModelPart arm, ModelPart sleeve,
                                          CallbackInfo ci) {
+        if (FirstPersonAnimHandler.isRenderingMainHand(player) && player.getMainHandItem().isEmpty()) {
+            RasenganHandRenderer.drawAtArm(player, arm, poseStack, bufferSource, Minecraft.getInstance().getFrameTime());
+        }
+        LightningArmorRenderer.firstPerson(player, arm, poseStack, bufferSource, Minecraft.getInstance().getFrameTime());
         FirstPersonAnimHandler.setRenderingFirstPersonHand(false);
     }
 

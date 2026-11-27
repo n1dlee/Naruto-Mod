@@ -5,10 +5,15 @@
   "package": "com.sekwah.narutomod.mixin",
   "refmap": "mixins.narutomod.refmap.json",
   "mixins": [
-    "common.TripWireBlockMixin"
+    "common.NinjaEndFightMixin",
+    "common.TripWireBlockMixin",
+    "common.PlayerSizeMixin"
   ],
   "client": [
+    "client.CameraMixin",
+    "client.ItemInHandRendererMixin",
     "client.LocalPlayerMixin",
+    "client.LivingEntityRendererMixin",
     "client.PlayerModelMixin",
     "client.PlayerRendererMixin"
   ],

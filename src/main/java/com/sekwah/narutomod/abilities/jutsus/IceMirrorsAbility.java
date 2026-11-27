@@ -2,43 +2,32 @@ package com.sekwah.narutomod.abilities.jutsus;
 
 import com.sekwah.narutomod.abilities.Ability;
 import com.sekwah.narutomod.capabilities.INinjaData;
-import com.sekwah.narutomod.util.EyeTargeting;
-import net.minecraft.world.entity.LivingEntity;
 import com.sekwah.narutomod.entity.jutsuprojectile.IceMirrorEntity;
+import com.sekwah.narutomod.entity.jutsuprojectile.MirrorTransit;
+import com.sekwah.narutomod.util.EyeTargeting;
+import com.sekwah.narutomod.util.Faction;
+import com.sekwah.narutomod.util.MirrorRing;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.sounds.SoundEvent;
-import net.minecraft.sounds.SoundEvents;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.Vec3;
 
-/**
- * Ice Release: Demonic Mirroring Ice Crystals (combo 2313).
- *
- * Raises the ring in front of the caster and puts them inside it. What the mirrors give is
- * position, not damage: sneak-use steps to the next pane in the ring, so the caster is never
- * where the last attack came from, and never where the next one is going to.
- *
- * The mirrors are entities and they can be broken - by the person trapped inside as much as
- * by anyone else. That is deliberate. A technique that simply wins for twenty seconds is not
- * a fight, and Haku's own was beaten exactly this way.
- */
 public class IceMirrorsAbility extends Ability implements Ability.Cooldown {
-
     private static final float CHAKRA_COST = 90f;
     private static final float STEP_COST = 12f;
-    /** How far ahead the ring is centred, so the caster is not standing on its rim. */
     private static final double CAST_REACH = 2.0;
+    private static final double TRAP_RANGE = 12.0;
 
     @Override
     public ActivationType activationType() {
         return ActivationType.INSTANT;
     }
 
-    /** Raising eight mirrors is a full sequence of seals, not a flick. */
     @Override
     public int castPoseTicks() {
-        return 22;
+        return MirrorRing.RISE_TICKS + MirrorRing.STAGGER_TICKS;
     }
 
     @Override
@@ -66,14 +55,6 @@ public class IceMirrorsAbility extends Ability implements Ability.Cooldown {
         return 12;
     }
 
-    /**
-     * Short, because the same cast does two different jobs.
-     *
-     * Raising the ring and stepping between panes both go through performServer, and there is
-     * no per-cast hook to give them different cooldowns - an override for one would have been
-     * a method nothing calls. What limits the technique is chakra: ninety to raise a ring,
-     * twelve to move inside one, against a ring that only stands for twenty seconds.
-     */
     @Override
     public int getCooldown() {
         return 2 * 20;
@@ -81,13 +62,17 @@ public class IceMirrorsAbility extends Ability implements Ability.Cooldown {
 
     @Override
     public SoundEvent castingSound() {
-        return SoundEvents.GLASS_PLACE;
+        return null;
     }
 
     @Override
     public boolean handleCost(Player player, INinjaData ninjaData, int chargeAmount) {
-        // Stepping between panes is the cheap half of the technique; raising them is not.
-        float cost = hasStandingMirrors(player) && player.isShiftKeyDown() ? STEP_COST : CHAKRA_COST;
+        var ring = player.isShiftKeyDown() ? MirrorTransit.ringNear(player, player.position()) : java.util.List.<IceMirrorEntity>of();
+        if (!ring.isEmpty() && MirrorTransit.destination(player, ring) == null) {
+            player.displayClientMessage(Component.translatable("jutsu.ice_mirrors.no_exit"), true);
+            return false;
+        }
+        float cost = ring.isEmpty() ? CHAKRA_COST : STEP_COST;
         if (ninjaData.getChakra() < cost) {
             player.displayClientMessage(Component.translatable("jutsu.fail.notenoughchakra",
                     Component.translatable(this.getTranslationKey(ninjaData)).withStyle(ChatFormatting.YELLOW)), true);
@@ -99,70 +84,27 @@ public class IceMirrorsAbility extends Ability implements Ability.Cooldown {
 
     @Override
     public void performServer(Player player, INinjaData ninjaData, int ticksActive) {
-        java.util.List<IceMirrorEntity> standing = standingMirrors(player);
-
-        if (!standing.isEmpty() && player.isShiftKeyDown()) {
-            stepToNextMirror(player, standing);
-            return;
-        }
-
-        // The dome goes up around the OPPONENT, not around empty ground ahead of the caster.
-        // Haku traps his target inside and works from the panes; centring on a point in front
-        // of the caster meant the technique caged whatever happened to be standing there,
-        // usually nothing, and then teleported the caster into their own cage.
-        Vec3 look = player.getLookAngle();
-        LivingEntity target = EyeTargeting.raycastLiving(player, TRAP_RANGE);
-        Vec3 centre = target != null
-                ? target.position()
-                : player.position().add(new Vec3(look.x, 0, look.z).normalize().scale(CAST_REACH));
-
-        IceMirrorEntity.raiseRing(player, centre);
-
-        if (target != null) {
-            // Pull the target to the middle so the ring closes on them rather than around
-            // wherever they were a moment ago.
-            target.teleportTo(centre.x, target.getY(), centre.z);
-            player.displayClientMessage(Component.literal("Trapped in the Crystal Ice Mirrors.")
-                    .withStyle(ChatFormatting.AQUA), true);
-        }
-        // The caster steps onto a pane, which is where the technique is fought from - inside
-        // the wall, not inside the cage with the prisoner.
-        java.util.List<IceMirrorEntity> raised = standingMirrors(player);
-        if (!raised.isEmpty()) {
-            stepToNextMirror(player, raised);
-        }
-    }
-
-    /** How far ahead the technique will look for someone to cage. */
-    private static final double TRAP_RANGE = 12.0;
-
-    /** Moves the caster to whichever surviving pane they are not currently standing at. */
-    private void stepToNextMirror(Player player, java.util.List<IceMirrorEntity> standing) {
-        IceMirrorEntity furthest = null;
-        double best = -1;
-        for (IceMirrorEntity mirror : standing) {
-            double distance = mirror.distanceToSqr(player);
-            if (distance > best) {
-                best = distance;
-                furthest = mirror;
+        if (player.isShiftKeyDown()) {
+            var ring = MirrorTransit.ringNear(player, player.position());
+            if (!ring.isEmpty()) {
+                MirrorTransit.travel(player, ring);
+                return;
             }
         }
-        if (furthest != null) {
-            player.teleportTo(furthest.getX(), furthest.getY(), furthest.getZ());
-            player.level().playSound(null, player.blockPosition(), SoundEvents.GLASS_HIT,
-                    net.minecraft.sounds.SoundSource.PLAYERS, 1.0f, 1.4f);
+        LivingEntity target = EyeTargeting.raycastLiving(player, TRAP_RANGE);
+        Vec3 center = target != null && !target.isSpectator() && !Faction.sameSide(player, target)
+                ? target.position() : player.position().add(Vec3.directionFromRotation(0, player.getYRot()).scale(CAST_REACH));
+        var raised = IceMirrorEntity.raiseRing(player, center);
+        if (raised.isEmpty()) {
+            player.displayClientMessage(Component.translatable("jutsu.ice_mirrors.no_footing"), true);
+            return;
         }
-    }
-
-    private static boolean hasStandingMirrors(Player player) {
-        return !standingMirrors(player).isEmpty();
-    }
-
-    /** This caster's own panes, near enough to still count as their ring. */
-    private static java.util.List<IceMirrorEntity> standingMirrors(Player player) {
-        return player.level().getEntitiesOfClass(IceMirrorEntity.class,
-                player.getBoundingBox().inflate(IceMirrorEntity.RING_RADIUS + 6.0),
-                mirror -> mirror.isAlive()
-                        && mirror.getOwnerUUID().map(player.getUUID()::equals).orElse(false));
+        var id = raised.get(0).ringId();
+        var level = player.level();
+        ninjaData.scheduleDelayedTickEvent(caster -> {
+            if (caster.level() == level) {
+                MirrorTransit.travel(caster, MirrorTransit.ring(caster, id));
+            }
+        }, MirrorRing.RISE_TICKS + MirrorRing.STAGGER_TICKS + 1);
     }
 }

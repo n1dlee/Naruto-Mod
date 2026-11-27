@@ -1,26 +1,11 @@
 package com.sekwah.narutomod.abilities.jutsus;
 
-import com.sekwah.narutomod.abilities.Ability;
-import com.sekwah.narutomod.capabilities.INinjaData;
-import net.minecraft.ChatFormatting;
-import net.minecraft.network.chat.Component;
-import net.minecraft.world.entity.player.Player;
+import com.sekwah.narutomod.util.ShadowCloneFormation.Profile;
 
-public class MultipleShadowCloneJutsuAbility extends Ability implements Ability.Cooldown {
-
-    private static final int CHAKRA_COST = 80;
-    private static final int CLONE_COUNT = 20;
-    private static final double SPREAD = 3.0;
-
-    @Override
-    public ActivationType activationType() {
-        return ActivationType.INSTANT;
-    }
-
-    /** More clones, longer seal - it is the mass-production version. */
+public class MultipleShadowCloneJutsuAbility extends ShadowCloneJutsuAbility {
     @Override
     public int castPoseTicks() {
-        return 14;
+        return 12;
     }
 
     @Override
@@ -30,24 +15,11 @@ public class MultipleShadowCloneJutsuAbility extends Ability implements Ability.
 
     @Override
     public int getCooldown() {
-        return 30 * 20;
+        return 600;
     }
 
     @Override
-    public boolean handleCost(Player player, INinjaData ninjaData, int chargeAmount) {
-        if (ninjaData.getChakra() < CHAKRA_COST) {
-            player.displayClientMessage(Component.translatable("jutsu.fail.notenoughchakra",
-                    Component.translatable(this.getTranslationKey(ninjaData)).withStyle(ChatFormatting.YELLOW)), true);
-            return false;
-        }
-        ninjaData.useChakra(CHAKRA_COST, 60);
-        return true;
-    }
-
-    @Override
-    public void performServer(Player player, INinjaData ninjaData, int ticksActive) {
-        ninjaData.setCrossSealPose(true);
-        ShadowCloneJutsuAbility.spawnCasterBurst(player, CLONE_COUNT);
-        ShadowCloneJutsuAbility.spawnClones(player, CLONE_COUNT, SPREAD, CHAKRA_COST);
+    protected Profile profile() {
+        return Profile.MASS;
     }
 }

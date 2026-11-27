@@ -63,7 +63,12 @@ public class ServerAbilityChannelPacket {
         public static void handle(ServerAbilityChannelPacket msg, Supplier<NetworkEvent.Context> ctx) {
             ctx.get().enqueueWork(() -> {
                 final ServerPlayer player = ctx.get().getSender();
-                if(player == null || player.gameMode.getGameModeForPlayer() == GameType.SPECTATOR) {
+                if(player == null || player.gameMode.getGameModeForPlayer() == GameType.SPECTATOR
+                        || com.sekwah.narutomod.events.AdamantineChainEvents.sealed(player)
+                        || com.sekwah.narutomod.events.BoulderRollEvents.actionLocked(player)
+                        || com.sekwah.narutomod.events.GatsugaEvents.actionLocked(player)
+                        || com.sekwah.narutomod.events.KamuiPhaseEvents.actionLocked(player)
+                        || com.sekwah.narutomod.events.SpiritProjectionEvents.actionLocked(player)) {
                     return;
                 }
                 player.getCapability(NinjaCapabilityHandler.NINJA_DATA).ifPresent(ninjaData -> {
@@ -76,9 +81,6 @@ public class ServerAbilityChannelPacket {
                         LOGGER.error("Ability doesnt exist {}", msg.abilityResource);
                         return;
                     }
-                    // Phase 15: scroll-taught jutsu must be learned; elemental jutsu need their
-                    // element unlocked + trained. Gating START also covers STOP.
-                    // Phase 16 adds the dojutsu gate.
                     if (!ability.checkLearnedRequirement(player, ninjaData)
                             || !ability.checkClanRequirement(player, ninjaData)
                             || !ability.checkElementRequirement(player, ninjaData)
@@ -90,6 +92,10 @@ public class ServerAbilityChannelPacket {
                     }
                     // Just check if its
                     if (ability.activationType() == Ability.ActivationType.CHANNELED) {
+                        if (msg.status != ChannelStatus.STOP && ability instanceof Ability.AlternateActivation alternate
+                                && alternate.handleAlternate(player, ninjaData)) {
+                            return;
+                        }
                         if (msg.status == ChannelStatus.START) {
                             // Only on START. Putting this in the shared prelude above also
                             // blocked STOP, which meant a channel could be begun but never
@@ -106,9 +112,6 @@ public class ServerAbilityChannelPacket {
                             if (ninjaData.getCurrentlyChanneledAbility() != null) {
                                 return;
                             }
-                            // Cooldowns used to be checked only on the INSTANT path, so a
-                            // channeled ability that declared one silently never had it.
-                            // Gate the START here, where refusing costs the player nothing.
                             if (ability instanceof Ability.Cooldown cooldownAbility
                                     && cooldownAbility.checkCooldown(player, ninjaData,
                                             ability.getTranslationKey(ninjaData))) {
@@ -154,14 +157,13 @@ public class ServerAbilityChannelPacket {
                                                 ability.getTranslationKey(ninjaData))) {
                                     return;
                                 }
-                                if(ability.handleCost(player, ninjaData, -1)) {
+                                if (ability.handleCost(player, ninjaData, -1) && ability.performTap(player, ninjaData)) {
                                     if (ability.castingSound() != null) {
                                         player.level().playSound(null, player, ability.castingSound(), SoundSource.PLAYERS, 0.5f, 1.0f);
 
                                         player.level().gameEvent(player, NarutoGameEvents.JUTSU_CASTING.get(), player.position().add(0, player.getEyeHeight() * 0.7, 0));
                                     }
                                     player.displayClientMessage(Component.translatable("jutsu.cast", Component.translatable(ability.getTranslationKey(ninjaData)).withStyle(ChatFormatting.YELLOW)).withStyle(ChatFormatting.GREEN), true);
-                                    ability.performServer(player, ninjaData, -1);
                                     ability.grantCastXp(ninjaData);
                                     if (ability instanceof Ability.Cooldown cooldownAbility) {
                                         cooldownAbility.registerCooldown(ninjaData,

@@ -1,10 +1,24 @@
 package com.sekwah.narutomod.entity.goal;
 
+import com.sekwah.narutomod.events.ChidoriDashEvents;
+import com.sekwah.narutomod.events.NagashiEvents;
+import com.sekwah.narutomod.events.KaitenEvents;
+import com.sekwah.narutomod.events.TrigramPalmsEvents;
+import com.sekwah.narutomod.events.FlickerEvents;
+
 import com.sekwah.narutomod.abilities.NarutoAbilities;
 import com.sekwah.narutomod.entity.MangekyoBossEntity;
 import com.sekwah.narutomod.entity.jutsuprojectile.AmaterasuFireEntity;
-import com.sekwah.narutomod.entity.jutsuprojectile.FireballJutsuEntity;
-import com.sekwah.narutomod.entity.jutsuprojectile.WaterBulletJutsuEntity;
+import com.sekwah.narutomod.entity.jutsuprojectile.GreatFireballEntity;
+import com.sekwah.narutomod.entity.jutsuprojectile.FireWallEntity;
+import com.sekwah.narutomod.entity.jutsuprojectile.IceMirrorEntity;
+import com.sekwah.narutomod.entity.jutsuprojectile.MirrorTransit;
+import com.sekwah.narutomod.entity.jutsuprojectile.ChakraDragonEntity;
+import com.sekwah.narutomod.entity.jutsuprojectile.RasenshurikenEntity;
+import com.sekwah.narutomod.entity.jutsuprojectile.KirinStrikeEntity;
+import com.sekwah.narutomod.entity.jutsuprojectile.WaterShotEntity;
+import com.sekwah.narutomod.entity.jutsuprojectile.GianBeamEntity;
+import com.sekwah.narutomod.entity.jutsuprojectile.GustFrontEntity;
 import com.sekwah.narutomod.util.NarutoParticles;
 import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
@@ -50,20 +64,8 @@ public class BossJutsuGoal extends Goal {
 
     /** Only a ceiling now — a boss in melee is still very much allowed to cast. */
     private static final double MAX_RANGE = 32.0;
-    /**
-     * Enough to cover the most expensive fallback in any rotation. Every branch ends in an
-     * unconditional cast, so the floor has to clear that cast's cost or a drained boss would
-     * be throwing techniques for free.
-     *
-     * It did not: the floor was 40 while the costliest unconditional cast is 70, so a boss
-     * between those two numbers went right on casting with chakra it did not have. The floor
-     * is now the real maximum across every pay() call in this file. Raise it if a more
-     * expensive technique is ever added to the bottom of a menu.
-     */
-    private static final float MIN_CHAKRA = 70f;
+    private static final int MIN_CHAKRA = com.sekwah.narutomod.entity.BossChakraReserve.NINJA_CAST_FLOOR;
 
-    private static final DustParticleOptions CROW_BLACK =
-            new DustParticleOptions(new Vector3f(0.08F, 0.08F, 0.12F), 1.4F);
     private static final DustParticleOptions POISON_GREEN =
             new DustParticleOptions(new Vector3f(0.35F, 0.75F, 0.20F), 1.1F);
     private static final DustParticleOptions CURSE_CRIMSON =
@@ -77,14 +79,10 @@ public class BossJutsuGoal extends Goal {
         CLAY_BARRAGE,
         /** Shisui: blink around the target, cutting once per appearance. */
         BODY_FLICKER,
-        /** Madara: a sweeping wall of fire dragged across the target's position. */
-        FIRE_WAVE,
         /** Kisame: three water sharks fired in sequence. */
         SHARK_VOLLEY,
         /** Sasori: a fan of poisoned senbon. */
         SENBON_VOLLEY,
-        /** Hinata: the Eight Trigrams palm sequence, doubling as it goes. */
-        SIXTY_FOUR_PALMS,
         /** Naruto: a wave of shadow clones piling in one after another. */
         CLONE_FLURRY,
         /** Hashirama: a wooden dragon's head driving forward through the ground. */
@@ -110,12 +108,6 @@ public class BossJutsuGoal extends Goal {
      * wind-up to show and does not need one.
      */
     private enum Telegraph {
-        /**
-         * Eye contact, held. The longest window in the game, guarding the effects that end
-         * your participation in the fight — and answered by getting behind something.
-         */
-        GENJUTSU(26, true, NarutoParticles.GENJUTSU_RED, SoundEvents.ENDERMAN_STARE,
-                MangekyoBossEntity.CastPose.STARE),
         /**
          * Fixed on one person: a bind, a pull, a black flame. Shorter than a genjutsu, still
          * broken by cover.
@@ -174,6 +166,9 @@ public class BossJutsuGoal extends Goal {
 
     @Override
     public boolean canUse() {
+        if (this.boss.isKamuiPhased() || KaitenEvents.spinning(this.boss) || TrigramPalmsEvents.running(this.boss)) {
+            return false;
+        }
         if (this.cooldown > 0) {
             this.cooldown--;
             return false;
@@ -183,7 +178,7 @@ public class BossJutsuGoal extends Goal {
             return false;
         }
         double distance = this.boss.distanceTo(target);
-        if (distance > MAX_RANGE || this.boss.getChakra() < MIN_CHAKRA) {
+        if (distance > MAX_RANGE || !this.boss.canUseChakra(MIN_CHAKRA)) {
             return false;
         }
         // Point blank needs no clean line of sight — they are standing on top of each other.
@@ -199,13 +194,15 @@ public class BossJutsuGoal extends Goal {
         // A charging technique keeps the goal alive exactly like a sustained one does. Without
         // this the goal ends on the tick it started, tick() never runs, and every announced
         // technique is silently dropped instead of landing.
-        return this.sustained != null || this.pendingCast != null;
+        return this.sustained != null || this.pendingCast != null
+                || com.sekwah.narutomod.events.YasakaVolleyEvents.preparing(this.boss)
+                || com.sekwah.narutomod.events.SusanooCombat.cutting(this.boss);
     }
 
     @Override
     public void start() {
         LivingEntity target = this.boss.getTarget();
-        if (target == null) {
+        if (target == null || !this.boss.canUseChakra(MIN_CHAKRA)) {
             return;
         }
         this.boss.getLookControl().setLookAt(target, 30f, 30f);
@@ -254,9 +251,19 @@ public class BossJutsuGoal extends Goal {
 
     @Override
     public void tick() {
+        if (this.boss.isKamuiPhased()) {
+            cancelPendingCast();
+            this.sustained = null;
+            return;
+        }
         // Checked before the sustained-technique early return: the circle has to be able to
         // break on a tick where nothing else is happening, which is most of them.
         tickCurseCircle();
+        if (com.sekwah.narutomod.events.YasakaVolleyEvents.preparing(this.boss)
+                || com.sekwah.narutomod.events.SusanooCombat.cutting(this.boss)) {
+            this.boss.getNavigation().stop();
+            return;
+        }
 
         if (this.pendingCast != null) {
             LivingEntity charging = this.boss.getTarget();
@@ -283,10 +290,8 @@ public class BossJutsuGoal extends Goal {
         switch (this.sustained) {
             case CLAY_BARRAGE -> stepClayBarrage(target);
             case BODY_FLICKER -> stepBodyFlicker(target);
-            case FIRE_WAVE -> stepFireWave(target);
             case SHARK_VOLLEY -> stepSharkVolley(target);
             case SENBON_VOLLEY -> stepSenbonVolley(target);
-            case SIXTY_FOUR_PALMS -> stepSixtyFourPalms(target);
             case CLONE_FLURRY -> stepCloneFlurry(target);
             case WOOD_DRAGON -> stepWoodDragon(target);
         }
@@ -295,6 +300,8 @@ public class BossJutsuGoal extends Goal {
     @Override
     public void stop() {
         this.sustained = null;
+        com.sekwah.narutomod.events.YasakaVolleyEvents.cancel(this.boss);
+        com.sekwah.narutomod.events.SusanooCombat.cancel(this.boss);
         // An interrupted wind-up does not land. If the boss loses its target, gets stunned out
         // of the goal or dies mid-charge, the technique it was gathering dies with it - which
         // is the other half of giving the player a window, because interrupting the cast has
@@ -313,7 +320,7 @@ public class BossJutsuGoal extends Goal {
      * jutsu names instead of turning into a wall of scheduling.
      *
      * <pre>
-     * if (windup(Telegraph.GENJUTSU, target, () -&gt; castTsukuyomi(target))) {
+     * if (windup(Telegraph.FOCUS, target, () -&gt; resolveBind(target))) {
      *     return;
      * }
      * </pre>
@@ -454,8 +461,8 @@ public class BossJutsuGoal extends Goal {
             offer(NarutoAbilities.CROW_GENJUTSU);
             return 22;
         }
-        if (roll < 40 && pay(55f)) {
-            castTsukuyomi(target);
+        if (roll < 40 && com.sekwah.narutomod.events.TsukuyomiEvents.canStartBoss(this.boss, target) && pay(55f)) {
+            com.sekwah.narutomod.events.TsukuyomiEvents.startBoss(this.boss, target);
             offer(NarutoAbilities.TSUKUYOMI);
             return 90;
         }
@@ -474,6 +481,11 @@ public class BossJutsuGoal extends Goal {
     private int castSasuke(LivingEntity target, double distance) {
         int roll = this.boss.getRandom().nextInt(100);
         if (distance > CLOSE_RANGE) {
+            if (this.boss.getSusanooStage() > 0 && roll >= 85 && pay(48f)) {
+                castBlackFlame(target);
+                offer(NarutoAbilities.AMATERASU);
+                return 56;
+            }
             boolean openSky = this.boss.level().canSeeSky(target.blockPosition());
             if (openSky && roll < 45 && pay(70f)) {
                 castKirin(target);
@@ -485,7 +497,9 @@ public class BossJutsuGoal extends Goal {
                 offer(NarutoAbilities.FIREBALL);
                 return 24;
             }
-            pay(35f);
+            if (!ChidoriDashEvents.canStart(this.boss) || !pay(35f)) {
+                return 12;
+            }
             castChidoriDash(target);
             offer(NarutoAbilities.CHIDORI_DASH);
             return 34;
@@ -509,19 +523,24 @@ public class BossJutsuGoal extends Goal {
     /** Madara: the war fan, a wall of fire, and a Susanoo sweep once the shell is up. */
     private int castMadara(LivingEntity target, double distance) {
         int roll = this.boss.getRandom().nextInt(100);
-        if (this.boss.getSusanooStage() >= 2 && distance <= 8.0 && roll < 40 && pay(40f)) {
-            castSusanooSweep();
+        int stage = this.boss.getSusanooStage();
+        boolean swordRange = stage == 4 ? distance >= 6 && distance <= 19 && roll < 54 : distance <= 6 && roll < 40;
+        if (swordRange && com.sekwah.narutomod.events.SusanooCombat.startBoss(this.boss, target)) {
             offer(NarutoAbilities.SUSANOO);
-            return 45;
+            return stage == 4 ? 60 : 45;
+        }
+        if (stage >= 2 && distance >= (stage == 4 ? 10 : 8) && roll < (stage == 4 ? 78 : 38)
+                && com.sekwah.narutomod.events.YasakaVolleyEvents.startBoss(this.boss, target)) {
+            return 60;
         }
         if (roll < 70 && pay(45f)) {
-            this.sustained = Sustained.FIRE_WAVE;
-            playCastSound(SoundEvents.BLAZE_SHOOT, 0.6f);
-            offer(NarutoAbilities.FIREBALL);
+            FireWallEntity.start(this.boss, aimVector(target), 7f, 3);
+            offer(NarutoAbilities.GREAT_FIRE_ANNIHILATION);
             return 60;
         }
         pay(30f);
-        castShockwave(target);
+        com.sekwah.narutomod.entity.jutsuprojectile.GustFrontEntity.fan(this.boss, aimVector(target),
+                net.minecraft.world.InteractionHand.MAIN_HAND, 1f, true);
         offer(NarutoAbilities.GUNBAI_WIND);
         return 30;
     }
@@ -529,14 +548,13 @@ public class BossJutsuGoal extends Goal {
     /** Shisui: takes you out of the fight rather than out of your health bar. */
     private int castShisui(LivingEntity target, double distance) {
         int roll = this.boss.getRandom().nextInt(100);
-        if (roll < 30 && pay(60f)) {
-            castKotoamatsukami(target);
+        if (roll < 30 && com.sekwah.narutomod.events.KotoInfluenceEvents.canStartBoss(this.boss, target) && pay(60f)) {
+            com.sekwah.narutomod.events.KotoInfluenceEvents.startBoss(this.boss, target);
             offer(NarutoAbilities.KOTOAMATSUKAMI);
             return 140;
         }
         if (roll < 75 && pay(35f)) {
             this.sustained = Sustained.BODY_FLICKER;
-            playCastSound(SoundEvents.ENDERMAN_TELEPORT, 1.3f);
             offer(NarutoAbilities.BODY_FLICKER);
             return 48;
         }
@@ -565,8 +583,7 @@ public class BossJutsuGoal extends Goal {
             offer(NarutoAbilities.FIREBALL);
             return 26;
         }
-        if (roll < 28 && pay(45f)) {
-            castIntangible();
+        if (roll < 28 && this.boss.beginKamuiPhase()) {
             offer(NarutoAbilities.KAMUI_PHASE);
             return 110;
         }
@@ -800,7 +817,9 @@ public class BossJutsuGoal extends Goal {
             offer(NarutoAbilities.KAMUI);
             return 34;
         }
-        pay(30f);
+        if (!pay(30f)) {
+            return 12;
+        }
         castNagashi();
         offer(NarutoAbilities.CHIDORI_NAGASHI);
         return 34;
@@ -850,31 +869,33 @@ public class BossJutsuGoal extends Goal {
     private int castHinata(LivingEntity target, double distance) {
         int roll = this.boss.getRandom().nextInt(100);
         if (distance > CLOSE_RANGE) {
-            if (roll < 60 && pay(30f)) {
+            if (roll < 60 && distance <= 8 && this.boss.hasLineOfSight(target) && pay(30f)) {
                 castVacuumPalm(target);
                 offer(NarutoAbilities.AIR_PALM);
                 return 34;
             }
-            pay(35f);
-            castGentleFistDash(target);
-            offer(NarutoAbilities.EIGHT_TRIGRAMS_SIXTY_FOUR_PALMS);
-            return 40;
+            if (this.boss.hasLineOfSight(target) && pay(35f)) {
+                castGentleFistDash(target);
+                return 40;
+            }
+            return 12;
         }
-        if (roll < 45 && pay(55f)) {
-            this.sustained = Sustained.SIXTY_FOUR_PALMS;
-            playCastSound(SoundEvents.PLAYER_ATTACK_SWEEP, 1.6f);
+        if (roll < 45 && TrigramPalmsEvents.canStart(this.boss, target) && pay(55f)) {
+            TrigramPalmsEvents.start(this.boss, target, 1.18f);
             offer(NarutoAbilities.EIGHT_TRIGRAMS_SIXTY_FOUR_PALMS);
             return 75;
         }
-        if (roll < 80 && pay(35f)) {
-            castRotation();
+        if (roll < 80 && KaitenEvents.canStart(this.boss) && pay(35f)) {
+            KaitenEvents.start(this.boss, 7f, 15);
             offer(NarutoAbilities.EIGHT_TRIGRAMS_ROTATION);
             return 50;
         }
-        pay(30f);
-        castVacuumPalm(target);
-        offer(NarutoAbilities.AIR_PALM);
-        return 34;
+        if (this.boss.hasLineOfSight(target) && pay(30f)) {
+            castVacuumPalm(target);
+            offer(NarutoAbilities.AIR_PALM);
+            return 34;
+        }
+        return 12;
     }
 
     /** Shikamaru: he does not out-hit you, he takes your turn away. */
@@ -891,8 +912,8 @@ public class BossJutsuGoal extends Goal {
             offer(NarutoAbilities.SHADOW_SEWING);
             return 40;
         }
-        if (roll < 40 && pay(50f)) {
-            castShadowStrangle(target);
+        if (roll < 40 && com.sekwah.narutomod.events.ShadowGripEvents.canStart(this.boss) && pay(36f)) {
+            com.sekwah.narutomod.events.ShadowGripEvents.start(this.boss, 3.7f);
             offer(NarutoAbilities.SHADOW_STRANGLE);
             return 80;
         }
@@ -1209,7 +1230,6 @@ public class BossJutsuGoal extends Goal {
                 SoundEvents.SAND_BREAK, SoundSource.HOSTILE, 2.0f, 0.4f);
     }
 
-    // --- Phase 20C: the Sand siblings, the second Akatsuki tier, and the Leaf's own -------
 
     private static final DustParticleOptions WIND_PALE =
             new DustParticleOptions(new Vector3f(0.82F, 0.92F, 0.88F), 1.1F);
@@ -1331,20 +1351,9 @@ public class BossJutsuGoal extends Goal {
                 SoundEvents.ENDER_DRAGON_FLAP, SoundSource.HOSTILE, 2.2f, 0.8f);
     }
 
-    /** Kakuzu's lightning mask. One bolt, and it does not care what you are wearing. */
     private void castLightningMask(LivingEntity target) {
-        Vec3 origin = this.boss.position().add(0, this.boss.getBbHeight() * 0.8, 0);
         Vec3 impact = target.position().add(0, target.getBbHeight() * 0.5, 0);
-        for (LivingEntity victim : victimsNear(impact, 2.5)) {
-            victim.hurt(this.boss.damageSources().mobAttack(this.boss), 14f);
-            victim.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 60, 1));
-        }
-        if (this.boss.level() instanceof ServerLevel serverLevel) {
-            NarutoParticles.spawnBolt(serverLevel, origin, impact, 4, 0.7,
-                    NarutoParticles.LIGHTNING_GOLD);
-        }
-        this.boss.level().playSound(null, this.boss.blockPosition(),
-                SoundEvents.LIGHTNING_BOLT_THUNDER, SoundSource.HOSTILE, 1.2f, 1.4f);
+        GianBeamEntity.launch(this.boss, impact, 14, true);
     }
 
     /** Earth Spear: he hardens, and for a while nothing gets through. */
@@ -1387,45 +1396,20 @@ public class BossJutsuGoal extends Goal {
         if (windup(Telegraph.HEAVY, target, () -> castIceMirrors(target))) {
             return;
         }
-        if (!(this.boss.level() instanceof ServerLevel serverLevel)) {
+        var ring = MirrorTransit.ringNear(this.boss, target.position());
+        if (ring.isEmpty()) {
+            IceMirrorEntity.raiseRing(this.boss, target.position());
             return;
         }
-        Vec3 centre = target.position();
-        java.util.List<com.sekwah.narutomod.entity.jutsuprojectile.IceMirrorEntity> standing =
-                this.standingMirrors(centre);
-
-        // The ring goes up once and then stands until it is broken. Re-raising it every cast
-        // would make the mirrors decoration again; leaving them up is what turns the technique
-        // into a structure the player has to dismantle.
-        if (standing.isEmpty()) {
-            standing = com.sekwah.narutomod.entity.jutsuprojectile.IceMirrorEntity
-                    .raiseRing(this.boss, centre);
+        if (MirrorTransit.travel(this.boss, ring) && target.isAlive() && this.boss.hasLineOfSight(target)
+                && this.boss.distanceToSqr(target) <= 81.0
+                && target.hurt(this.boss.damageSources().mobAttack(this.boss), 7f)) {
+            target.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 80, 1));
+            if (this.boss.level() instanceof ServerLevel level) {
+                NarutoParticles.spawnBolt(level, this.boss.getEyePosition(),
+                        target.getBoundingBox().getCenter(), 3, 0.19, NarutoParticles.ICE_PALE);
+            }
         }
-
-        // Step into one of the surviving panes, and cut once from it on the way through.
-        com.sekwah.narutomod.entity.jutsuprojectile.IceMirrorEntity into =
-                standing.get(this.boss.getRandom().nextInt(standing.size()));
-        this.boss.randomTeleport(into.getX(), into.getY(), into.getZ(), false);
-        this.boss.getLookControl().setLookAt(target, 30f, 30f);
-
-        target.invulnerableTime = 0;
-        target.hurt(this.boss.damageSources().mobAttack(this.boss), 7f);
-        target.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 80, 1));
-        NarutoParticles.spawnBolt(serverLevel, into.position().add(0, 1.2, 0),
-                target.position().add(0, target.getBbHeight() * 0.5, 0), 2, 0.2,
-                NarutoParticles.ICE_PALE);
-        this.boss.level().playSound(null, this.boss.blockPosition(),
-                SoundEvents.GLASS_BREAK, SoundSource.HOSTILE, 1.6f, 1.2f);
-    }
-
-    /** This wielder's own mirrors that are still standing near a point. */
-    private java.util.List<com.sekwah.narutomod.entity.jutsuprojectile.IceMirrorEntity> standingMirrors(Vec3 centre) {
-        return this.boss.level().getEntitiesOfClass(
-                com.sekwah.narutomod.entity.jutsuprojectile.IceMirrorEntity.class,
-                new net.minecraft.world.phys.AABB(centre, centre).inflate(
-                        com.sekwah.narutomod.entity.jutsuprojectile.IceMirrorEntity.RING_RADIUS + 4.0),
-                mirror -> mirror.isAlive()
-                        && mirror.getOwnerUUID().map(this.boss.getUUID()::equals).orElse(false));
     }
 
     /** A Thousand Flying Water Needles, frozen. A cone of them, and they all land. */
@@ -1625,55 +1609,21 @@ public class BossJutsuGoal extends Goal {
                 SoundEvents.SLIME_SQUISH, SoundSource.HOSTILE, 1.2f, 0.7f);
     }
 
-    /** Itachi: Amaterasu — the flame entity spreads on its own from where it lands. */
     private void castBlackFlame(LivingEntity target) {
-        if (windup(Telegraph.FOCUS, target, () -> castBlackFlame(target))) {
-            return;
-        }
-        AmaterasuFireEntity fire = new AmaterasuFireEntity(this.boss.level(), this.boss,
-                target.getX(), target.getY(), target.getZ());
-        fire.setDamageMultiplier(1.2f);
-        this.boss.level().addFreshEntity(fire);
-        playCastSound(SoundEvents.WARDEN_SONIC_BOOM, 1.0f);
-    }
-
-    /** Itachi: Tsukuyomi — no damage worth speaking of, but you stop being a participant. */
-    private void castTsukuyomi(LivingEntity target) {
-        if (windup(Telegraph.GENJUTSU, target, () -> castTsukuyomi(target))) {
-            return;
-        }
-        target.addEffect(new MobEffectInstance(MobEffects.BLINDNESS, 8 * 20, 0, false, false));
-        target.addEffect(new MobEffectInstance(MobEffects.CONFUSION, 12 * 20, 0, false, false));
-        target.addEffect(new MobEffectInstance(MobEffects.WEAKNESS, 12 * 20, 2, false, true));
-        target.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 6 * 20, 2, false, true));
-        target.hurt(this.boss.damageSources().indirectMagic(this.boss, this.boss), 6f);
-        playCastSound(SoundEvents.ELDER_GUARDIAN_CURSE, 0.7f);
-
-        if (this.boss.level() instanceof ServerLevel serverLevel) {
-            NarutoParticles.spawnRing(serverLevel, target.getEyePosition(), 1.2, 32,
-                    NarutoParticles.GENJUTSU_RED);
-            NarutoParticles.spawnBurst(serverLevel, target.position().add(0, 1.2, 0), 30, 1.0, CROW_BLACK);
-        }
+        var point = target.position().add(0, target.getBbHeight() * 0.65, 0);
+        AmaterasuFireEntity.aim(this.boss, point, 1.2f);
     }
 
     /** Itachi: a murder of crows that blinds and cuts on the way past. */
     private void castCrowMurder(LivingEntity target) {
-        target.addEffect(new MobEffectInstance(MobEffects.BLINDNESS, 5 * 20, 0, false, true));
-        target.hurt(this.boss.damageSources().mobAttack(this.boss), 5f);
-        playCastSound(SoundEvents.PARROT_IMITATE_WITHER_SKELETON, 0.8f);
-
-        if (this.boss.level() instanceof ServerLevel serverLevel) {
-            NarutoParticles.spawnBurst(serverLevel, target.position().add(0, 1.2, 0), 30, 1.1, CROW_BLACK);
-        }
+        var aim = target.position().subtract(this.boss.position());
+        float yaw = (float) Math.toDegrees(Math.atan2(-aim.x, aim.z));
+        com.sekwah.narutomod.events.CrowFlockEvents.start(this.boss, yaw);
     }
 
     /** Shared Uchiha staple — a real charged fireball, aimed the way a player would aim it. */
     private void castGreatFireball(LivingEntity target, int charge) {
-        Vec3 aim = aimVector(target);
-        FireballJutsuEntity fireball = new FireballJutsuEntity(this.boss, aim.x, aim.y, aim.z);
-        fireball.setChargeAmount(charge, true, 1.0f);
-        this.boss.level().addFreshEntity(fireball);
-        playCastSound(SoundEvents.BLAZE_SHOOT, 0.8f);
+        GreatFireballEntity.launch(this.boss, aimVector(target), charge, 1.25f);
     }
 
     /** Sasuke: Kirin — a branching bolt out of the sky, using the shared fractal helper. */
@@ -1681,42 +1631,13 @@ public class BossJutsuGoal extends Goal {
         if (windup(Telegraph.HEAVY, target, () -> castKirin(target))) {
             return;
         }
-        Vec3 impact = target.position();
-        if (this.boss.level() instanceof ServerLevel serverLevel) {
-            Vec3 sky = impact.add(0, 40, 0);
-            NarutoParticles.spawnBolt(serverLevel, sky, impact.add(0, 1.0, 0), 5, 2.5,
-                    NarutoParticles.CHIDORI_CYAN);
-            for (int branch = 0; branch < 3; branch++) {
-                Vec3 offset = impact.add(
-                        (this.boss.getRandom().nextDouble() - 0.5) * 8,
-                        12 + this.boss.getRandom().nextDouble() * 12,
-                        (this.boss.getRandom().nextDouble() - 0.5) * 8);
-                NarutoParticles.spawnBolt(serverLevel, offset, impact.add(0, 1.0, 0), 4, 1.8,
-                        NarutoParticles.LIGHTNING_GOLD);
-            }
-            serverLevel.sendParticles(ParticleTypes.EXPLOSION, impact.x, impact.y + 0.5, impact.z,
-                    4, 1.0, 0.5, 1.0, 0.0);
-        }
-        for (LivingEntity caught : nearby(impact, 3.5)) {
-            caught.hurt(this.boss.damageSources().mobAttack(this.boss), caught == target ? 22f : 12f);
-            caught.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 4 * 20, 1, false, true));
-        }
-        playCastSound(SoundEvents.LIGHTNING_BOLT_THUNDER, 0.8f);
+        KirinStrikeEntity.mark(this.boss, target, new KirinStrikeEntity.Profile(22f, 12f, 3.5f));
     }
 
     /** Sasuke: closes the gap in a lightning-wrapped charge. */
     private void castChidoriDash(LivingEntity target) {
-        Vec3 toTarget = target.position().subtract(this.boss.position()).normalize();
-        this.boss.setDeltaMovement(toTarget.scale(1.8).add(0, 0.3, 0));
-        this.boss.hurtMarked = true;
-        target.hurt(this.boss.damageSources().mobAttack(this.boss), 15f);
-        target.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 3 * 20, 1, false, true));
-        playCastSound(SoundEvents.LIGHTNING_BOLT_IMPACT, 1.4f);
-
-        if (this.boss.level() instanceof ServerLevel serverLevel) {
-            NarutoParticles.spawnBolt(serverLevel, this.boss.getEyePosition(),
-                    target.position().add(0, 1.0, 0), 4, 0.8, NarutoParticles.CHIDORI_CYAN);
-        }
+        ChidoriDashEvents.start(this.boss, target.position().subtract(this.boss.position()),
+                new ChidoriDashEvents.DamageProfile(15f, 15f, false, true));
     }
 
     /**
@@ -1739,16 +1660,7 @@ public class BossJutsuGoal extends Goal {
 
     /** Sasuke: Chidori Nagashi — current through everything touching him. */
     private void castNagashi() {
-        for (LivingEntity caught : nearby(this.boss.position(), 5.0)) {
-            caught.hurt(this.boss.damageSources().mobAttack(this.boss), 11f);
-            caught.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 4 * 20, 1, false, true));
-        }
-        playCastSound(SoundEvents.LIGHTNING_BOLT_IMPACT, 1.6f);
-
-        if (this.boss.level() instanceof ServerLevel serverLevel) {
-            NarutoParticles.spawnRing(serverLevel, this.boss.position().add(0, 1.0, 0), 4.5, 40,
-                    NarutoParticles.CHIDORI_CYAN);
-        }
+        NagashiEvents.start(this.boss, new NagashiEvents.Profile(5.0, 11f, 80, 1, false));
     }
 
     /** Madara: the fan sweep that hurls you back across the clearing. */
@@ -1762,58 +1674,6 @@ public class BossJutsuGoal extends Goal {
         if (this.boss.level() instanceof ServerLevel serverLevel) {
             NarutoParticles.spawnRing(serverLevel, this.boss.position().add(0, 1.0, 0), 3.0, 30,
                     ParticleTypes.CLOUD);
-        }
-    }
-
-    /** Madara: once the shell is up, the shell is the weapon. */
-    private void castSusanooSweep() {
-        if (windup(Telegraph.HEAVY, this.boss.getTarget(), () -> castSusanooSweep())) {
-            return;
-        }
-        for (LivingEntity caught : nearby(this.boss.position(), 7.0)) {
-            caught.hurt(this.boss.damageSources().mobAttack(this.boss), 18f);
-            Vec3 push = caught.position().subtract(this.boss.position()).normalize().scale(1.4).add(0, 0.5, 0);
-            caught.setDeltaMovement(caught.getDeltaMovement().add(push));
-            caught.hurtMarked = true;
-        }
-        playCastSound(SoundEvents.WITHER_BREAK_BLOCK, 0.6f);
-
-        if (this.boss.level() instanceof ServerLevel serverLevel) {
-            NarutoParticles.spawnRing(serverLevel, this.boss.position().add(0, 1.5, 0), 6.5, 48,
-                    NarutoParticles.SHARINGAN_RED);
-        }
-    }
-
-    /** Shisui: Kotoamatsukami — everything that makes you dangerous, switched off. */
-    private void castKotoamatsukami(LivingEntity target) {
-        if (windup(Telegraph.GENJUTSU, target, () -> castKotoamatsukami(target))) {
-            return;
-        }
-        target.addEffect(new MobEffectInstance(MobEffects.BLINDNESS, 10 * 20, 0, false, false));
-        target.addEffect(new MobEffectInstance(MobEffects.CONFUSION, 15 * 20, 0, false, false));
-        target.addEffect(new MobEffectInstance(MobEffects.WEAKNESS, 15 * 20, 2, false, true));
-        target.addEffect(new MobEffectInstance(MobEffects.DIG_SLOWDOWN, 15 * 20, 2, false, true));
-        target.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 8 * 20, 2, false, true));
-        playCastSound(SoundEvents.EVOKER_CAST_SPELL, 0.6f);
-
-        if (this.boss.level() instanceof ServerLevel serverLevel) {
-            NarutoParticles.spawnRing(serverLevel, target.getEyePosition(), 1.0, 28,
-                    NarutoParticles.GENJUTSU_RED);
-            NarutoParticles.spawnSpiral(serverLevel, target.position(), 1.4, 0.12, 24,
-                    NarutoParticles.SHARINGAN_RED);
-        }
-    }
-
-    /** Obito: goes intangible for a moment and comes back healed. */
-    private void castIntangible() {
-        this.boss.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 4 * 20, 3, false, true));
-        this.boss.addEffect(new MobEffectInstance(MobEffects.REGENERATION, 4 * 20, 1, false, true));
-        this.boss.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SPEED, 6 * 20, 1, false, true));
-        playCastSound(SoundEvents.SHULKER_TELEPORT, 0.6f);
-
-        if (this.boss.level() instanceof ServerLevel serverLevel) {
-            NarutoParticles.spawnSpiral(serverLevel, this.boss.position(), 1.0, 0.15, 20,
-                    NarutoParticles.SHARINGAN_RED);
         }
     }
 
@@ -1912,14 +1772,13 @@ public class BossJutsuGoal extends Goal {
         }
     }
 
-    /** Zabuza: a single heavy water round rather than a volley. */
     private void castWaterDragon(LivingEntity target) {
-        Vec3 aim = aimVector(target);
-        WaterBulletJutsuEntity bullet = new WaterBulletJutsuEntity(this.boss, aim.x, aim.y, aim.z);
-        bullet.setDamageMultiplier(1.6f);
-        bullet.setYRot(this.boss.getYRot() - 180);
-        this.boss.level().addFreshEntity(bullet);
-        playCastSound(SoundEvents.DOLPHIN_ATTACK, 0.6f);
+        ChakraDragonEntity.launchWater(this.boss,
+                target.position().add(0, target.getBbHeight() * 0.5, 0), 11.2f);
+    }
+
+    private void castSharkVolleyRound(LivingEntity target) {
+        WaterShotEntity.launch(this.boss, aimVector(target), 1.6f, true);
     }
 
     /** Hidan: his own blood pays for it, so it hurts you regardless of your armour. */
@@ -2056,7 +1915,6 @@ public class BossJutsuGoal extends Goal {
         }
     }
 
-    // --- Hashirama ---------------------------------------------------------------
 
     /** Roots tear up under the target, hold them, and keep grinding. */
     private void castWoodSurge(LivingEntity target) {
@@ -2088,7 +1946,6 @@ public class BossJutsuGoal extends Goal {
         }
     }
 
-    // --- Nagato ------------------------------------------------------------------
 
     /** Shinra Tensei: everything near him stops being near him. */
     private void castShinraTensei() {
@@ -2169,27 +2026,14 @@ public class BossJutsuGoal extends Goal {
         }
     }
 
-    // --- Naruto ------------------------------------------------------------------
 
     /** A thrown Rasenshuriken: wide, shredding, and it does not care about armour. */
     private void castRasenshuriken(LivingEntity target) {
         if (windup(Telegraph.HEAVY, target, () -> castRasenshuriken(target))) {
             return;
         }
-        Vec3 impact = target.position().add(0, 1.0, 0);
-        for (LivingEntity caught : nearby(impact, 5.0)) {
-            caught.hurt(this.boss.damageSources().indirectMagic(this.boss, this.boss), 20f);
-            caught.addEffect(new MobEffectInstance(MobEffects.WEAKNESS, 10 * 20, 2, false, true));
-            caught.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 6 * 20, 1, false, true));
-        }
-        playCastSound(SoundEvents.PHANTOM_SWOOP, 0.7f);
-        if (this.boss.level() instanceof ServerLevel serverLevel) {
-            NarutoParticles.spawnBolt(serverLevel, this.boss.getEyePosition(), impact, 3, 0.4,
-                    NarutoParticles.RASENGAN_BLUE);
-            for (int ring = 1; ring <= 3; ring++) {
-                NarutoParticles.spawnRing(serverLevel, impact, ring * 1.7, 32, NarutoParticles.ROTATION_WHITE);
-            }
-        }
+        RasenshurikenEntity.form(this.boss, target.position().add(0, target.getBbHeight() * 0.63, 0)
+                .subtract(this.boss.getEyePosition()), 1.0f, true);
     }
 
     /** A Rasengan driven into the chest, with the grinding knockback that goes with it. */
@@ -2218,19 +2062,11 @@ public class BossJutsuGoal extends Goal {
         }
     }
 
-    // --- Hinata ------------------------------------------------------------------
 
-    /** Hakke Kusho: a palm thrust that arrives as compressed air a dozen blocks away. */
     private void castVacuumPalm(LivingEntity target) {
-        target.hurt(this.boss.damageSources().indirectMagic(this.boss, this.boss), 11f);
-        Vec3 push = target.position().subtract(this.boss.position()).normalize().scale(1.8).add(0, 0.35, 0);
-        target.setDeltaMovement(target.getDeltaMovement().add(push));
-        target.hurtMarked = true;
-        playCastSound(SoundEvents.PLAYER_ATTACK_SWEEP, 1.3f);
-        if (this.boss.level() instanceof ServerLevel serverLevel) {
-            NarutoParticles.spawnBolt(serverLevel, this.boss.getEyePosition(),
-                    target.position().add(0, 1.0, 0), 2, 0.3, NarutoParticles.ROTATION_WHITE);
-        }
+        Vec3 center = target.position().add(0, target.getBbHeight() * 0.53, 0);
+        Vec3 shoulder = this.boss.position().add(0, this.boss.getBbHeight() * 0.66, 0);
+        GustFrontEntity.palm(this.boss, center.subtract(shoulder), 1, true);
     }
 
     /** Closes the gap the way a Hyuga does: instantly, and already inside your guard. */
@@ -2238,89 +2074,15 @@ public class BossJutsuGoal extends Goal {
         Vec3 toTarget = target.position().subtract(this.boss.position()).normalize();
         this.boss.setDeltaMovement(toTarget.scale(1.7).add(0, 0.3, 0));
         this.boss.hurtMarked = true;
-        gentleFistHit(target, 8f);
     }
 
-    /** Kaiten: he spins, and everything touching him leaves. */
-    private void castRotation() {
-        for (LivingEntity caught : nearby(this.boss.position(), 5.0)) {
-            caught.hurt(this.boss.damageSources().mobAttack(this.boss), 10f);
-            Vec3 push = caught.position().subtract(this.boss.position()).normalize().scale(2.2).add(0, 0.5, 0);
-            caught.setDeltaMovement(push);
-            caught.hurtMarked = true;
-        }
-        playCastSound(SoundEvents.ELYTRA_FLYING, 1.6f);
-        if (this.boss.level() instanceof ServerLevel serverLevel) {
-            for (int ring = 1; ring <= 3; ring++) {
-                NarutoParticles.spawnRing(serverLevel, this.boss.position().add(0, ring * 0.6, 0),
-                        4.0, 36, NarutoParticles.ROTATION_WHITE);
-            }
-        }
-    }
-
-    /**
-     * One Gentle Fist strike. Magic damage on purpose: the whole point of the style is that
-     * it goes through armour to the chakra network, so routing it through the normal
-     * armour-reduced melee path would be exactly backwards.
-     */
-    private void gentleFistHit(LivingEntity target, float damage) {
-        target.hurt(this.boss.damageSources().indirectMagic(this.boss, this.boss), damage);
-        target.addEffect(new MobEffectInstance(MobEffects.WEAKNESS, 6 * 20, 1, false, true));
-        target.addEffect(new MobEffectInstance(MobEffects.DIG_SLOWDOWN, 6 * 20, 1, false, true));
-        playCastSound(SoundEvents.PLAYER_ATTACK_KNOCKBACK, 1.5f);
-        if (this.boss.level() instanceof ServerLevel serverLevel) {
-            NarutoParticles.spawnBurst(serverLevel, target.position().add(0, 1.1, 0), 12, 0.5,
-                    NarutoParticles.ROTATION_WHITE);
-        }
-    }
-
-    // --- Shikamaru ---------------------------------------------------------------
-
-    /** Shadow Possession: you are still alive, you simply do not get to move. */
     private void castShadowBind(LivingEntity target) {
-        if (windup(Telegraph.FOCUS, target, () -> castShadowBind(target))) {
-            return;
-        }
-        target.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 6 * 20, 6, false, true));
-        target.addEffect(new MobEffectInstance(MobEffects.JUMP, 6 * 20, 128, false, false));
-        target.addEffect(new MobEffectInstance(MobEffects.WEAKNESS, 6 * 20, 2, false, true));
-        target.setDeltaMovement(0, target.getDeltaMovement().y, 0);
-        target.hurtMarked = true;
-        playCastSound(SoundEvents.SCULK_BLOCK_CHARGE, 0.8f);
-        if (this.boss.level() instanceof ServerLevel serverLevel) {
-            NarutoParticles.spawnBolt(serverLevel, this.boss.position(), target.position(), 2, 0.15,
-                    NarutoParticles.SHADOW_PURPLE);
-            NarutoParticles.spawnRing(serverLevel, target.position(), 1.0, 20, NarutoParticles.SHADOW_PURPLE);
-        }
+        com.sekwah.narutomod.events.ShadowTetherEvents.start(this.boss, target.position().subtract(this.boss.position()), 15, target);
     }
 
-    /** Shadow Sewing: the shadow sharpens and comes up through the floor. */
     private void castShadowSewing(LivingEntity target) {
-        target.hurt(this.boss.damageSources().indirectMagic(this.boss, this.boss), 13f);
-        target.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 4 * 20, 2, false, true));
-        playCastSound(SoundEvents.SCULK_SHRIEKER_SHRIEK, 1.4f);
-        if (this.boss.level() instanceof ServerLevel serverLevel) {
-            NarutoParticles.spawnBurst(serverLevel, target.position(), 22, 0.9, NarutoParticles.SHADOW_PURPLE);
-        }
+        com.sekwah.narutomod.events.ShadowSewingEvents.start(this.boss, 11, 13, target);
     }
-
-    /** Shadow Strangle: it reaches the throat and stays there. */
-    private void castShadowStrangle(LivingEntity target) {
-        if (windup(Telegraph.FOCUS, target, () -> castShadowStrangle(target))) {
-            return;
-        }
-        target.addEffect(new MobEffectInstance(MobEffects.WITHER, 8 * 20, 2, false, true));
-        target.addEffect(new MobEffectInstance(MobEffects.BLINDNESS, 5 * 20, 0, false, false));
-        target.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 8 * 20, 3, false, true));
-        target.hurt(this.boss.damageSources().indirectMagic(this.boss, this.boss), 8f);
-        playCastSound(SoundEvents.WARDEN_HEARTBEAT, 0.7f);
-        if (this.boss.level() instanceof ServerLevel serverLevel) {
-            NarutoParticles.spawnSpiral(serverLevel, target.position(), 0.9, 0.16, 22,
-                    NarutoParticles.SHADOW_PURPLE);
-        }
-    }
-
-    // ------------------------------------------------------------------ sustained steps
 
     /** Deidara: a detonation every few ticks, walking in from short of the target. */
     private void stepClayBarrage(LivingEntity target) {
@@ -2352,51 +2114,25 @@ public class BossJutsuGoal extends Goal {
         }
         double angle = this.boss.getRandom().nextDouble() * Math.PI * 2;
         Vec3 spot = target.position().add(Math.cos(angle) * 1.8, 0, Math.sin(angle) * 1.8);
-        if (this.boss.level() instanceof ServerLevel serverLevel) {
-            NarutoParticles.spawnBurst(serverLevel, this.boss.position().add(0, 1.0, 0), 12, 0.5,
-                    NarutoParticles.ROTATION_WHITE);
-        }
-        teleportSafely(spot.x, target.getY(), spot.z);
-        target.hurt(this.boss.damageSources().mobAttack(this.boss), 7f);
-        playCastSound(SoundEvents.ENDERMAN_TELEPORT, 1.5f);
+        FlickerEvents.start(this.boss, spot.subtract(this.boss.position()), () -> {
+            if (target.isAlive() && target.level() == this.boss.level() && this.boss.distanceToSqr(target) <= 3.4 * 3.4
+                    && this.boss.hasLineOfSight(target)) {
+                target.hurt(this.boss.damageSources().mobAttack(this.boss), 7f);
+            }
+        });
 
         if (++this.sustainedStep >= 5) {
             this.sustained = null;
         }
     }
 
-    /** Madara: a line of fire dragged sideways across the target's ground. */
-    private void stepFireWave(LivingEntity target) {
-        if (this.sustainedTicks % 3 != 0) {
-            return;
-        }
-        Vec3 direction = target.position().subtract(this.boss.position()).normalize();
-        Vec3 side = new Vec3(-direction.z, 0, direction.x);
-        double sweep = (this.sustainedStep - 3) * 1.6;
-        for (int step = 2; step <= 10; step++) {
-            Vec3 point = this.boss.position().add(direction.scale(step)).add(side.scale(sweep)).add(0, 0.4, 0);
-            if (this.boss.level() instanceof ServerLevel serverLevel) {
-                serverLevel.sendParticles(ParticleTypes.FLAME, point.x, point.y, point.z,
-                        5, 0.35, 0.35, 0.35, 0.02);
-            }
-            for (LivingEntity caught : nearby(point, 1.6)) {
-                caught.hurt(this.boss.damageSources().mobAttack(this.boss), 5f);
-                caught.setSecondsOnFire(5);
-            }
-        }
-        playCastSound(SoundEvents.BLAZE_SHOOT, 0.5f);
-
-        if (++this.sustainedStep >= 7) {
-            this.sustained = null;
-        }
-    }
 
     /** Kisame: three sharks, one after another, so dodging the first is not enough. */
     private void stepSharkVolley(LivingEntity target) {
         if (this.sustainedTicks % 8 != 0) {
             return;
         }
-        castWaterDragon(target);
+        castSharkVolleyRound(target);
         if (++this.sustainedStep >= 3) {
             this.sustained = null;
         }
@@ -2420,26 +2156,6 @@ public class BossJutsuGoal extends Goal {
         }
     }
 
-    /**
-     * Hinata: the Eight Trigrams sequence, and it doubles the way the count does - two
-     * palms, then four, then eight. Each strike bypasses armour and shaves the target's
-     * ability to fight back rather than simply their health.
-     */
-    private void stepSixtyFourPalms(LivingEntity target) {
-        if (this.sustainedTicks % 3 != 0) {
-            return;
-        }
-        if (this.boss.distanceTo(target) > 4.5) {
-            this.sustained = null; // they broke away; the sequence cannot follow
-            return;
-        }
-        // Later palms in the sequence land harder, matching the two-four-eight escalation.
-        float damage = 4f + this.sustainedStep * 0.7f;
-        gentleFistHit(target, damage);
-        if (++this.sustainedStep >= 12) {
-            this.sustained = null;
-        }
-    }
 
     /** Naruto: clones pile in one after another from wherever they happen to be. */
     private void stepCloneFlurry(LivingEntity target) {

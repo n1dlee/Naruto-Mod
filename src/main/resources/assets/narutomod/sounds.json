@@ -1,4 +1,514 @@
 {
+  "final_chakra.sword": {
+    "sounds": [
+      "narutomod:jutsu/final_chakra_sword"
+    ],
+    "subtitle": "narutomod.subtitle.final_chakra.sword"
+  },
+  "final_chakra.armor": {
+    "sounds": [
+      "narutomod:jutsu/final_chakra_armor"
+    ],
+    "subtitle": "narutomod.subtitle.final_chakra.armor"
+  },
+  "final_chakra.shatter": {
+    "sounds": [
+      "narutomod:jutsu/final_chakra_shatter"
+    ],
+    "subtitle": "narutomod.subtitle.final_chakra.shatter"
+  },
+  "final_chakra.magatama": {
+    "sounds": [
+      "narutomod:jutsu/final_chakra_magatama"
+    ],
+    "subtitle": "narutomod.subtitle.final_chakra.magatama"
+  },
+  "final_chakra.seal": {
+    "sounds": [
+      "narutomod:jutsu/final_chakra_seal"
+    ],
+    "subtitle": "narutomod.subtitle.final_chakra.seal"
+  },
+  "final_chakra.kindling": {
+    "sounds": [
+      "narutomod:jutsu/final_chakra_kindling"
+    ],
+    "subtitle": "narutomod.subtitle.final_chakra.kindling"
+  },
+  "final_chakra.dim": {
+    "sounds": [
+      "narutomod:jutsu/final_chakra_dim"
+    ],
+    "subtitle": "narutomod.subtitle.final_chakra.dim"
+  },
+  "final_chakra.biju_build": {
+    "sounds": [
+      "narutomod:jutsu/final_chakra_biju_build"
+    ],
+    "subtitle": "narutomod.subtitle.final_chakra.biju_build"
+  },
+  "final_chakra.biju_launch": {
+    "sounds": [
+      "narutomod:jutsu/final_chakra_biju_launch"
+    ],
+    "subtitle": "narutomod.subtitle.final_chakra.biju_launch"
+  },
+  "final_chakra.biju_abort": {
+    "sounds": [
+      "narutomod:jutsu/final_chakra_biju_abort"
+    ],
+    "subtitle": "narutomod.subtitle.final_chakra.biju_abort"
+  },
+  "final_chakra.biju_collapse": {
+    "sounds": [
+      "narutomod:jutsu/final_chakra_biju_collapse"
+    ],
+    "subtitle": "narutomod.subtitle.final_chakra.biju_collapse"
+  },
+  "kurama_cloak.rise": {
+    "sounds": [
+      "narutomod:jutsu/kurama_cloak_rise"
+    ],
+    "subtitle": "narutomod.subtitle.kurama_cloak.rise"
+  },
+  "kurama_cloak.paw": {
+    "sounds": [
+      "narutomod:jutsu/kurama_cloak_paw"
+    ],
+    "subtitle": "narutomod.subtitle.kurama_cloak.paw"
+  },
+  "kurama_cloak.sweep": {
+    "sounds": [
+      "narutomod:jutsu/kurama_cloak_sweep"
+    ],
+    "subtitle": "narutomod.subtitle.kurama_cloak.sweep"
+  },
+  "body_rite.gather": {
+    "sounds": [
+      "narutomod:jutsu/body_rite_gather"
+    ],
+    "subtitle": "narutomod.subtitle.body_rite.gather"
+  },
+  "body_rite.balance": {
+    "sounds": [
+      "narutomod:jutsu/body_rite_balance"
+    ],
+    "subtitle": "narutomod.subtitle.body_rite.balance"
+  },
+  "body_rite.stone": {
+    "sounds": [
+      "narutomod:jutsu/body_rite_stone"
+    ],
+    "subtitle": "narutomod.subtitle.body_rite.stone"
+  },
+  "body_rite.release": {
+    "sounds": [
+      "narutomod:jutsu/body_rite_release"
+    ],
+    "subtitle": "narutomod.subtitle.body_rite.release"
+  },
+  "body_rite.heart": {
+    "sounds": [
+      "narutomod:jutsu/body_rite_heart"
+    ],
+    "subtitle": "narutomod.subtitle.body_rite.heart"
+  },
+  "body_rite.gate": {
+    "sounds": [
+      "narutomod:jutsu/body_rite_gate"
+    ],
+    "subtitle": "narutomod.subtitle.body_rite.gate"
+  },
+  "body_rite.end": {
+    "sounds": [
+      "narutomod:jutsu/body_rite_end"
+    ],
+    "subtitle": "narutomod.subtitle.body_rite.end"
+  },
+  "shadow_clone.seal": {
+    "sounds": ["narutomod:jutsu/shadow_clone_seal"],
+    "subtitle": "narutomod.subtitle.clone_seal"
+  },
+  "shadow_clone.form": {
+    "sounds": ["narutomod:jutsu/shadow_clone_form"],
+    "subtitle": "narutomod.subtitle.clone_form"
+  },
+  "shadow_clone.dispel": {
+    "sounds": ["narutomod:jutsu/shadow_clone_dispel"],
+    "subtitle": "narutomod.subtitle.clone_dispel"
+  },
+  "hiraishin.mark": {
+    "sounds": ["narutomod:jutsu/hiraishin_mark"],
+    "subtitle": "narutomod.subtitle.hiraishin_mark"
+  },
+  "hiraishin.depart": {
+    "sounds": ["narutomod:jutsu/hiraishin_depart"],
+    "subtitle": "narutomod.subtitle.hiraishin_depart"
+  },
+  "hiraishin.arrive": {
+    "sounds": ["narutomod:jutsu/hiraishin_arrive"],
+    "subtitle": "narutomod.subtitle.hiraishin_arrive"
+  },
+  "summon.toad": {
+    "sounds": ["narutomod:jutsu/summon_toad"],
+    "subtitle": "narutomod.subtitle.summon_toad"
+  },
+  "summon.snake": {
+    "sounds": ["narutomod:jutsu/summon_snake"],
+    "subtitle": "narutomod.subtitle.summon_snake"
+  },
+  "summon.slug": {
+    "sounds": ["narutomod:jutsu/summon_slug"],
+    "subtitle": "narutomod.subtitle.summon_slug"
+  },
+  "summon.monkey": {
+    "sounds": ["narutomod:jutsu/summon_monkey"],
+    "subtitle": "narutomod.subtitle.summon_monkey"
+  },
+  "summon.mark": {
+    "sounds": ["narutomod:jutsu/summon_mark"],
+    "subtitle": "narutomod.subtitle.summon_mark"
+  },
+  "summon.arrive": {
+    "sounds": ["narutomod:jutsu/summon_arrive"],
+    "subtitle": "narutomod.subtitle.summon_arrive"
+  },
+  "summon.ram": {
+    "sounds": ["narutomod:jutsu/summon_ram"],
+    "subtitle": "narutomod.subtitle.summon_ram"
+  },
+  "naraka.restore": {
+    "sounds": ["narutomod:jutsu/naraka_restore"],
+    "subtitle": "narutomod.subtitle.naraka_restore"
+  },
+  "naraka.jaw": {
+    "sounds": ["narutomod:jutsu/naraka_jaw"],
+    "subtitle": "narutomod.subtitle.naraka_jaw"
+  },
+  "naraka.close": {
+    "sounds": ["narutomod:jutsu/naraka_close"],
+    "subtitle": "narutomod.subtitle.naraka_close"
+  },
+  "preta.open": {
+    "sounds": ["narutomod:jutsu/preta_open"],
+    "subtitle": "narutomod.subtitle.preta_open"
+  },
+  "preta.sip": {
+    "sounds": ["narutomod:jutsu/preta_sip"],
+    "subtitle": "narutomod.subtitle.preta_sip"
+  },
+  "chibaku.seed": {
+    "sounds": ["narutomod:jutsu/chibaku_seed"],
+    "subtitle": "narutomod.subtitle.chibaku_seed"
+  },
+  "chibaku.gather": {
+    "sounds": ["narutomod:jutsu/chibaku_gather"],
+    "subtitle": "narutomod.subtitle.chibaku_gather"
+  },
+  "chibaku.crash": {
+    "sounds": ["narutomod:jutsu/chibaku_crash"],
+    "subtitle": "narutomod.subtitle.chibaku_crash"
+  },
+  "bansho.focus": {
+    "sounds": ["narutomod:jutsu/bansho_focus"],
+    "subtitle": "narutomod.subtitle.bansho_focus"
+  },
+  "bansho.pull": {
+    "sounds": ["narutomod:jutsu/bansho_pull"],
+    "subtitle": "narutomod.subtitle.bansho_pull"
+  },
+  "shinra.pressure": {
+    "sounds": ["narutomod:jutsu/shinra_pressure"],
+    "subtitle": "narutomod.subtitle.shinra_pressure"
+  },
+  "shinra.release": {
+    "sounds": ["narutomod:jutsu/shinra_release"],
+    "subtitle": "narutomod.subtitle.shinra_release"
+  },
+  "shinra.wake": {
+    "sounds": ["narutomod:jutsu/shinra_wake"],
+    "subtitle": "narutomod.subtitle.shinra_wake"
+  },
+  "clay.mold": {
+    "sounds": ["narutomod:jutsu/clay_mold"],
+    "subtitle": "narutomod.subtitle.clay_mold"
+  },
+  "clay.arm": {
+    "sounds": ["narutomod:jutsu/clay_arm"],
+    "subtitle": "narutomod.subtitle.clay_arm"
+  },
+  "clay.burst": {
+    "sounds": ["narutomod:jutsu/clay_burst"],
+    "subtitle": "narutomod.subtitle.clay_burst"
+  },
+  "laser_circus.focus": {
+    "sounds": ["narutomod:jutsu/laser_circus_focus"],
+    "subtitle": "narutomod.subtitle.laser_circus_focus"
+  },
+  "laser_circus.cast": {
+    "sounds": ["narutomod:jutsu/laser_circus_cast"],
+    "subtitle": "narutomod.subtitle.laser_circus_cast"
+  },
+  "ice_field.warn": {
+    "sounds": ["narutomod:jutsu/ice_field_warn"],
+    "subtitle": "narutomod.subtitle.ice_field_warn"
+  },
+  "ice_field.rise": {
+    "sounds": ["narutomod:jutsu/ice_field_rise"],
+    "subtitle": "narutomod.subtitle.ice_field_rise"
+  },
+  "ice_field.melt": {
+    "sounds": ["narutomod:jutsu/ice_field_melt"],
+    "subtitle": "narutomod.subtitle.ice_field_melt"
+  },
+  "iron_sand.gather": {
+    "sounds": ["narutomod:jutsu/iron_sand_gather"],
+    "subtitle": "narutomod.subtitle.iron_sand_gather"
+  },
+  "iron_sand.break": {
+    "sounds": ["narutomod:jutsu/iron_sand_break"],
+    "subtitle": "narutomod.subtitle.iron_sand_break"
+  },
+  "mokuton.warn": {
+    "sounds": ["narutomod:jutsu/mokuton_warn"],
+    "subtitle": "narutomod.subtitle.mokuton_warn"
+  },
+  "mokuton.grow": {
+    "sounds": ["narutomod:jutsu/mokuton_grow"],
+    "subtitle": "narutomod.subtitle.mokuton_grow"
+  },
+  "mokuton.burial": {
+    "sounds": ["narutomod:jutsu/mokuton_burial"],
+    "subtitle": "narutomod.subtitle.mokuton_burial"
+  },
+  "mokuton.grab": {
+    "sounds": ["narutomod:jutsu/mokuton_grab"],
+    "subtitle": "narutomod.subtitle.mokuton_grab"
+  },
+  "mokuton.golem": {
+    "sounds": ["narutomod:jutsu/mokuton_golem"],
+    "subtitle": "narutomod.subtitle.mokuton_golem"
+  },
+  "kikaichu.launch": {
+    "sounds": ["narutomod:jutsu/kikaichu_launch"],
+    "subtitle": "narutomod.subtitle.kikaichu_launch"
+  },
+  "kikaichu.return": {
+    "sounds": ["narutomod:jutsu/kikaichu_return"],
+    "subtitle": "narutomod.subtitle.kikaichu_return"
+  },
+  "gatsuga.release": {
+    "sounds": ["narutomod:jutsu/gatsuga_release"],
+    "subtitle": "narutomod.subtitle.gatsuga_release"
+  },
+  "gatsuga.stop": {
+    "sounds": ["narutomod:jutsu/gatsuga_stop"],
+    "subtitle": "narutomod.subtitle.gatsuga_stop"
+  },
+  "ninken.arrive": {
+    "sounds": ["narutomod:jutsu/ninken_arrive"],
+    "subtitle": "narutomod.subtitle.ninken_arrive"
+  },
+  "ninken.track": {
+    "sounds": ["narutomod:jutsu/ninken_track"],
+    "subtitle": "narutomod.subtitle.ninken_track"
+  },
+  "ninken.dismiss": {
+    "sounds": ["narutomod:jutsu/ninken_dismiss"],
+    "subtitle": "narutomod.subtitle.ninken_dismiss"
+  },
+  "shinranshin.focus": {
+    "sounds": ["narutomod:jutsu/shinranshin_focus"],
+    "subtitle": "narutomod.subtitle.shinranshin_focus"
+  },
+  "shinranshin.grip": {
+    "sounds": ["narutomod:jutsu/shinranshin_grip"],
+    "subtitle": "narutomod.subtitle.shinranshin_grip"
+  },
+  "boulder.tuck": {
+    "sounds": ["narutomod:jutsu/boulder_tuck"],
+    "subtitle": "narutomod.subtitle.boulder_tuck"
+  },
+  "boulder.roll": {
+    "sounds": ["narutomod:jutsu/boulder_roll"],
+    "subtitle": "narutomod.subtitle.boulder_roll"
+  },
+  "boulder.bump": {
+    "sounds": ["narutomod:jutsu/boulder_bump"],
+    "subtitle": "narutomod.subtitle.boulder_bump"
+  },
+  "baika.grow": {
+    "sounds": ["narutomod:jutsu/baika_grow"],
+    "subtitle": "narutomod.subtitle.baika_grow"
+  },
+  "baika.step": {
+    "sounds": ["narutomod:jutsu/baika_step"],
+    "subtitle": "narutomod.subtitle.baika_step"
+  },
+  "baika.denied": {
+    "sounds": ["narutomod:jutsu/baika_denied"],
+    "subtitle": "narutomod.subtitle.baika_denied"
+  },
+  "scalpel.form": {
+    "sounds": ["narutomod:jutsu/scalpel_form"],
+    "subtitle": "narutomod.subtitle.scalpel_form"
+  },
+  "scalpel.cut": {
+    "sounds": ["narutomod:jutsu/scalpel_cut"],
+    "subtitle": "narutomod.subtitle.scalpel_cut"
+  },
+  "medical_palm.open": {
+    "sounds": ["narutomod:jutsu/medical_palm_open"],
+    "subtitle": "narutomod.subtitle.medical_palm_open"
+  },
+  "medical_palm.heal": {
+    "sounds": ["narutomod:jutsu/medical_palm_heal"],
+    "subtitle": "narutomod.subtitle.medical_palm_heal"
+  },
+  "trigram.field": {
+    "sounds": ["narutomod:jutsu/trigram_field"],
+    "subtitle": "narutomod.subtitle.trigram_field"
+  },
+  "trigram.seal": {
+    "sounds": ["narutomod:jutsu/trigram_seal"],
+    "subtitle": "narutomod.subtitle.trigram_seal"
+  },
+  "trigram.two": {
+    "sounds": ["narutomod:jutsu/trigram_two"],
+    "subtitle": "narutomod.subtitle.trigram_flurry"
+  },
+  "trigram.four": {
+    "sounds": ["narutomod:jutsu/trigram_four"],
+    "subtitle": "narutomod.subtitle.trigram_flurry"
+  },
+  "trigram.eight": {
+    "sounds": ["narutomod:jutsu/trigram_eight"],
+    "subtitle": "narutomod.subtitle.trigram_flurry"
+  },
+  "trigram.sixteen": {
+    "sounds": ["narutomod:jutsu/trigram_sixteen"],
+    "subtitle": "narutomod.subtitle.trigram_flurry"
+  },
+  "trigram.thirty_two": {
+    "sounds": ["narutomod:jutsu/trigram_thirty_two"],
+    "subtitle": "narutomod.subtitle.trigram_flurry"
+  },
+  "kaiten.spin": {
+    "sounds": ["narutomod:jutsu/kaiten_spin"],
+    "subtitle": "narutomod.subtitle.kaiten_spin"
+  },
+  "kaiten.contact": {
+    "sounds": ["narutomod:jutsu/kaiten_contact"],
+    "subtitle": "narutomod.subtitle.kaiten_contact"
+  },
+  "adamantine.spool": {
+    "sounds": ["narutomod:jutsu/adamantine_spool"],
+    "subtitle": "narutomod.subtitle.adamantine_spool"
+  },
+  "adamantine.lock": {
+    "sounds": ["narutomod:jutsu/adamantine_lock"],
+    "subtitle": "narutomod.subtitle.adamantine_lock"
+  },
+  "adamantine.release": {
+    "sounds": ["narutomod:jutsu/adamantine_release"],
+    "subtitle": "narutomod.subtitle.adamantine_release"
+  },
+  "air_palm.release": {
+    "sounds": ["narutomod:jutsu/air_palm_release"],
+    "subtitle": "narutomod.subtitle.air_palm_release"
+  },
+  "air_palm.hit": {
+    "sounds": ["narutomod:jutsu/air_palm_hit"],
+    "subtitle": "narutomod.subtitle.air_palm_hit"
+  },
+  "shadow.grip_lift": {
+    "sounds": ["narutomod:jutsu/shadow_grip_lift"],
+    "subtitle": "narutomod.subtitle.shadow_grip_lift"
+  },
+  "shadow.grip_clench": {
+    "sounds": ["narutomod:jutsu/shadow_grip_clench"],
+    "subtitle": "narutomod.subtitle.shadow_grip_clench"
+  },
+  "shadow.grip_drop": {
+    "sounds": ["narutomod:jutsu/shadow_grip_drop"],
+    "subtitle": "narutomod.subtitle.shadow_grip_drop"
+  },
+  "shadow.needle": {
+    "sounds": ["narutomod:jutsu/shadow_needle"],
+    "subtitle": "narutomod.subtitle.shadow_needle"
+  },
+  "shadow.weave": {
+    "sounds": ["narutomod:jutsu/shadow_weave"],
+    "subtitle": "narutomod.subtitle.shadow_weave"
+  },
+  "spirit.open": {
+    "sounds": ["narutomod:jutsu/spirit_open"],
+    "subtitle": "narutomod.subtitle.spirit_open"
+  },
+  "spirit.return": {
+    "sounds": ["narutomod:jutsu/spirit_return"],
+    "subtitle": "narutomod.subtitle.spirit_return"
+  },
+  "kamui.transit": {
+    "sounds": ["narutomod:jutsu/kamui_transit"],
+    "subtitle": "narutomod.subtitle.kamui_transit"
+  },
+  "koto.whisper": {
+    "sounds": ["narutomod:jutsu/koto_whisper"],
+    "subtitle": "narutomod.subtitle.koto_whisper"
+  },
+  "gunbai.wind_cut": {
+    "sounds": ["narutomod:jutsu/gunbai_wind_cut"],
+    "subtitle": "narutomod.subtitle.gunbai_wind_cut"
+  },
+  "crow_flock.wings": {
+    "sounds": ["narutomod:jutsu/crow_flock_wings"],
+    "subtitle": "narutomod.subtitle.crow_flock_wings"
+  },
+  "tsukuyomi.echo": {
+    "sounds": ["narutomod:jutsu/tsukuyomi_echo"],
+    "subtitle": "narutomod.subtitle.tsukuyomi_echo"
+  },
+  "sharingan.whisper": {
+    "sounds": ["narutomod:jutsu/sharingan_whisper"],
+    "subtitle": "narutomod.subtitle.sharingan_whisper"
+  },
+  "kamui.fold": {
+    "sounds": ["narutomod:jutsu/kamui_fold"],
+    "subtitle": "narutomod.subtitle.kamui_fold"
+  },
+  "amaterasu.ignite": {
+    "sounds": ["narutomod:jutsu/amaterasu_ignite"],
+    "subtitle": "narutomod.subtitle.amaterasu_ignite"
+  },
+  "lightning_armor.hum": {
+    "sounds": ["narutomod:jutsu/lightning_armor_hum"],
+    "subtitle": "narutomod.subtitle.lightning_armor_hum"
+  },
+  "lightning_shock.snap": {
+    "sounds": ["narutomod:jutsu/lightning_shock_snap"],
+    "subtitle": "narutomod.subtitle.shock_arc"
+  },
+  "great_breakthrough.gust": {
+    "sounds": ["narutomod:jutsu/great_breakthrough_gust"],
+    "subtitle": "narutomod.subtitle.gust_edge"
+  },
+  "gian.crack": {
+    "sounds": ["narutomod:jutsu/gian_crack"],
+    "subtitle": "narutomod.subtitle.gian_crack"
+  },
+  "earth_spikes.crack": {
+    "sounds": ["narutomod:jutsu/earth_spikes_crack"],
+    "subtitle": "narutomod.subtitle.earth_spikes_crack"
+  },
+  "phoenix_flower.volley": {
+    "sounds": ["narutomod:jutsu/phoenix_flower_volley"],
+    "subtitle": "narutomod.subtitle.phoenix_flower_volley"
+  },
+  "doryuheki.rise": {
+    "sounds": ["narutomod:jutsu/doryuheki_rise"],
+    "subtitle": "narutomod.subtitle.doryuheki_rise"
+  },
   "biju.shukaku": {
     "category": "hostile",
     "sounds": [
@@ -134,6 +644,14 @@
     ],
     "subtitle": "narutomod.subtitle.fireball.explosion"
   },
+  "great_fireball.exhale": {
+    "sounds": ["narutomod:jutsu/great_fireball_exhale"],
+    "subtitle": "narutomod.subtitle.great_fireball.exhale"
+  },
+  "great_fireball.steam": {
+    "sounds": ["narutomod:jutsu/great_fireball_steam"],
+    "subtitle": "narutomod.subtitle.great_fireball.steam"
+  },
   "waterbullet.shoot": {
     "sounds": [
       "minecraft:liquid/swim5",
@@ -160,6 +678,42 @@
       "minecraft:mob/dolphin/splash3"
     ],
     "subtitle": "narutomod.subtitle.waterbullet.splash"
+  },
+  "water_dragon.form": {
+    "sounds": ["narutomod:jutsu/water_dragon_form"],
+    "subtitle": "narutomod.subtitle.water_dragon.form"
+  },
+  "water_dragon.launch": {
+    "sounds": ["narutomod:jutsu/water_dragon_launch"],
+    "subtitle": "narutomod.subtitle.water_dragon.launch"
+  },
+  "water_dragon.impact": {
+    "sounds": ["narutomod:jutsu/water_dragon_impact"],
+    "subtitle": "narutomod.subtitle.water_dragon.impact"
+  },
+  "chidori_dash.launch": {
+    "sounds": ["narutomod:jutsu/chidori_dash_launch"],
+    "subtitle": "narutomod.subtitle.chidori_dash.launch"
+  },
+  "chakra_dash.wind": {
+    "sounds": ["narutomod:jutsu/chakra_dash_wind"],
+    "subtitle": "narutomod.subtitle.chakra_dash.wind"
+  },
+  "chakra_charge.breath": {
+    "sounds": ["narutomod:jutsu/chakra_charge_breath"],
+    "subtitle": "narutomod.subtitle.chakra_charge.breath"
+  },
+  "chakra_charge.full": {
+    "sounds": ["narutomod:jutsu/chakra_charge_full"],
+    "subtitle": "narutomod.subtitle.chakra_charge.full"
+  },
+  "rasenshuriken.flight": {
+    "sounds": ["narutomod:jutsu/rasenshuriken_flight"],
+    "subtitle": "narutomod.subtitle.rasenshuriken.flight"
+  },
+  "rasenshuriken.bloom": {
+    "sounds": ["narutomod:jutsu/rasenshuriken_bloom"],
+    "subtitle": "narutomod.subtitle.rasenshuriken.bloom"
   },
   "sizzle": {
     "sounds": [
@@ -201,5 +755,17 @@
       "narutomod:chidori"
     ],
     "subtitle": "narutomod.subtitle.chidori"
+  },
+  "rasengan.hit_entity": {
+    "sounds": [
+      "narutomod:jutsu/rasengan_hit_entity"
+    ],
+    "subtitle": "narutomod.subtitle.rasengan.hit_entity"
+  },
+  "rasengan.hit_block": {
+    "sounds": [
+      "narutomod:jutsu/rasengan_hit_block"
+    ],
+    "subtitle": "narutomod.subtitle.rasengan.hit_block"
   }
 }

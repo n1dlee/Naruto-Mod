@@ -3,6 +3,7 @@ package com.sekwah.narutomod.client.gui;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.sekwah.narutomod.abilities.jutsus.SubstitutionJutsuAbility;
 import com.sekwah.narutomod.util.GuiUtils;
+import com.sekwah.narutomod.util.SubstitutionRoute;
 import net.minecraft.client.gui.GuiGraphics;
 import org.joml.Matrix4f;
 import com.sekwah.narutomod.NarutoMod;
@@ -66,7 +67,8 @@ public class WorldMarkerGUI implements PlayerGUI {
         RenderSystem.setShaderTexture(0, LOG_TEXTURE);
 
         Vector4f vec = new Vector4f((float) (substitutionLoc.x - cameraPos.x), (float) (substitutionLoc.y - cameraPos.y), (float) (substitutionLoc.z - cameraPos.z), 1F);
-        double distance = cameraPos.distanceTo(substitutionLoc);
+        Vec3 viewer = this.minecraft.player == null ? cameraPos : this.minecraft.player.position();
+        double distance = viewer.distanceTo(substitutionLoc.subtract(0, SubstitutionRoute.MARKER_LIFT, 0));
 
         // Was vec.transform
         vec.mul(worldMatrix);
@@ -92,7 +94,8 @@ public class WorldMarkerGUI implements PlayerGUI {
                     32, 32);
             long roundedDistance = Math.round(distance);
             RenderSystem.setShaderColor(1, 1, 1, Math.min(fadeOut * 1.5f, 1));
-            GuiUtils.centeredTextOutlined(guiGraphics, this.getFont(), roundedDistance + " M", 0, 11, roundedDistance <= SubstitutionJutsuAbility.MAX_MARKER_DISTANCE ? intTextColor : outOfRangeColor, intTextOutline);
+            GuiUtils.centeredTextOutlined(guiGraphics, this.getFont(), roundedDistance + " M", 0, 11,
+                    distance <= SubstitutionJutsuAbility.MAX_MARKER_DISTANCE ? intTextColor : outOfRangeColor, intTextOutline);
             poseStack.popPose();
         }
 

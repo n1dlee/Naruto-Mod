@@ -1,0 +1,22 @@
+{
+  "parent": "minecraft:block/block",
+  "textures": { "bark": "minecraft:block/spruce_log", "cut": "minecraft:block/spruce_log_top", "dark": "minecraft:block/dark_oak_log", "particle": "#bark" },
+  "elements": [
+    {
+      "from": [1, 0, 4], "to": [15, 5, 12],
+      "faces": {
+        "down": { "texture": "#dark" }, "up": { "texture": "#bark", "rotation": 90 },
+        "north": { "texture": "#dark", "rotation": 90 }, "south": { "texture": "#dark", "rotation": 90 },
+        "west": { "texture": "#cut" }, "east": { "texture": "#cut" }
+      }
+    },
+    {
+      "from": [5, 3, 5], "to": [11, 16, 11],
+      "faces": {
+        "down": { "texture": "#cut" }, "up": { "texture": "#cut" },
+        "north": { "texture": "#bark" }, "south": { "texture": "#bark" },
+        "west": { "texture": "#bark" }, "east": { "texture": "#bark" }
+      }
+    }
+  ]
+}

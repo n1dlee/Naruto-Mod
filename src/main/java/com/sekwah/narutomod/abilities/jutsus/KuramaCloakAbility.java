@@ -20,7 +20,7 @@ import net.minecraft.world.entity.player.Player;
  *
  * Activation and effects are handled in NinjaData.updateKuramaCloak().
  */
-public class KuramaCloakAbility extends Ability implements Ability.Cooldown {
+public class KuramaCloakAbility extends Ability implements Ability.Cooldown, Ability.AlternateActivation {
 
     /** Exempt from the free-hands gate: this is a transformation being worn, not a hand-cast technique. */
     @Override
@@ -46,15 +46,21 @@ public class KuramaCloakAbility extends Ability implements Ability.Cooldown {
     }
 
     @Override
-    public boolean handleCost(Player player, INinjaData ninjaData, int chargeAmount) {
-        // Toggle off if already active
+    public boolean handleAlternate(Player player, INinjaData ninjaData) {
         if (ninjaData.isKuramaCloakActive()) {
             ninjaData.setKuramaCloakActive(false);
-            player.displayClientMessage(Component.literal("Kurama Cloak deactivated!")
+            player.displayClientMessage(Component.translatable("kurama.cloak.closed")
                     .withStyle(ChatFormatting.RED), true);
+            return true;
+        }
+        return false;
+    }
+
+    @Override
+    public boolean handleCost(Player player, INinjaData ninjaData, int chargeAmount) {
+        if (ninjaData.isSusanooActive()) {
             return false;
         }
-
         // Uzumaki only
         if (!"uzumaki".equals(ninjaData.getClanId())) {
             player.displayClientMessage(Component.translatable("jutsu.fail.uzumaki",
@@ -70,7 +76,7 @@ public class KuramaCloakAbility extends Ability implements Ability.Cooldown {
         }
 
         if (ninjaData.getKuramaBond() < BOND_COST) {
-            player.displayClientMessage(Component.literal("Not enough of Kurama's chakra!")
+            player.displayClientMessage(Component.translatable("kurama.cloak.spent")
                     .withStyle(ChatFormatting.YELLOW), true);
             return false;
         }
@@ -81,9 +87,12 @@ public class KuramaCloakAbility extends Ability implements Ability.Cooldown {
 
     @Override
     public void performServer(Player player, INinjaData ninjaData, int ticksActive) {
+        if (ninjaData.isKcmActive()) {
+            KuramaChakraModeAbility.standDown(player, ninjaData);
+        }
         ninjaData.setKuramaCloakActive(true);
         player.displayClientMessage(
-                Component.literal("Kurama Cloak activated!")
+                Component.translatable("kurama.cloak.open")
                         .withStyle(ChatFormatting.GOLD), true);
     }
 

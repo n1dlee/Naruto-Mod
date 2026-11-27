@@ -2,13 +2,12 @@ package com.sekwah.narutomod.abilities.jutsus;
 
 import com.sekwah.narutomod.abilities.Ability;
 import com.sekwah.narutomod.capabilities.INinjaData;
-import com.sekwah.narutomod.entity.jutsuprojectile.WaterBulletJutsuEntity;
-import com.sekwah.narutomod.sounds.NarutoSounds;
+import com.sekwah.narutomod.entity.jutsuprojectile.WaterShotEntity;
+import com.sekwah.narutomod.util.WaterShotShape;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
-import net.minecraft.sounds.SoundSource;
+import net.minecraft.sounds.SoundEvent;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.phys.Vec3;
 
 public class WaterBulletJutsuAbility extends Ability implements Ability.Cooldown {
 
@@ -21,7 +20,6 @@ public class WaterBulletJutsuAbility extends Ability implements Ability.Cooldown
     public long defaultCombo() {
         return 132;
     }
-    // --- Phase 15: Nature Release ---
     @Override
     public String element() {
         return "water";
@@ -50,24 +48,21 @@ public class WaterBulletJutsuAbility extends Ability implements Ability.Cooldown
 
     @Override
     public void performServer(Player player, INinjaData ninjaData, int ticksActive) {
-        // Water visibly compressing into the shot rather than a splash at the mouth.
-        if (player.level() instanceof net.minecraft.server.level.ServerLevel serverLevel) {
-            com.sekwah.narutomod.util.ElementalVfx.waterLance(serverLevel,
-                    player.getEyePosition().add(player.getLookAngle().scale(0.4)),
-                    player.getLookAngle(), 1.8);
+        float power = ninjaData.getRankDamageMultiplier();
+        var dimension = player.level().dimension();
+        WaterShotEntity.launchAimed(player, power);
+        for (int i = 1; i < WaterShotShape.SHOTS; i++) {
+            ninjaData.scheduleDelayedTickEvent(caster -> {
+                if (caster.isAlive() && caster.level().dimension().equals(dimension) && ninjaData.isNinjaModeEnabled()) {
+                    WaterShotEntity.launchAimed(caster, power);
+                }
+            }, i * WaterShotShape.SHOT_INTERVAL);
         }
+    }
 
-        for (int i = 0; i < 3; i++) {
-            ninjaData.scheduleDelayedTickEvent((delayedPlayer) -> {
-                Vec3 shootSpeed = player.getLookAngle();
-                WaterBulletJutsuEntity waterBullet = new WaterBulletJutsuEntity(player, shootSpeed.x, shootSpeed.y, shootSpeed.z);
-                waterBullet.setDamageMultiplier(ninjaData.getRankDamageMultiplier());
-                waterBullet.setYRot(player.getYRot() - 180);
-                player.level().addFreshEntity(waterBullet);
-                player.level().playSound(null, player, NarutoSounds.WATER_BULLET_SHOOT.get(), SoundSource.PLAYERS, 1f, 1.0f);
-            }, 10 + i * 15);
-        }
-
+    @Override
+    public SoundEvent castingSound() {
+        return null;
     }
 
     @Override

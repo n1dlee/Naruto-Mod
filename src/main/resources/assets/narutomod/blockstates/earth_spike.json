@@ -1,0 +1,40 @@
+{
+  "variants": {
+    "crack=false,raised=false,row=0": {
+      "model": "narutomod:block/earth_spike_empty"
+    },
+    "crack=true,raised=false,row=0": {
+      "model": "narutomod:block/earth_spike_crack"
+    },
+    "crack=false,raised=true,row=0": {
+      "model": "narutomod:block/earth_spike_0"
+    },
+    "crack=true,raised=true,row=0": {
+      "model": "narutomod:block/earth_spike_0"
+    },
+    "crack=false,raised=false,row=1": {
+      "model": "narutomod:block/earth_spike_empty"
+    },
+    "crack=true,raised=false,row=1": {
+      "model": "narutomod:block/earth_spike_crack"
+    },
+    "crack=false,raised=true,row=1": {
+      "model": "narutomod:block/earth_spike_1"
+    },
+    "crack=true,raised=true,row=1": {
+      "model": "narutomod:block/earth_spike_1"
+    },
+    "crack=false,raised=false,row=2": {
+      "model": "narutomod:block/earth_spike_empty"
+    },
+    "crack=true,raised=false,row=2": {
+      "model": "narutomod:block/earth_spike_crack"
+    },
+    "crack=false,raised=true,row=2": {
+      "model": "narutomod:block/earth_spike_2"
+    },
+    "crack=true,raised=true,row=2": {
+      "model": "narutomod:block/earth_spike_2"
+    }
+  }
+}

@@ -88,7 +88,6 @@ public class JutsuScreen extends Screen {
     private Button becomeANinja;
     private Button changeBack;
 
-    // --- Scroll state for the "other" column, since the full catalog no longer fits ---
     private int otherScrollOffset = 0;
     private int otherMaxScroll = 0;
     private int otherColX, otherColWidth, otherListTop, otherListBottom;

@@ -60,12 +60,17 @@ public class NarutoConfig {
     private static final ForgeConfigSpec.IntValue CONFIG_JUTSU_CAST_DELAY;
     public static int jutsuCastDelay;
 
-    // Phase 16: roaming Mangekyo bosses (spawned by vanilla mob spawning, see the biome modifier)
     private static final ForgeConfigSpec.BooleanValue CONFIG_BOSS_SPAWN_ENABLED;
     public static boolean mangekyoBossSpawnEnabled;
+    private static final ForgeConfigSpec.BooleanValue CONFIG_OTHER_HOSTILES;
+    public static boolean allowOtherHostiles;
 
     private static final ForgeConfigSpec.IntValue CONFIG_CHAKRA_BAR_DESIGN;
     public static int chakraBarDesign;
+    private static final ForgeConfigSpec.DoubleValue CONFIG_WALL_WALK_CAMERA_BANK;
+    public static float wallWalkCameraBank = 0.16f;
+    private static final ForgeConfigSpec.BooleanValue CONFIG_REDUCED_BODY_RITE_EFFECTS;
+    public static boolean reducedBodyRiteEffects;
 
     //private static final ForgeConfigSpec.BooleanValue CONFIG_STARTS_AS_NINJA;
     //public static boolean startsAsNinja;
@@ -73,9 +78,6 @@ public class NarutoConfig {
     static {
         ForgeConfigSpec.Builder configBuilder = new ForgeConfigSpec.Builder();
 
-        // ===========================================================
-        // Server Settings
-        // ===========================================================
         configBuilder.comment("Server based settings").push(SERVER);
 
         configBuilder.comment("Player settings").push(CATEGORY_PLAYER);
@@ -141,13 +143,20 @@ public class NarutoConfig {
                 .define("mangekyoBossSpawnEnabled", true);
 
         configBuilder.pop();
-
+        configBuilder.push("world");
+        CONFIG_OTHER_HOSTILES = configBuilder
+                .comment("Allow new hostile mobs from Minecraft and other mods in all dimensions. Restart to restore biome spawn tables.")
+                .define("allowOtherHostiles", false);
+        configBuilder.pop();
         configBuilder.pop();
 
-        // ===========================================================
-        // Client Settings
-        // ===========================================================
         configBuilder.comment("Client based settings").push(CLIENT);
+        CONFIG_WALL_WALK_CAMERA_BANK = configBuilder
+                .comment("Wall-walk camera bank multiplier. Set to 0 for a level camera.")
+                .defineInRange("wallWalkCameraBank", 0.16, 0.0, 1.0);
+        CONFIG_REDUCED_BODY_RITE_EFFECTS = configBuilder
+                .comment("Reduce Sage Mode and Eight Gates brightness, motion, and atmospheric overlays.")
+                .define("reducedBodyRiteEffects", false);
 
         configBuilder.comment("Variables for UI").push(CATEGORY_UI);
         CONFIG_CHAKRA_BAR_DESIGN = configBuilder.comment("Design for the chara bar")
@@ -177,7 +186,10 @@ public class NarutoConfig {
         paperbombBlockDamage = CONFIG_PAPERBOMB_BLOCK_DAMAGE.get();
         jutsuKeybindHoldThreshold = CONFIG_JUTSU_KEYBIND_HOLD_THRESHOLD.get();
         mangekyoBossSpawnEnabled = CONFIG_BOSS_SPAWN_ENABLED.get();
+        allowOtherHostiles = CONFIG_OTHER_HOSTILES.get();
         chakraBarDesign = CONFIG_CHAKRA_BAR_DESIGN.get();
+        wallWalkCameraBank = CONFIG_WALL_WALK_CAMERA_BANK.get().floatValue();
+        reducedBodyRiteEffects = CONFIG_REDUCED_BODY_RITE_EFFECTS.get();
         jutsuCastDelay = CONFIG_JUTSU_CAST_DELAY
                 .get();
         //startsAsNinja = CONFIG_STARTS_AS_NINJA.get();

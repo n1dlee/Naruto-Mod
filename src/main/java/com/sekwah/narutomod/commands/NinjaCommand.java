@@ -144,6 +144,7 @@ public class NinjaCommand {
                                                 data -> data.setIsNinja(BoolArgumentType.getBool(ctx, "enabled"))))))));
 
         ninja.then(Commands.literal("add")
+                .then(TrainingLoadoutCommand.add())
                 .then(Commands.literal("chakra")
                         .then(Commands.argument("target", EntityArgument.player())
                                 .then(Commands.argument("amount", FloatArgumentType.floatArg())
@@ -159,8 +160,8 @@ public class NinjaCommand {
                                 .then(Commands.argument("amount", FloatArgumentType.floatArg(0))
                                         .executes(ctx -> mutateTarget(ctx, "chakra XP",
                                                 data -> data.addChakraXp(FloatArgumentType.getFloat(ctx, "amount"))))))));
+        ninja.then(Commands.literal("remove").then(TrainingLoadoutCommand.remove()));
 
-        // --- Nature Release management ---
         // Grants bypass the rank slot cap on purpose: this is the operator override, and
         // being told "no free slot" by your own debug command would be useless.
         ninja.then(Commands.literal("element")

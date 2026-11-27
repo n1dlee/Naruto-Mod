@@ -53,9 +53,6 @@ public final class JutsuVfxHandler {
                 if (!ninjaData.isNinjaModeEnabled()) {
                     return;
                 }
-                if (ninjaData.isRasenganHeld()) {
-                    renderRasengan(player, ninjaData.getRasenganCharge());
-                }
                 if (ninjaData.isChidoriActive()) {
                     renderChidori(player);
                 }
@@ -68,30 +65,6 @@ public final class JutsuVfxHandler {
             });
         }
     }
-
-    /**
-     * The sphere sits in the right hand and spins about the player's own look direction, so
-     * turning the camera turns the ball with it rather than leaving it hanging in place.
-     */
-    private static void renderRasengan(Player player, int charge) {
-        // The sphere is geometry now (JutsuWorldRenderer). These are only the few sparks
-        // thrown clear of it - a dense cloud around a solid ball just hides the ball, which
-        // is exactly what it was doing. Every fourth tick, well outside the surface, and the
-        // core layer dropped entirely.
-        if (player.tickCount % 4 != 0) {
-            return;
-        }
-        float t = Math.max(0, Math.min(charge - 20, 40)) / 40.0f;
-        double radius = (0.24 + t * 0.26) * 1.45;
-
-        Vec3 hand = JutsuVfx.handPosition(player, 1.0, 1.0f);
-        Vec3 axis = player.getViewVector(1.0f);
-        float age = player.tickCount + 1.0f;
-
-        JutsuVfx.rasenganSparks(player.level(), hand, axis, radius, age,
-                NarutoParticles.ROTATION_WHITE);
-    }
-
 
     /** Arcs reseeded each tick, plus vanilla sparks for the bright flecks between them. */
     private static void renderChidori(Player player) {

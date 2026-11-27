@@ -98,7 +98,7 @@ minecraft {
     // These can be tweaked, removed, or duplicated as needed.
     runs {
         client {
-            workingDirectory project.file('run')
+            workingDirectory project.file(providers.gradleProperty('narutoClientWorkDir').getOrElse('run'))
 
             // Recommended logging data for a userdev environment
             //property 'forge.logging.markers', 'SCAN,REGISTR
@@ -201,6 +201,7 @@ dependencies {
 
 test {
     useJUnitPlatform()
+    workingDir layout.buildDirectory.get().asFile
     testLogging {
         events "passed", "skipped", "failed"
     }

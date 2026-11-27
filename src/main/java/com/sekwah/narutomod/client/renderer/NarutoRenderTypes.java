@@ -46,4 +46,24 @@ public final class NarutoRenderTypes extends RenderType {
                     .setDepthTestState(LEQUAL_DEPTH_TEST)
                     .setLightmapState(NO_LIGHTMAP)
                     .createCompositeState(false));
+
+    public static final RenderType WATER_SURFACE = create(
+            "narutomod_water_surface", DefaultVertexFormat.POSITION_COLOR, VertexFormat.Mode.QUADS,
+            4096, false, true,
+            RenderType.CompositeState.builder()
+                    .setShaderState(POSITION_COLOR_SHADER)
+                    .setTransparencyState(TRANSLUCENT_TRANSPARENCY)
+                    .setCullState(NO_CULL)
+                    .setWriteMaskState(COLOR_WRITE)
+                    .setDepthTestState(LEQUAL_DEPTH_TEST)
+                    .createCompositeState(false));
+
+    public static final RenderType BOULDER_BODY = create(
+            "narutomod_boulder_body", DefaultVertexFormat.POSITION_COLOR, VertexFormat.Mode.QUADS,
+            4096, false, false,
+            RenderType.CompositeState.builder()
+                    .setShaderState(POSITION_COLOR_SHADER)
+                    .setCullState(NO_CULL)
+                    .setDepthTestState(LEQUAL_DEPTH_TEST)
+                    .createCompositeState(false));
 }

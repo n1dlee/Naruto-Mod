@@ -1,0 +1,10 @@
+{
+  "textures": {
+    "particle": "minecraft:block/tuff",
+    "side": "minecraft:block/tuff",
+    "cap": "minecraft:block/smooth_basalt",
+    "root": "minecraft:block/coarse_dirt",
+    "crack": "minecraft:block/blackstone"
+  },
+  "elements": []
+}

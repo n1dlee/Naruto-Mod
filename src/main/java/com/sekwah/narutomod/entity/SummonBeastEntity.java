@@ -3,6 +3,10 @@ package com.sekwah.narutomod.entity;
 import com.sekwah.narutomod.entity.goal.NinjaLeapGoal;
 import com.sekwah.narutomod.entity.goal.SummonBeastJutsuGoal;
 import com.sekwah.narutomod.entity.goal.SummonFollowOwnerGoal;
+import com.sekwah.narutomod.events.SummonRitualEvents;
+import com.sekwah.narutomod.util.ContractSummonLedger;
+import com.sekwah.narutomod.util.JutsuAim;
+import com.sekwah.narutomod.util.SummoningCircle;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.protocol.Packet;
@@ -11,6 +15,7 @@ import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.*;
 import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
@@ -49,8 +54,15 @@ public class SummonBeastEntity extends PathfinderMob {
             SynchedEntityData.defineId(SummonBeastEntity.class, EntityDataSerializers.OPTIONAL_UUID);
     private static final EntityDataAccessor<Byte> VARIANT =
             SynchedEntityData.defineId(SummonBeastEntity.class, EntityDataSerializers.BYTE);
+    private static final EntityDataAccessor<Integer> PRESENCE =
+            SynchedEntityData.defineId(SummonBeastEntity.class, EntityDataSerializers.INT);
+    private static final EntityDataAccessor<Integer> CUE =
+            SynchedEntityData.defineId(SummonBeastEntity.class, EntityDataSerializers.INT);
+    public static final int ARRIVAL = 13;
+    public static final int WITHDRAW = 9;
 
     private int aliveTicks = 0;
+    private boolean contracted;
 
     public SummonBeastEntity(EntityType<SummonBeastEntity> entityType, Level level) {
         super(entityType, level);
@@ -62,6 +74,8 @@ public class SummonBeastEntity extends PathfinderMob {
         super.defineSynchedData();
         this.entityData.define(OWNER_UUID, Optional.empty());
         this.entityData.define(VARIANT, (byte) 0);
+        this.entityData.define(PRESENCE, ARRIVAL);
+        this.entityData.define(CUE, 0);
     }
 
     public Optional<UUID> getOwnerUUID() {
@@ -71,6 +85,25 @@ public class SummonBeastEntity extends PathfinderMob {
     public void setOwner(LivingEntity owner) {
         this.entityData.set(OWNER_UUID, Optional.of(owner.getUUID()));
     }
+
+    public void beginContract() {
+        this.contracted = true;
+        this.setPersistenceRequired();
+        this.entityData.set(PRESENCE, 0);
+        this.setNoAi(true);
+    }
+
+    public int presence() { return this.entityData.get(PRESENCE); }
+
+    public boolean isDismissing() { return this.presence() < 0; }
+
+    public boolean usesContractLedger() { return this.contracted; }
+
+    public boolean canUseSignature() { return this.presence() >= ARRIVAL && !this.isNoAi(); }
+
+    public int cue() { return this.entityData.get(CUE); }
+
+    public void signal(int ticks) { this.entityData.set(CUE, ticks); }
 
     /** The summoner, if they are still loaded in this level. */
     public Player getOwner() {
@@ -187,24 +220,84 @@ public class SummonBeastEntity extends PathfinderMob {
 
     @Override
     public void tick() {
+        if (this.contracted && this.level() instanceof ServerLevel level) {
+            contractTick(level);
+            if (this.isRemoved()) {
+                return;
+            }
+        }
         super.tick();
         if (this.level().isClientSide) {
             return;
         }
+        int cue = this.cue();
+        if (cue > 0) {
+            this.signal(cue - 1);
+        } else if (cue < 0) {
+            this.signal(cue + 1);
+        }
         NinjaMobMovement.tickWaterWalk(this);
-        if (++this.aliveTicks >= LIFESPAN) {
+        if (!this.contracted && ++this.aliveTicks >= LIFESPAN) {
             this.dispel();
         }
     }
 
-    /** Back to Myoboku, Ryuchi Cave, Shikkotsu Forest or the Monkey King's mountain. */
+    private void contractTick(ServerLevel level) {
+        int presence = this.presence();
+        if (presence < 0) {
+            if (presence <= -WITHDRAW) {
+                this.discard();
+            } else {
+                this.entityData.set(PRESENCE, presence - 1);
+            }
+            return;
+        }
+        var ownerId = this.getOwnerUUID().orElse(null);
+        var owner = this.getOwner();
+        if (ownerId == null || !ContractSummonLedger.of(level).owns(ownerId, this.getUUID(), level.dimension().location(), ContractSummonLedger.time(level))
+                || !this.isAlive() || owner != null && !owner.isAlive()) {
+            this.dispel();
+            return;
+        }
+        if (presence < ARRIVAL) {
+            this.entityData.set(PRESENCE, presence + 1);
+        }
+        boolean idle = owner == null || owner.isSpectator() || owner.distanceToSqr(this) > 64 * 64 || presence < ARRIVAL;
+        if (idle && !this.isNoAi()) {
+            this.getNavigation().stop();
+            this.setTarget(null);
+            this.signal(0);
+        }
+        this.setNoAi(idle);
+    }
+
     public void dispel() {
         if (this.level() instanceof ServerLevel serverLevel) {
+            if (this.contracted && this.isDismissing()) {
+                return;
+            }
             serverLevel.sendParticles(ParticleTypes.LARGE_SMOKE,
                     this.getX(), this.getY() + this.getBbHeight() / 2, this.getZ(),
-                    60, 1.2, 1.2, 1.2, 0.05);
+                    29, 0.85, 0.87, 0.85, 0.05);
+            if (this.contracted) {
+                releaseContract(serverLevel);
+                this.setNoAi(true);
+                this.getNavigation().stop();
+                this.setTarget(null);
+                this.signal(0);
+                this.entityData.set(PRESENCE, -1);
+                if (this.getOwner() instanceof ServerPlayer owner) {
+                    SummonRitualEvents.publish(owner, serverLevel, this.position(), this.getVariant().sealStyle(),
+                            SummoningCircle.Stage.FADE, this.getVariant().getWidth());
+                }
+                return;
+            }
         }
         this.discard();
+    }
+
+    private void releaseContract(ServerLevel level) {
+        this.getOwnerUUID().ifPresent(owner -> ContractSummonLedger.of(level).release(owner, this.getUUID()));
     }
 
     /** A contract beast never turns on the ninja who called it. */
@@ -217,10 +310,23 @@ public class SummonBeastEntity extends PathfinderMob {
     }
 
     @Override
+    public boolean doHurtTarget(Entity victim) {
+        Player owner = this.getOwner();
+        if (victim instanceof LivingEntity actor && this.level() instanceof ServerLevel level && owner != null
+                && (!JutsuAim.attackable(owner, actor) || actor instanceof Player && !level.getServer().isPvpAllowed()
+                || !level.mayInteract(owner, actor.blockPosition()))) {
+            return false;
+        }
+        return super.doHurtTarget(victim);
+    }
+
+    @Override
     public void addAdditionalSaveData(CompoundTag tag) {
         super.addAdditionalSaveData(tag);
         tag.putInt("AliveTicks", this.aliveTicks);
         tag.putByte("Variant", this.entityData.get(VARIANT));
+        tag.putBoolean("Contracted", this.contracted);
+        tag.putInt("Presence", this.presence());
         this.getOwnerUUID().ifPresent(uuid -> tag.putUUID("OwnerUUID", uuid));
     }
 
@@ -228,6 +334,10 @@ public class SummonBeastEntity extends PathfinderMob {
     public void readAdditionalSaveData(CompoundTag tag) {
         super.readAdditionalSaveData(tag);
         this.aliveTicks = tag.getInt("AliveTicks");
+        this.contracted = tag.getBoolean("Contracted");
+        if (this.contracted) {
+            this.entityData.set(PRESENCE, tag.contains("Presence") ? tag.getInt("Presence") : ARRIVAL);
+        }
         // Attributes and hitbox come back with the variant; health does not, so the saved
         // Health super already read stays exactly as it was.
         this.setVariant(SummonBeastVariant.byId(tag.getByte("Variant")));

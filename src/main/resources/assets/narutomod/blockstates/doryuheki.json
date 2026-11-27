@@ -1,0 +1,19 @@
+{
+  "variants": {
+    "stage=0": {
+      "model": "narutomod:block/doryuheki_0"
+    },
+    "stage=1": {
+      "model": "narutomod:block/doryuheki_1"
+    },
+    "stage=2": {
+      "model": "narutomod:block/doryuheki_2"
+    },
+    "stage=3": {
+      "model": "narutomod:block/doryuheki_3"
+    },
+    "stage=4": {
+      "model": "narutomod:block/doryuheki_4"
+    }
+  }
+}

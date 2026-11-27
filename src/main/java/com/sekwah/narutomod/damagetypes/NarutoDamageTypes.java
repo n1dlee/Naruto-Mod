@@ -19,6 +19,8 @@ public class NarutoDamageTypes {
     public static final ResourceKey<DamageType> RASENGAN = create("rasengan");
     public static final ResourceKey<DamageType> AMATERASU = create("amaterasu");
     public static final ResourceKey<DamageType> CHIDORI = create("chidori");
+    public static final ResourceKey<DamageType> EARTH_SPIKE = create("earth_spike");
+    public static final ResourceKey<DamageType> TRIGRAM_PALMS = create("trigram_palms");
 
     public static ResourceKey<DamageType> create(String name) {
         return ResourceKey.create(Registries.DAMAGE_TYPE, new ResourceLocation(NarutoMod.MOD_ID, name));
@@ -54,5 +56,7 @@ public class NarutoDamageTypes {
         register(context, RASENGAN, 0.1F);
         register(context, AMATERASU, 0.1F);
         register(context, CHIDORI, 0.1F);
+        register(context, EARTH_SPIKE, 0.1F);
+        register(context, TRIGRAM_PALMS);
     }
 }

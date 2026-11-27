@@ -1,0 +1,75 @@
+{
+  "textures": {
+    "particle": "minecraft:block/tuff",
+    "side": "minecraft:block/tuff",
+    "cap": "minecraft:block/smooth_basalt",
+    "root": "minecraft:block/coarse_dirt",
+    "crack": "minecraft:block/blackstone"
+  },
+  "elements": [
+    {
+      "from": [
+        1,
+        0,
+        1
+      ],
+      "to": [
+        15,
+        8,
+        15
+      ],
+      "faces": {
+        "down": {
+          "texture": "#root"
+        },
+        "up": {
+          "texture": "#side"
+        },
+        "north": {
+          "texture": "#root"
+        },
+        "south": {
+          "texture": "#root"
+        },
+        "west": {
+          "texture": "#root"
+        },
+        "east": {
+          "texture": "#root"
+        }
+      }
+    },
+    {
+      "from": [
+        3,
+        8,
+        3
+      ],
+      "to": [
+        13,
+        16,
+        13
+      ],
+      "faces": {
+        "down": {
+          "texture": "#root"
+        },
+        "up": {
+          "texture": "#side"
+        },
+        "north": {
+          "texture": "#side"
+        },
+        "south": {
+          "texture": "#side"
+        },
+        "west": {
+          "texture": "#side"
+        },
+        "east": {
+          "texture": "#side"
+        }
+      }
+    }
+  ]
+}

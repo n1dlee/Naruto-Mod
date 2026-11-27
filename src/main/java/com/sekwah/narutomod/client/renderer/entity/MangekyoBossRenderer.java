@@ -1,6 +1,9 @@
 package com.sekwah.narutomod.client.renderer.entity;
 
+import com.sekwah.narutomod.client.renderer.TrigramPalmsRenderer;
 import com.sekwah.narutomod.entity.MangekyoBossEntity;
+import com.sekwah.narutomod.util.SusanooFullBody;
+import com.sekwah.narutomod.util.SusanooPose;
 import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.model.geom.ModelLayers;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
@@ -8,6 +11,7 @@ import net.minecraft.client.renderer.entity.HumanoidMobRenderer;
 import net.minecraft.client.renderer.entity.layers.HumanoidArmorLayer;
 import net.minecraft.client.renderer.entity.layers.ItemInHandLayer;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.Mth;
 
 /**
  * Draws a Mangekyo boss with that wielder's own skin, picked off the variant byte.
@@ -17,7 +21,13 @@ import net.minecraft.resources.ResourceLocation;
 public class MangekyoBossRenderer extends HumanoidMobRenderer<MangekyoBossEntity, HumanoidModel<MangekyoBossEntity>> {
 
     public MangekyoBossRenderer(EntityRendererProvider.Context context) {
-        super(context, new HumanoidModel<>(context.bakeLayer(ModelLayers.PLAYER)), 0.5F);
+        super(context, new HumanoidModel<MangekyoBossEntity>(context.bakeLayer(ModelLayers.PLAYER)) {
+            @Override
+            public void setupAnim(MangekyoBossEntity boss, float swing, float amount, float age, float yaw, float pitch) {
+                super.setupAnim(boss, swing, amount, age, yaw, pitch);
+                TrigramPalmsRenderer.pose(this, boss, Mth.frac(age));
+            }
+        }, 0.5F);
         // Armour has to be skipped explicitly rather than left to setAllVisible below:
         // HumanoidModel.copyPropertiesTo copies part transforms, not part visibility, so a
         // hidden wielder would still have their cloak and headband floating in the giant.
@@ -54,7 +64,6 @@ public class MangekyoBossRenderer extends HumanoidMobRenderer<MangekyoBossEntity
                         limbSwingAmount, partialTick, ageInTicks, netHeadYaw, headPitch);
             }
         });
-        this.addLayer(new BossSusanooLayer(this, context));
         this.addLayer(new BossKuramaLayer(this));
         this.addLayer(new BossSandLayer(this, context));
     }
@@ -77,7 +86,18 @@ public class MangekyoBossRenderer extends HumanoidMobRenderer<MangekyoBossEntity
         // Set on every render call, never assumed: one model instance serves every boss on
         // screen, so whatever the last one left here is what the next one would inherit.
         this.getModel().setAllVisible(!entity.isGiant());
-        super.render(entity, entityYaw, partialTick, poseStack, bufferSource, packedLight);
+        if (!entity.getVariant().hasSusanoo() || !SusanooFullBody.standing(entity.getSusanooStage())) {
+            super.render(entity, entityYaw, partialTick, poseStack, bufferSource, packedLight);
+            return;
+        }
+        poseStack.pushPose();
+        try {
+            double settle = SusanooPose.smooth((entity.getSusanooStageAge() + partialTick) / 9);
+            poseStack.translate(0, SusanooFullBody.seatShift(entity.getEyeHeight()) * settle, 0);
+            super.render(entity, entityYaw, partialTick, poseStack, bufferSource, packedLight);
+        } finally {
+            poseStack.popPose();
+        }
     }
 
     /**

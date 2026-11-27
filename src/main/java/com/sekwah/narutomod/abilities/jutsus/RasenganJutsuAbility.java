@@ -13,8 +13,7 @@ import net.minecraft.world.entity.player.Player;
  * Rasengan — held in hand (combo 212, TOGGLE), like Naruto actually uses it: formed, carried,
  * resized on the fly, and rammed into a target or a wall rather than thrown. Toggle on to form
  * it, scroll the mouse wheel to grow/shrink it (20-60, same scale the old charge used), melee
- * an entity to slam it into them (see PlayerEvents.applyRasenganMeleeHit), or punch a block to
- * blast a small crater (see PlayerEvents.onLeftClickBlock). Either action consumes it.
+ * an entity to slam it into them, or punch a block to blast a small crater. Either action consumes it.
  */
 public class RasenganJutsuAbility extends Ability implements Ability.Toggled, Ability.ToggleStartCheck, Ability.HandleEnded {
 
